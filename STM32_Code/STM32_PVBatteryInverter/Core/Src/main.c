@@ -22,8 +22,15 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdlib.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 #include <string.h>
+
+#include "common.h"
+#include "gpio.h"
+#include "dc_control.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,10 +69,13 @@ UART_HandleTypeDef huart3;
 /* USER CODE BEGIN PV */
 uint16_t ADC1ConvertedData[2];
 uint16_t ADC2ConvertedData[1];
-volatile uint16_t debug_Ipv_filt;
+volatile uint16_t debug_sigma_delta_re;
 volatile uint16_t debug_Ig_filt;
 volatile uint16_t debug_Vg_filt;
 
+volatile int16_t debug_dutyB1;
+
+extern volatile enum stateDC_t stateDC;
 
 
 uint8_t ubKeyNumber = 0x0;
@@ -73,9 +83,6 @@ FDCAN_RxHeaderTypeDef RxHeader;
 uint8_t RxData[8];
 FDCAN_TxHeaderTypeDef TxHeader;
 uint8_t TxData[8];
-
-enum state_t {INIT, PV_LOW_VOLTAGE, PV2BAT }; //POWER_TEST, GRID_CONNECTING, GRID_SYNC};
-volatile enum state_t state = INIT;
 
 /* USER CODE END PV */
 
@@ -110,36 +117,63 @@ uint16_t lowpass4(uint16_t in, uint16_t* prev)
     return filt;
 }
 
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
+	checkErrors();
 
-  	GPIOB->BRR = (1<<1);  // enable green LED
-  	//uSend("i\n");
+    if (hadc == &hadc1) {
 
-    // if ADC = 1
-    // Lowpass filter for Vg
-    static uint16_t Vg_prev[3] = {0};
-    uint16_t Vg_filt = lowpass4(ADC1ConvertedData[0], Vg_prev);
-    debug_Vg_filt = Vg_filt;
+      	//measVdc();  // called with f=200Hz when repetition counter = 200
 
-    // Lowpass filter for Ig
-    static uint16_t Ig_prev[3] = {0};
-    uint16_t Ig_filt = lowpass4(ADC1ConvertedData[1], Ig_prev);
-    debug_Ig_filt = Ig_filt;
+		// Lowpass filter for Vg
+		static uint16_t Vg_prev[3] = {0};
+		uint16_t Vg_filt = lowpass4(ADC1ConvertedData[0], Vg_prev);
+		debug_Vg_filt = Vg_filt;
 
-
-    // if ADC = 2
-    // Lowpass filter for Ipv
-    static uint16_t Ipv_prev[3] = {0};
-    uint16_t Ipv_filt = ((uint32_t)ADC2ConvertedData[0] + Ipv_prev[0] + Ipv_prev[1] + Ipv_prev[2]) >> 2;
-    debug_Ipv_filt = Ipv_filt;
-    Ipv_prev[2] = Ipv_prev[1];
-    Ipv_prev[1] = Ipv_prev[0];
-    Ipv_prev[0] = ADC2ConvertedData[0];
+		// Lowpass filter for Ig
+		static uint16_t Ig_prev[3] = {0};
+		uint16_t Ig_filt = lowpass4(ADC1ConvertedData[1], Ig_prev);
+		debug_Ig_filt = Ig_filt;
+    }
 
 
+    if (hadc == &hadc2) {
 
-  	GPIOB->BSRR = (1<<1);  // disable green LED
+      	//measVdc();  // called with f=200Hz when repetition counter = 200
+    	//measVdc();  // called with f=40kHz when repetition counter = 0
+    	measVdc();  // called with f=20kHz when repetition counter = 1
+
+    	static uint32_t blankingCnt = 0;
+
+    	if (blankingCnt > 64) {  // dont check 1 sigmadeltacycles 4(64) work  1(16), 2(32) not
+			int status_limits = checkLimits();
+			if (status_limits != EC_NO_ERROR) {
+				shutdown();
+				sys_errcode = status_limits;
+			}
+    	} else {
+    		blankingCnt++;
+    	}
+
+		// Lowpass filter for Ipv
+		static uint16_t Ipv_prev[3] = {0};
+#define IDC_OFFSET_RAW 2635
+#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
+#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
+#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
+
+		int16_t idc_filt_raw = ((uint32_t)ADC2ConvertedData[0] + Ipv_prev[0] + Ipv_prev[1] + Ipv_prev[2]) >> 2;
+		Idc_filt_10mA = (idc_filt_raw-IDC_OFFSET_RAW) * IDC_RAW_TO_10mA;
+		Ipv_prev[2] = Ipv_prev[1];
+		Ipv_prev[1] = Ipv_prev[0];
+		Ipv_prev[0] = ADC2ConvertedData[0];
+
+		int16_t dutyB1 = dcControlStep();
+		debug_dutyB1 = dutyB1;
+	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
+    }
+
 }
 
 void uartSend(char* ptr, int len)
@@ -194,6 +228,8 @@ int main(void)
   char Tx_Buffer[64];
   uint8_t Tx_len;
 
+  Vdc_sincfilt_100mV = 0;
+
   /* Configure the FDCAN peripheral */
   FDCAN_Config();  // CAN2 is connected to Battery Cell Stack Controller CAN Bus
 
@@ -222,6 +258,9 @@ int main(void)
     Error_Handler();
   }
 
+  // start Sigma-delta-ADC counter
+  HAL_TIM_Base_Start(&htim4);
+
   // #########################
   // ### DMA configuration ###
   // #########################
@@ -235,9 +274,13 @@ int main(void)
     Error_Handler();
   }
 
-  __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, 2125);  //update pwm value 50% dutycycle
+  //__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, 2125);  //update pwm value 50% dutycycle
 
-  uSend("PVBattery Inverter\n");
+  uSend("PVBattery Inverter  ");
+  uSend(__DATE__ " ");
+  uSend(__TIME__);
+  uSend("\n");
+  GPIOB->BSRR = (1<<0);  // disable red LED
 
   /* USER CODE END 2 */
 
@@ -248,12 +291,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	GPIOB->BRR = (1<<0);  // enable red LED
+
+	checkErrors();
+
+	GPIOB->BRR = (1<<1);  // enable green LED
 	HAL_Delay(1000);  //ms
-	GPIOB->BSRR = (1<<0);  // disable red LED
+	GPIOB->BSRR = (1<<1);  // disable green LED
 	HAL_Delay(1000);  //ms
 
-	GPIOB->BSRR = (1<<7);  // enable Boost Gatedriver
+
 
 
     /* Set the data to be transmitted */
@@ -274,41 +320,87 @@ int main(void)
 	uint8_t Rx_Buffer = 0;
 	HAL_UART_Receive(&huart3, &Rx_Buffer, 1, 10);
 
-	if (Rx_Buffer == 'p') {
 
-	  uSend("state ");
-	  itoa(state, Tx_Buffer, 10);
-	  Tx_len=strlen(Tx_Buffer);
-	  HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-
-	  uSend("\n\n");
+	if (Rx_Buffer == 'e') {
+		gatedriverDC(1);
+	    uSend("DC EN\n");
+	} else if (Rx_Buffer == 'd') {
+		gatedriverDC(0);
+ 	    uSend("DC DIS\n");
 	}
 
-	uSend("Ipv ");
-	itoa(debug_Ipv_filt, Tx_Buffer, 10);
+
+	if (sys_errcode!=EC_NO_ERROR) {
+		GPIOB->BRR = (1<<0);  // enable red LED
+		uSend("Err ");
+		itoa(sys_errcode, Tx_Buffer, 10);
+		Tx_len=strlen(Tx_Buffer);
+		HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		uSend(" : ");
+		char * strerr = strerror(sys_errcode);
+		Tx_len=strlen(strerr);
+		HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+		uSend("\n");
+	}
+
+	uSend("\nstateDC ");
+	itoa(stateDC, Tx_Buffer, 10);
 	Tx_len=strlen(Tx_Buffer);
 	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
 	uSend("\n");
+
+
+	uSend("dutyB1 ");
+	itoa(debug_dutyB1, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	uSend("\n");
+
+	uSend("Vdc ");
+	float Vdc = Vdc_sincfilt_100mV/10.0;
+	Tx_len = snprintf(NULL, 0, "%.01f", Vdc);
+	char *str_Vdc = malloc(Tx_len + 1);
+	snprintf(str_Vdc, Tx_len + 1, "%f.01", Vdc);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str_Vdc, Tx_len, 10);
+	uSend("\n");
+	free(str_Vdc);
+
+//	uSend("re ");
+//	itoa(debug_sigma_delta_re, Tx_Buffer, 10);
+//	Tx_len=strlen(Tx_Buffer);
+//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+//	uSend("\n");
+
+
+	uSend("Idc ");
+	float Idc = Idc_filt_10mA/100.0;
+	Tx_len = snprintf(NULL, 0, "%.02f", Idc);
+	char *str_Idc = malloc(Tx_len + 1);
+	snprintf(str_Idc, Tx_len + 1, "%f.02", Idc);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str_Idc, Tx_len, 10);
+	uSend("\n");
+	free(str_Idc);
+
 	// no current 4avg: 2632-2634
 	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
 
-	uSend("Vg ");
-	itoa(debug_Vg_filt, Tx_Buffer, 10);
-	Tx_len=strlen(Tx_Buffer);
-	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	uSend("\n");
-	// no voltage 4avg: 1971-1982
-	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
-	// -5V: 1955-1964
-
-
-	uSend("Ig ");
-	itoa(debug_Ig_filt, Tx_Buffer, 10);
-	Tx_len=strlen(Tx_Buffer);
-	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	uSend("\n");
-	// no current 4avg: 2627-2630
-	// ~+1A 2671
+//	uSend("Vg ");
+//	itoa(debug_Vg_filt, Tx_Buffer, 10);
+//	Tx_len=strlen(Tx_Buffer);
+//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+//	uSend("\n");
+//	// no voltage 4avg: 1971-1982
+//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
+//	// -5V: 1955-1964
+//
+//
+//	uSend("Ig ");
+//	itoa(debug_Ig_filt, Tx_Buffer, 10);
+//	Tx_len=strlen(Tx_Buffer);
+//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+//	uSend("\n");
+//	// no current 4avg: 2627-2630
+//	// ~+1A 2671
 
 
 
@@ -706,7 +798,7 @@ static void MX_TIM1_Init(void)
   htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
   htim1.Init.Period = 4249;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 200;
+  htim1.Init.RepetitionCounter = 1;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {
@@ -1034,7 +1126,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_0|GPIO_PIN_4, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
@@ -1043,8 +1135,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_14
                           |GPIO_PIN_7, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : PC13 PC14 PC0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_0;
+  /*Configure GPIO pins : PC13 PC14 PC0 PC4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_0|GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
