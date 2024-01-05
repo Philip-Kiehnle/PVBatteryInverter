@@ -85,3 +85,21 @@ This demonstrates the whole extent of stupidity to install an extra energy meter
 
 # Efficiency
 
+
+GaN PCB 
+5V von 230V-Samsung Netzteil:
+## Ohne Enable, ohne Gatesignale
+1,4W mit Lüfter
+0,6W ohne Lüfter
+
+
+https://www.dsprelated.com/showarticle/1337.php
+
+CIC intergrartor:
+each stage is implemented with two’s complement (non-saturating) arithmetic
+the range of a stage's number system is greater than or equal to the maximum value expected at the stage's output.
+
+
+
+
+

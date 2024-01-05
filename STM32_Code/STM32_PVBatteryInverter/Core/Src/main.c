@@ -29,7 +29,19 @@
 
 #include "common.h"
 #include "gpio.h"
+#include "can_bus.h"
+#include "ac_control.h"
 #include "dc_control.h"
+#include "battery/bms_types.h"
+
+
+// todo
+typedef struct {
+    uint16_t cell_voltage_max_mV;
+    uint16_t cell_voltage_max_index;
+    uint16_t cell_voltage_min_mV;
+    uint16_t cell_voltage_min_index;
+} __attribute__((__packed__)) csc_cell_volt_min_max_t;
 
 /* USER CODE END Includes */
 
@@ -40,7 +52,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define uSend(x) uartSend(x, sizeof x -1)
+#define uSend(x) uartSend((char *)x, sizeof x -1)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -70,17 +82,25 @@ UART_HandleTypeDef huart3;
 uint16_t ADC1ConvertedData[2];
 uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
-volatile uint16_t debug_Ig_filt;
-volatile uint16_t debug_Vg_filt;
+
+extern volatile int debug_Vac_rms_100mV;
+extern volatile int debug_fac_10mHz;
 
 volatile int16_t debug_dutyB1;
+volatile uint16_t debug_Vg_raw_filt;
+volatile uint16_t debug_Ig_raw_filt;
+
+extern volatile int16_t debug_v_amp_pred;
+extern volatile int16_t debug_i_ref_amp;
 
 extern volatile enum stateDC_t stateDC;
 
 
+
+
 uint8_t ubKeyNumber = 0x0;
-FDCAN_RxHeaderTypeDef RxHeader;
-uint8_t RxData[8];
+//FDCAN_RxHeaderTypeDef RxHeader;
+//uint8_t RxData[8];
 FDCAN_TxHeaderTypeDef TxHeader;
 uint8_t TxData[8];
 
@@ -122,19 +142,64 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
 	checkErrors();
 
+	static uint32_t blankingCnt = 0;
+
+	if (blankingCnt > 240) {  // dont check sigmadelta data during startup for 240/20kHz/3ADCs = 4ms
+		error_t limitErr = checkDCLimits();
+		if (limitErr != EC_NO_ERROR) {
+			shutdown();
+			sys_errcode = limitErr;
+		}
+		limitErr = checkACLimits();
+		if (limitErr != EC_NO_ERROR) {
+			shutdown();  // todo shutdown AC only
+			sys_errcode = limitErr;
+		}
+	} else {
+		blankingCnt++;
+	}
+
+#define IDC_OFFSET_RAW 2635
+#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
+#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
+#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
+
+#define IAC_OFFSET_RAW 2629
+#define IAC_RAW_TO_10mA IDC_RAW_TO_10mA
+
+	// two channels -> called twice
     if (hadc == &hadc1) {
 
-      	//measVdc();  // called with f=200Hz when repetition counter = 200
+    	static uint8_t cnt_ac = 1;
+    	cnt_ac++;
 
-		// Lowpass filter for Vg
-		static uint16_t Vg_prev[3] = {0};
-		uint16_t Vg_filt = lowpass4(ADC1ConvertedData[0], Vg_prev);
-		debug_Vg_filt = Vg_filt;
+    	if (cnt_ac == 2) {
+    		cnt_ac = 0;
 
-		// Lowpass filter for Ig
-		static uint16_t Ig_prev[3] = {0};
-		uint16_t Ig_filt = lowpass4(ADC1ConvertedData[1], Ig_prev);
-		debug_Ig_filt = Ig_filt;
+			measVdcFBgrid();
+
+			uint16_t vac_raw = ADC1ConvertedData[0];
+			// Lowpass filter for Vg
+			static uint16_t Vg_prev[3] = {0};
+			uint16_t Vg_filt = lowpass4(vac_raw, Vg_prev);
+			debug_Vg_raw_filt = Vg_filt;
+
+			uint16_t iac_raw = ADC1ConvertedData[1];
+			// Lowpass filter for Ig
+			static uint16_t Ig_prev[3] = {0};
+			uint16_t Ig_filt = lowpass4(iac_raw, Ig_prev);
+			debug_Ig_raw_filt = Ig_filt;
+
+			iac_10mA = (iac_raw-IAC_OFFSET_RAW) * IAC_RAW_TO_10mA;
+
+			int16_t duty = acControlStep(vac_raw, iac_raw);
+
+			// set the PWM duty cycle value (into a 'shadow register')
+			__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
+
+			// copy the PWM duty cycle value from the 'shadow register' to the 'active register' -> not necessary
+			//HAL_HRTIM_SoftwareUpdate(&hhrtim1, HRTIM_TIMERUPDATE_A);
+    	}
     }
 
 
@@ -142,26 +207,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
       	//measVdc();  // called with f=200Hz when repetition counter = 200
     	//measVdc();  // called with f=40kHz when repetition counter = 0
-    	measVdc();  // called with f=20kHz when repetition counter = 1
-
-    	static uint32_t blankingCnt = 0;
-
-    	if (blankingCnt > 64) {  // dont check 1 sigmadeltacycles 4(64) work  1(16), 2(32) not
-			int status_limits = checkLimits();
-			if (status_limits != EC_NO_ERROR) {
-				shutdown();
-				sys_errcode = status_limits;
-			}
-    	} else {
-    		blankingCnt++;
-    	}
+    	measVdcFBboost();  // called with f=20kHz when repetition counter = 1
 
 		// Lowpass filter for Ipv
 		static uint16_t Ipv_prev[3] = {0};
-#define IDC_OFFSET_RAW 2635
-#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
-#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
-#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
 
 		int16_t idc_filt_raw = ((uint32_t)ADC2ConvertedData[0] + Ipv_prev[0] + Ipv_prev[1] + Ipv_prev[2]) >> 2;
 		Idc_filt_10mA = (idc_filt_raw-IDC_OFFSET_RAW) * IDC_RAW_TO_10mA;
@@ -169,9 +218,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		Ipv_prev[1] = Ipv_prev[0];
 		Ipv_prev[0] = ADC2ConvertedData[0];
 
-		int16_t dutyB1 = dcControlStep();
-		debug_dutyB1 = dutyB1;
-	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
+//		int16_t dutyB1 = dcControlStep();
+//		debug_dutyB1 = dutyB1;
+//	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
     }
 
 }
@@ -181,6 +230,37 @@ void uartSend(char* ptr, int len)
     HAL_UART_Transmit(&huart3,(uint8_t *)ptr,len, 10);
 
 }
+
+char Tx_Buffer[64];
+uint8_t Tx_len;
+
+void uSendInt(int value)
+{
+	itoa(value, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+}
+
+void uSend_10m(int int_value)
+{
+	float value = int_value/100.0;
+	uint8_t Tx_len = snprintf(NULL, 0, "%.02f", value);
+	char *str = (char *)malloc(Tx_len + 1);
+	snprintf(str, Tx_len + 1, "%f.02", value);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str, Tx_len, 10);
+	free(str);
+}
+
+void uSend_100m(int int_value)
+{
+	float value = int_value/10.0;
+	uint8_t Tx_len = snprintf(NULL, 0, "%.01f", value);
+	char *str = (char *)malloc(Tx_len + 1);
+	snprintf(str, Tx_len + 1, "%f.01", value);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str, Tx_len, 10);
+	free(str);
+}
+
 
 /* USER CODE END 0 */
 
@@ -225,11 +305,6 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  char Tx_Buffer[64];
-  uint8_t Tx_len;
-
-  Vdc_sincfilt_100mV = 0;
-
   /* Configure the FDCAN peripheral */
   FDCAN_Config();  // CAN2 is connected to Battery Cell Stack Controller CAN Bus
 
@@ -241,25 +316,40 @@ int main(void)
   // ### Timer configuration ###
   // ###########################
 
+  // start PWM timer for PV boost Full-bridge
   if (   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
   {
     /* PWM Generation Error */
     Error_Handler();
   }
-
   if (  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
   {
     /* PWM Generation Error */
     Error_Handler();
   }
-
   if (  HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
   {
     Error_Handler();
   }
 
-  // start Sigma-delta-ADC counter
+  // start Sigma-delta-ADC counter for Vdc FB_boost
   HAL_TIM_Base_Start(&htim4);
+
+  // start Sigma-delta-ADC counter for Vdc FB_grid
+  HAL_TIM_Base_Start(&htim2);
+
+  // start PWM timer for grid Full-bridge
+  if (   HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1+HRTIM_OUTPUT_TA2) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  if (   HAL_HRTIM_WaveformCounterStart(&hhrtim1, HRTIM_TIMERID_TIMER_A) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+
 
   // #########################
   // ### DMA configuration ###
@@ -295,26 +385,26 @@ int main(void)
 	checkErrors();
 
 	GPIOB->BRR = (1<<1);  // enable green LED
-	HAL_Delay(1000);  //ms
+	HAL_Delay(500);  //ms
 	GPIOB->BSRR = (1<<1);  // disable green LED
-	HAL_Delay(1000);  //ms
+	HAL_Delay(500);  //ms
 
-
-
+	//can_bus_read();
 
     /* Set the data to be transmitted */
-    TxData[0] = ubKeyNumber;
-    TxData[1] = 0xAD;
+//    TxData[0] = ubKeyNumber;
+//    TxData[1] = 0xAD;
+
+    //csc_cell_volt_min_max_t csc_cell_volt_min_max = {.cell_voltage_max_mV=4000};
 
     // todo check polarity of tim CH3N seems same as CH3
     // todo check CAN baudrate: 500kMHz now
     /* Start the Transmission process */
-    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
-    {
-      /* Transmission request Error */
-      Error_Handler();
-    }
-
+//    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, (uint8_t *)&csc_cell_volt_min_max) != HAL_OK)
+//    {
+//      /* Transmission request Error */
+//      Error_Handler();
+//    }
 
 
 	uint8_t Rx_Buffer = 0;
@@ -322,11 +412,7 @@ int main(void)
 
 
 	if (Rx_Buffer == 'e') {
-		gatedriverDC(1);
-	    uSend("DC EN\n");
-	} else if (Rx_Buffer == 'd') {
-		gatedriverDC(0);
- 	    uSend("DC DIS\n");
+	    uSend("EN\n");
 	}
 
 
@@ -347,23 +433,54 @@ int main(void)
 	itoa(stateDC, Tx_Buffer, 10);
 	Tx_len=strlen(Tx_Buffer);
 	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	uSend("\n");
 
-
-	uSend("dutyB1 ");
-	itoa(debug_dutyB1, Tx_Buffer, 10);
+	uSend("\nstateAC ");
+	itoa(stateAC, Tx_Buffer, 10);
 	Tx_len=strlen(Tx_Buffer);
 	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
 	uSend("\n");
 
-	uSend("Vdc ");
-	float Vdc = Vdc_sincfilt_100mV/10.0;
-	Tx_len = snprintf(NULL, 0, "%.01f", Vdc);
-	char *str_Vdc = malloc(Tx_len + 1);
-	snprintf(str_Vdc, Tx_len + 1, "%f.01", Vdc);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str_Vdc, Tx_len, 10);
+//	for (int c=0; c<96;c++) {
+//		uSend("Vc");
+//		if (c<=8)
+//			uSend(" ");
+//		uSendInt(c+1);
+//
+//		float vCell_mV = cellStack.vCell_mV[c]/1000.0;
+//		Tx_len = snprintf(NULL, 0, " %.03f", vCell_mV);
+//		char *str_vCell = (char *)malloc(Tx_len + 1);
+//		snprintf(str_vCell, Tx_len + 1, " %f.03", vCell_mV);
+//		HAL_UART_Transmit(&huart3, (uint8_t *)str_vCell, Tx_len, 10);
+//		uSend("\n");
+//		free(str_vCell);
+//	}
+
+//	uSend("dutyB1 ");
+//	itoa(debug_dutyB1, Tx_Buffer, 10);
+//	Tx_len=strlen(Tx_Buffer);
+//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+//	uSend("\n");
+//
+	uSend("Vdc FBboost ");
+	uSend_100m(VdcFBboost_sincfilt_100mV);
 	uSend("\n");
-	free(str_Vdc);
+
+
+	uSend("Vdc FBgrid  ");
+	uSend_100m(VdcFBgrid_sincfilt_100mV);
+	uSend("\n");
+
+	uSend("Vac_rms ");
+	uSend_100m(debug_Vac_rms_100mV);
+	uSend("\n");
+
+	uSend("iac ");
+	uSend_10m(iac_10mA);
+	uSend("\n");
+
+	uSend("fac ");
+	uSend_10m(debug_fac_10mHz);
+	uSend(" Hz\n");
 
 //	uSend("re ");
 //	itoa(debug_sigma_delta_re, Tx_Buffer, 10);
@@ -372,35 +489,50 @@ int main(void)
 //	uSend("\n");
 
 
-	uSend("Idc ");
-	float Idc = Idc_filt_10mA/100.0;
-	Tx_len = snprintf(NULL, 0, "%.02f", Idc);
-	char *str_Idc = malloc(Tx_len + 1);
-	snprintf(str_Idc, Tx_len + 1, "%f.02", Idc);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str_Idc, Tx_len, 10);
+
+	uSend("v_amp_pred ");
+	itoa(debug_v_amp_pred, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
 	uSend("\n");
-	free(str_Idc);
+
+	uSend("debug_i_ref_amp ");
+	itoa(debug_i_ref_amp, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	uSend("\n");
+
+
+
+//	uSend("Idc ");
+//	float Idc = Idc_filt_10mA/100.0;
+//	Tx_len = snprintf(NULL, 0, "%.02f", Idc);
+//	char *str_Idc = (char *)malloc(Tx_len + 1);
+//	snprintf(str_Idc, Tx_len + 1, "%f.02", Idc);
+//	HAL_UART_Transmit(&huart3, (uint8_t *)str_Idc, Tx_len, 10);
+//	uSend("\n");
+//	free(str_Idc);
 
 	// no current 4avg: 2632-2634
 	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
 
-//	uSend("Vg ");
-//	itoa(debug_Vg_filt, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-//	// no voltage 4avg: 1971-1982
-//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
-//	// -5V: 1955-1964
-//
-//
-//	uSend("Ig ");
-//	itoa(debug_Ig_filt, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-//	// no current 4avg: 2627-2630
-//	// ~+1A 2671
+	uSend("Vg_raw_filt ");
+	itoa(debug_Vg_raw_filt, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	uSend("\n");
+	// no voltage 4avg: 1971-1982
+	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
+	// -5V: 1955-1964
+
+
+	uSend("Ig_raw_filt ");
+	itoa(debug_Ig_raw_filt, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	uSend("\n");
+	// no current 4avg: 2627-2630
+	// ~+1A 2671
 
 
 
@@ -485,7 +617,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 2;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_TRGO;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_HRTIM_TRG1;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
@@ -620,7 +752,7 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Init.DataSyncJumpWidth = 1;
   hfdcan2.Init.DataTimeSeg1 = 1;
   hfdcan2.Init.DataTimeSeg2 = 1;
-  hfdcan2.Init.StdFiltersNbr = 0;
+  hfdcan2.Init.StdFiltersNbr = 2;
   hfdcan2.Init.ExtFiltersNbr = 0;
   hfdcan2.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   if (HAL_FDCAN_Init(&hfdcan2) != HAL_OK)
@@ -645,9 +777,11 @@ static void MX_HRTIM1_Init(void)
 
   /* USER CODE END HRTIM1_Init 0 */
 
+  HRTIM_ADCTriggerCfgTypeDef pADCTriggerCfg = {0};
   HRTIM_TimeBaseCfgTypeDef pTimeBaseCfg = {0};
   HRTIM_TimerCtlTypeDef pTimerCtl = {0};
   HRTIM_TimerCfgTypeDef pTimerCfg = {0};
+  HRTIM_CompareCfgTypeDef pCompareCfg = {0};
   HRTIM_OutputCfgTypeDef pOutputCfg = {0};
 
   /* USER CODE BEGIN HRTIM1_Init 1 */
@@ -668,17 +802,34 @@ static void MX_HRTIM1_Init(void)
   {
     Error_Handler();
   }
-  pTimeBaseCfg.Period = 0xFFDF;
+  pADCTriggerCfg.UpdateSource = HRTIM_ADCTRIGGERUPDATE_TIMER_A;
+  pADCTriggerCfg.Trigger = HRTIM_ADCTRIGGEREVENT13_TIMERA_PERIOD;
+  if (HAL_HRTIM_ADCTriggerConfig(&hhrtim1, HRTIM_ADCTRIGGER_1, &pADCTriggerCfg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_HRTIM_ADCPostScalerConfig(&hhrtim1, HRTIM_ADCTRIGGER_1, 0x0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  pTimeBaseCfg.Period = 8500;
   pTimeBaseCfg.RepetitionCounter = 0x00;
-  pTimeBaseCfg.PrescalerRatio = HRTIM_PRESCALERRATIO_MUL32;
+  pTimeBaseCfg.PrescalerRatio = HRTIM_PRESCALERRATIO_MUL2;
   pTimeBaseCfg.Mode = HRTIM_MODE_CONTINUOUS;
   if (HAL_HRTIM_TimeBaseConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, &pTimeBaseCfg) != HAL_OK)
   {
     Error_Handler();
   }
-  pTimerCtl.UpDownMode = HRTIM_TIMERUPDOWNMODE_UP;
+  pTimerCtl.UpDownMode = HRTIM_TIMERUPDOWNMODE_UPDOWN;
+  pTimerCtl.GreaterCMP1 = HRTIM_TIMERGTCMP1_GREATER;
   pTimerCtl.DualChannelDacEnable = HRTIM_TIMER_DCDE_DISABLED;
   if (HAL_HRTIM_WaveformTimerControl(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, &pTimerCtl) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_HRTIM_RollOverModeConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_TIM_FEROM_BOTH|HRTIM_TIM_BMROM_BOTH
+                              |HRTIM_TIM_ADROM_BOTH|HRTIM_TIM_OUTROM_BOTH
+                              |HRTIM_TIM_ROM_BOTH) != HAL_OK)
   {
     Error_Handler();
   }
@@ -709,18 +860,13 @@ static void MX_HRTIM1_Init(void)
   {
     Error_Handler();
   }
-  pTimerCfg.DelayedProtectionMode = HRTIM_TIMER_D_E_DELAYEDPROTECTION_DISABLED;
-  if (HAL_HRTIM_WaveformTimerConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E, &pTimerCfg) != HAL_OK)
+  pCompareCfg.CompareValue = 4250;
+  if (HAL_HRTIM_WaveformCompareConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, &pCompareCfg) != HAL_OK)
   {
     Error_Handler();
   }
-  pTimerCfg.DelayedProtectionMode = HRTIM_TIMER_F_DELAYEDPROTECTION_DISABLED;
-  if (HAL_HRTIM_WaveformTimerConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, &pTimerCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  pOutputCfg.Polarity = HRTIM_OUTPUTPOLARITY_HIGH;
-  pOutputCfg.SetSource = HRTIM_OUTPUTSET_NONE;
+  pOutputCfg.Polarity = HRTIM_OUTPUTPOLARITY_LOW;
+  pOutputCfg.SetSource = HRTIM_OUTPUTSET_TIMCMP1;
   pOutputCfg.ResetSource = HRTIM_OUTPUTRESET_NONE;
   pOutputCfg.IdleMode = HRTIM_OUTPUTIDLEMODE_NONE;
   pOutputCfg.IdleLevel = HRTIM_OUTPUTIDLELEVEL_INACTIVE;
@@ -731,39 +877,8 @@ static void MX_HRTIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_HRTIM_WaveformOutputConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E, HRTIM_OUTPUT_TE1, &pOutputCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_WaveformOutputConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, HRTIM_OUTPUT_TF1, &pOutputCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  pOutputCfg.Polarity = HRTIM_OUTPUTPOLARITY_HIGH;
   if (HAL_HRTIM_WaveformOutputConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_OUTPUT_TA2, &pOutputCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_WaveformOutputConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E, HRTIM_OUTPUT_TE2, &pOutputCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_WaveformOutputConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, HRTIM_OUTPUT_TF2, &pOutputCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_TimeBaseConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E, &pTimeBaseCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_WaveformTimerControl(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E, &pTimerCtl) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_TimeBaseConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, &pTimeBaseCfg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_HRTIM_WaveformTimerControl(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, &pTimerCtl) != HAL_OK)
   {
     Error_Handler();
   }
@@ -1148,8 +1263,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA2 PA12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_12;
+  /*Configure GPIO pin : PA2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -1173,7 +1288,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PB11 */
   GPIO_InitStruct.Pin = GPIO_PIN_11;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA11 */
@@ -1182,6 +1297,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF9_FDCAN1;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA15 */
@@ -1218,8 +1339,10 @@ static void FDCAN_Config(void)
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
   sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x321;
-  sFilterConfig.FilterID2 = 0x7FF;
+  sFilterConfig.FilterID1 = 0x40D;  // CSC01_CELL_VOLT_21_24
+  //sFilterConfig.FilterID2 = 0x7FF;
+  sFilterConfig.FilterID2 = 0x000;
+
   if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
   {
     Error_Handler();
@@ -1239,16 +1362,17 @@ static void FDCAN_Config(void)
     Error_Handler();
   }
 
-  if (HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  // use polling for now
+//  if (HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
 
   /* Prepare Tx Header */
-  TxHeader.Identifier = 0x321;
+  TxHeader.Identifier = 0x40D;
   TxHeader.IdType = FDCAN_STANDARD_ID;
   TxHeader.TxFrameType = FDCAN_DATA_FRAME;
-  TxHeader.DataLength = FDCAN_DLC_BYTES_2;
+  TxHeader.DataLength = FDCAN_DLC_BYTES_8;
   TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
   TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
   TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
@@ -1266,21 +1390,29 @@ static void FDCAN_Config(void)
   */
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
-  if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
-  {
-    /* Retrieve Rx messages from RX FIFO0 */
-    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
-    {
-    Error_Handler();
-    }
-
-    /* Display LEDx */
-    if ((RxHeader.Identifier == 0x321) && (RxHeader.IdType == FDCAN_STANDARD_ID) && (RxHeader.DataLength == FDCAN_DLC_BYTES_2))
-    {
-      //LED_Display(RxData[0]);
-      ubKeyNumber = RxData[0];
-    }
-  }
+//  if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
+//  {
+//    /* Retrieve Rx messages from RX FIFO0 */
+//    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
+//    {
+//    Error_Handler();
+//    }
+//
+//    if ((RxHeader.Identifier == 0x40D) && (RxHeader.IdType == FDCAN_STANDARD_ID))// && (RxHeader.DataLength == FDCAN_DLC_BYTES_8))
+//    {
+//    	uSend("\nRX ID: ");
+//    	uSendInt(RxHeader.Identifier);
+//    	uSend("\nRX DLC: ");
+//    	uSendInt(RxHeader.DataLength);
+//
+//    	//csc_cell_volt_min_max_t *csc_cell_volt_min_max = &RxData[0];
+//
+//    	uSend("\ncell_voltage_max_mV: ");
+//    	uSendInt(((csc_cell_volt_min_max_t *)RxData)->cell_voltage_max_mV);
+//    } else {
+//    	uSend("invalid CAN msg\n");
+//    }
+//  }
 }
 
 /* USER CODE END 4 */
@@ -1296,6 +1428,8 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+	  shutdown();
+	  uSend("Error_Handler\n");
   }
   /* USER CODE END Error_Handler_Debug */
 }

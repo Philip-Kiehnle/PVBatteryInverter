@@ -18,15 +18,14 @@ extern "C" {
 #define VDC_TOLERANCE_100mV 50  // 5V tolerance for closing DC contactor
 
 
-enum stateDC_t {INIT, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR, MPPT};
-//enum stateAC_t {INIT, GRID_CONNECTING, GRID_SYNC};
+enum stateDC_t {INIT_DC, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR_DC, MPPT};
 
 extern volatile enum stateDC_t stateDC;
-extern volatile uint16_t Vdc_sincfilt_100mV;
+extern volatile uint16_t VdcFBboost_sincfilt_100mV;
 extern volatile int16_t Idc_filt_10mA;
 
-void measVdc();
-int checkLimits();
+void measVdcFBboost();
+error_t checkDCLimits();
 int16_t dcControlStep();
 
 

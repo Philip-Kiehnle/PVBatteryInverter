@@ -41,3 +41,13 @@ void contactorBattery(bool state)
 		GPIOC->BRR = (1<<13);
 	}
 }
+
+void bmsPower(bool state)
+{
+	// Mosfet for 12V BMS supply
+	if ( state ) {
+		GPIOC->BSRR = (1<<0);
+	} else {
+		GPIOC->BRR = (1<<0);
+	}
+}
