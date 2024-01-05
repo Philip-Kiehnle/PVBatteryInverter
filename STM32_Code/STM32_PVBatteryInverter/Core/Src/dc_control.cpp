@@ -8,10 +8,11 @@
 #include "common.h"
 #include "gpio.h"
 #include "dc_control.h"
+#include "battery/STW_mBMS.hpp"
 
 // defines for MPP tracking algorithm
 #define I_ADCR 50
-#define VIN_ADCR (450/1)
+//#define VIN_ADCR (450/1)  // tested okay with ~30V
 
 #define MPPT_PRECISION_BITS 16
 #define MPPT_V_RANGE (6554)  // voltage range [0, +6553.6] 16bit in 100mV
@@ -25,21 +26,21 @@
 #define MPPT_DUTY_ABSMAX 4250
 #define MPPT_DUTY_MIN_BOOTSTRAP 0  // High side has isolated supply and no bootstrap capacitor
 
-// single PWM step has 1/170MHz = 5.88ns
+// single PWM step has 1/170MHz = 5.88ns -> center aligned PWM -> 11.8ns
 // deadtime is configured to 64ns (10k resistor)
-#define MIN_PULSE 18  // min pulse duration is 106ns - 64ns deadtime = 42ns
+#define MIN_PULSE 9  // min pulse duration is 106ns - 64ns deadtime = 42ns
 #include "mpptracker.h"
 
 #define DC_CTRL_FREQ 20000
 #define DC_CTRL_FREQ_MPPT 50
 
-volatile uint16_t Vdc_sincfilt_100mV;
+volatile uint16_t VdcFBboost_sincfilt_100mV;
 volatile int16_t Idc_filt_10mA;
 
 
 extern volatile uint16_t debug_sigma_delta_re;
 
-volatile enum stateDC_t stateDC = INIT;
+volatile enum stateDC_t stateDC = INIT_DC;
 
 
 
@@ -49,7 +50,7 @@ void shutdownDC()
 	contactorBattery(0);
 }
 
-uint32_t cnt_rel = 0;
+static uint32_t cnt_rel = 0;
 
 static inline void nextState(enum stateDC_t state)
 {
@@ -62,18 +63,24 @@ int16_t dcControlStep()
 
 	static int16_t dutyLS1 = 0;
 
+	static STW_mBMS bms(2);  // BMS address
 	static MPPTracker mppTracker;
 
 	bool vdc_inRange = false;
 
-	if (Vdc_sincfilt_100mV > VDC_BOOST_STOP_100mV && Vdc_sincfilt_100mV < E_VDC_MAX_100mV) {
-		if (Vdc_sincfilt_100mV > VDC_BOOST_START_100mV) {
+	if (VdcFBboost_sincfilt_100mV > VDC_BOOST_STOP_100mV && VdcFBboost_sincfilt_100mV < E_VDC_MAX_100mV) {
+		if (VdcFBboost_sincfilt_100mV > VDC_BOOST_START_100mV) {
 		    vdc_inRange = true;
 		}
 	} else {
 		shutdownDC();
 		vdc_inRange = false;
-		stateDC = INIT;
+		stateDC = INIT_DC;
+	}
+
+	if (sys_errcode != 0 ) {
+		shutdownDC();
+		stateDC = INIT_DC;
 	}
 
 	cnt_rel++;
@@ -83,7 +90,7 @@ int16_t dcControlStep()
 
 	uint16_t vdc_filt50Hz_100mV;
 	static uint32_t vdc_sum;
-	vdc_sum += Vdc_sincfilt_100mV;
+	vdc_sum += VdcFBboost_sincfilt_100mV;
 
 	int16_t idc_filt50Hz_10mA;
 	static int32_t idc_sum;
@@ -95,10 +102,17 @@ int16_t dcControlStep()
 		vdc_sum = 0;
 		idc_filt50Hz_10mA = idc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
 		idc_sum = 0;
+
+		if (sys_mode == OFF) {
+			bmsPower(0);
+		} else {
+			bmsPower(1);
+			//bms->update();
+		}
 	}
 
 	switch (stateDC) {
-	  case INIT:
+	  case INIT_DC:
 		shutdownDC();
 		nextState(WAIT_PV_VOLTAGE);
 		break;
@@ -111,6 +125,7 @@ int16_t dcControlStep()
 		break;
 
 	  case VOLTAGE_CONTROL:
+	  {  // curly braces to have scope for variable initialization
 		gatedriverDC(1);
 		uint16_t vdc_ref_100mV = 2900;  // todo insert battery voltage
 
@@ -125,16 +140,16 @@ int16_t dcControlStep()
 		}
 
 
-		if (   Vdc_sincfilt_100mV > (vdc_ref_100mV-VDC_TOLERANCE_100mV)
-		    && Vdc_sincfilt_100mV < (vdc_ref_100mV+VDC_TOLERANCE_100mV)
+		if (   VdcFBboost_sincfilt_100mV > (vdc_ref_100mV-VDC_TOLERANCE_100mV)
+		    && VdcFBboost_sincfilt_100mV < (vdc_ref_100mV+VDC_TOLERANCE_100mV)
 			){
 
 			contactorBattery(1);
-			nextState(WAIT_CONTACTOR);
+			nextState(WAIT_CONTACTOR_DC);
 		}
 		break;
-
-	  case WAIT_CONTACTOR:
+	  }
+	  case WAIT_CONTACTOR_DC:
 		if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
 			mppTracker.i_prev = idc_filt50Hz_10mA;
 			mppTracker.v_prev = vdc_filt50Hz_100mV;
@@ -145,10 +160,10 @@ int16_t dcControlStep()
 
 	  case MPPT:
 		if (cnt50Hz == 0) {
-			GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
+			//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 			mppTracker_step(&mppTracker, vdc_filt50Hz_100mV, idc_filt50Hz_10mA);  // todo meas exec time; find better way for #defines in mppt
 			dutyLS1 = mppTracker.duty_raw;
-			GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+			//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 		}
 		break;
 
@@ -177,15 +192,15 @@ int16_t dcControlStep()
 
 }
 
-int checkLimits(){
-	if ( Vdc_sincfilt_100mV > E_VDC_MAX_100mV ) {
-		return EC_V_DC_MAX;
+error_t checkDCLimits(){
+	if ( VdcFBboost_sincfilt_100mV > E_VDC_MAX_100mV ) {
+		return EC_V_DC_MAX_FB_BOOST;
 	}
 	return EC_NO_ERROR;
 }
 
 
-void measVdc()
+void measVdcFBboost()
 {
 
 	// sigma delta bitstream with 10MHz
@@ -210,11 +225,12 @@ void measVdc()
 	// @9.55V Vdc=400.6-401.2V, re=71-72
 	// @12.57V Vdc=528.4-529.1V, re=14-16
 
-	uint16_t sigma_delta_re = TIM4->CNT;
+	//uint16_t sigma_delta_re = TIM4->CNT;
+	uint16_t sigma_delta_re = 250;  //for AC debugging todo remove
 	TIM4->CNT = 0;
 
 	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
-		sys_errcode = EC_V_DC_SENSOR;
+		sys_errcode = EC_V_DC_SENSOR_FB_BOOST;
 	}
 
 	uint16_t filt_in = sigma_delta_re;
@@ -284,9 +300,13 @@ void measVdc()
 		comb_stage[2] = tmp2;
 
 		// voltage calculation
-		// decim=16 ->                  7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
-		// pos value range from 250 to 450 -> div by 200
-		Vdc_sincfilt_100mV = (VIN_ADCR * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
+		// 0V = 50% bitstream ones = 250 edges counted in 50us -> probability of doubles high -> less edges
+		// 1V = 90% bitstream ones = 50 edges counted in 50us
+		// pos value range from 50 to 250 -> div by 200
+//#define V_DC_MAX_FBboost (1+33)
+#define V_DC_MAX_FBboost (1+450)  // todo 450 voltage divider
+		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
+		VdcFBboost_sincfilt_100mV = (V_DC_MAX_FBboost * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
 
 		cnt_intr = 0;
 	}

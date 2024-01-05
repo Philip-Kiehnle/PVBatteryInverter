@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "random": "c",
+        "cmath": "c",
+        "complex": "c"
+    }
+}

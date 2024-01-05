@@ -1946,7 +1946,7 @@
     (uuid 9e2dff6d-4f9a-47d5-a5b5-6c4d768ff9cc)
   )
 
-  (text_box "ToDo for PCB Version 2:\n\nPA5 FBgrid_Vdc_data not 5V tolerant!\nswap LED1 and LED2 silkscreen\nAMC3330 place 1nF 1206 close to pins (swap with 100nF)"
+  (text_box "ToDo for PCB Version 2:\n\nPA5 FBgrid_Vdc_data not 5V tolerant!\nswap LED1 and LED2 silkscreen\nAMC3330 place 1nF 1206 close to pins (swap with 100nF)\nEmergency Button: add filter Cap 2.2nF * 40kOhm = 88us  "
     (at 137.16 59.055 0) (size 65.405 35.56)
     (stroke (width 0) (type default))
     (fill (type none))
