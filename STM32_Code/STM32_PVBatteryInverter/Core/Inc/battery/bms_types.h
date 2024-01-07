@@ -42,8 +42,8 @@ typedef struct {
     uint8_t status;
     volatile uint8_t faultsDetectedByMicrocontroller;
     uint8_t soc;
-    int8_t temperatureAmbient;
-    int8_t temperatureBattery;
+    int8_t temperatureBatteryMAX;
+    int8_t temperatureBatteryMIN;
     int8_t temperatureMOSFET;
     int16_t current_mA;
     uint32_t voltage_mV;
@@ -60,7 +60,10 @@ struct DualBMS {
 struct CellStack {
     uint16_t vCell_mV[96];
     bool balancingState[96];
+    int8_t temperature[14*4];
+    uint64_t csc_err[4];
 } __attribute__((__packed__));
+
 
 #ifdef __cplusplus
 }
