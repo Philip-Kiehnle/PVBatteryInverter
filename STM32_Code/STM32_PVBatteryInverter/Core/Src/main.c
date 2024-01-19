@@ -95,7 +95,15 @@ volatile uint16_t debug_Ig_raw_filt;
 extern volatile int16_t debug_v_amp_pred;
 extern volatile int16_t debug_i_ref_amp;
 
+extern volatile float pdc_filt50Hz;
+extern volatile float v_pv_filt50Hz;
+extern volatile float v_dc_filt50Hz;
+extern volatile bool mppt_calc_request;
+extern volatile bool mppt_calc_complete;
+
 extern volatile enum stateDC_t stateDC;
+
+extern bool monitoring_binary;
 
 
 uint8_t ubKeyNumber = 0x0;
@@ -224,7 +232,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		blankingCnt++;
 	}
 
-#define IDC_OFFSET_RAW 2635
+#define IDC_OFFSET_RAW 2632  // 2635->-60mA
 #define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
@@ -283,9 +291,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		Ipv_prev[1] = Ipv_prev[0];
 		Ipv_prev[0] = ADC2ConvertedData[0];
 
-//		int16_t dutyB1 = dcControlStep();
-//		debug_dutyB1 = dutyB1;
-//	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
+		int16_t dutyB1 = dcControlStep();
+		debug_dutyB1 = dutyB1;
+	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
     }
 
 }
@@ -460,204 +468,209 @@ int main(void)
 	checkErrors();
 
 	GPIOB->BRR = (1<<1);  // enable green LED
-	HAL_Delay(500);  //ms
+	calc_and_wait(500, &huart3);  //ms
 	GPIOB->BSRR = (1<<1);  // disable green LED
-	HAL_Delay(500);  //ms
+	calc_and_wait(250, &huart3);  //ms
 
-	if (sys_errcode!=EC_NO_ERROR) {
-		GPIOB->BRR = (1<<0);  // enable red LED
-		uSend("Err ");
-		itoa(sys_errcode, Tx_Buffer, 10);
+	// RS485
+	itoa(sys_errcode, Tx_Buffer, 10);
+	Tx_len=strlen(Tx_Buffer);
+	HAL_UART_Transmit(&huart5, (uint8_t *)Tx_Buffer, Tx_len, 10);
+
+	calc_and_wait(250, &huart3);  //ms
+
+	// UART
+	if (!monitoring_binary) {
+		if (sys_errcode!=EC_NO_ERROR) {
+			GPIOB->BRR = (1<<0);  // enable red LED
+			uSend("Err ");
+			itoa(sys_errcode, Tx_Buffer, 10);
+			Tx_len=strlen(Tx_Buffer);
+			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			uSend(" : ");
+			char * strerr = strerror(sys_errcode);
+			Tx_len=strlen(strerr);
+			HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+			uSend("\n");
+		}
+
+		uSend("\nstateDC ");
+		itoa(stateDC, Tx_Buffer, 10);
 		Tx_len=strlen(Tx_Buffer);
 		HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-		uSend(" : ");
-		char * strerr = strerror(sys_errcode);
-		Tx_len=strlen(strerr);
-		HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+
+		uSend("\nstateAC ");
+		itoa(stateAC, Tx_Buffer, 10);
+		Tx_len=strlen(Tx_Buffer);
+		HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
 		uSend("\n");
-	}
 
-	uSend("\nstateDC ");
-	itoa(stateDC, Tx_Buffer, 10);
-	Tx_len=strlen(Tx_Buffer);
-	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		//can_bus_read();  // todo implement anti lockup
+	#if 0
+		/************************/
+		/* print battery status */
+		/************************/
+		int16_t temperatureBatteryMIN = 127;
+		int16_t temperatureBatteryMAX = -128;
 
-	uSend("\nstateAC ");
-	itoa(stateAC, Tx_Buffer, 10);
-	Tx_len=strlen(Tx_Buffer);
-	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	uSend("\n");
+		for (int c=0; c<(4*14);c++) {
 
-	can_bus_read();
-#if 1
-	/************************/
-	/* print battery status */
-	/************************/
-	int16_t temperatureBatteryMIN = 127;
-	int16_t temperatureBatteryMAX = -128;
+			if (cellStack.temperature[c] < temperatureBatteryMIN) {
+				temperatureBatteryMIN = cellStack.temperature[c];
+			}
+			if (cellStack.temperature[c] > temperatureBatteryMAX) {
+				temperatureBatteryMAX = cellStack.temperature[c];
+			}
 
-	for (int c=0; c<(4*14);c++) {
-
-		if (cellStack.temperature[c] < temperatureBatteryMIN) {
-			temperatureBatteryMIN = cellStack.temperature[c];
-		}
-		if (cellStack.temperature[c] > temperatureBatteryMAX) {
-			temperatureBatteryMAX = cellStack.temperature[c];
-		}
-
-		uSend("Temp");
-		if (c<=8)
+			uSend("Temp");
+			if (c<=8)
+				uSend(" ");
+			uSendInt(c+1);
 			uSend(" ");
-		uSendInt(c+1);
-		uSend(" ");
-		uSendInt(cellStack.temperature[c]);
-		uSend("\n");
-	}
-
-	battery.temperatureBatteryMIN = temperatureBatteryMIN;
-	battery.temperatureBatteryMAX = temperatureBatteryMAX;
-
-
-	uint16_t vCellMIN_mV = 5000;
-	uint16_t vCellMAX_mV = 0;
-
-	uint8_t nr_cells_balancing = 0;
-
-	for (int c=0; c<96;c++) {
-
-		if (cellStack.vCell_mV[c] < vCellMIN_mV) {
-			vCellMIN_mV = cellStack.vCell_mV[c];
-		}
-		if (cellStack.vCell_mV[c] > vCellMAX_mV) {
-			vCellMAX_mV = cellStack.vCell_mV[c];
-		}
-
-		uSend("Vc");
-		if (c<=8)
-			uSend(" ");
-		uSendInt(c+1);
-		uSend(" ");
-		uSend_1m(cellStack.vCell_mV[c]);
-
-		if (cellStack.balancingState[c]) {
-			uSend(" balancing");
-			nr_cells_balancing++;
-		}
-		uSend("\n");
-	}
-	uSend("nr_cells_balancing ");
-	uSendInt(nr_cells_balancing);
-	uSend("\n");
-
-	// todo implement safety mechanism for hangups and tolerate 3 can message errors
-	battery.vCell_max_mV = vCellMAX_mV;
-	battery.vCell_min_mV = vCellMIN_mV;
-
-	int16_t vCellDIFF_mV = vCellMAX_mV - vCellMIN_mV;
-	uSend("vCellMAX_mV ");
-	uSend_1m(vCellMAX_mV);
-	uSend("\n");
-	uSend("vCellMIN_mV ");
-	uSend_1m(vCellMIN_mV);
-	uSend("\n");
-	uSend("vCellDIFF_mV ");
-	uSend_1m(vCellDIFF_mV);
-	uSend("\n");
-
-	for (int csc=0; csc<4;csc++) {
-		if (cellStack.csc_err[csc]) {
-			uSend("Err in CSC");
-			uSendInt(csc+1);
+			uSendInt(cellStack.temperature[c]);
 			uSend("\n");
-			for (uint8_t bit=0; bit<64; bit++) {
-				if ( (1<<bit) & cellStack.csc_err[csc]) {
-					const char * strerr = csc_err_str[bit];
-					Tx_len=strlen(strerr);
-					HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
-					uSend("\n");
+		}
+
+		battery.temperatureBatteryMIN = temperatureBatteryMIN;
+		battery.temperatureBatteryMAX = temperatureBatteryMAX;
+
+
+		uint16_t vCellMIN_mV = 5000;
+		uint16_t vCellMAX_mV = 0;
+
+		uint8_t nr_cells_balancing = 0;
+
+		for (int c=0; c<96;c++) {
+
+			if (cellStack.vCell_mV[c] < vCellMIN_mV) {
+				vCellMIN_mV = cellStack.vCell_mV[c];
+			}
+			if (cellStack.vCell_mV[c] > vCellMAX_mV) {
+				vCellMAX_mV = cellStack.vCell_mV[c];
+			}
+
+			uSend("Vc");
+			if (c<=8)
+				uSend(" ");
+			uSendInt(c+1);
+			uSend(" ");
+			uSend_1m(cellStack.vCell_mV[c]);
+
+			if (cellStack.balancingState[c]) {
+				uSend(" balancing");
+				nr_cells_balancing++;
+			}
+			uSend("\n");
+		}
+		uSend("nr_cells_balancing ");
+		uSendInt(nr_cells_balancing);
+		uSend("\n");
+
+		// todo implement safety mechanism for hangups and tolerate 3 can message errors
+		battery.vCell_max_mV = vCellMAX_mV;
+		battery.vCell_min_mV = vCellMIN_mV;
+
+		int16_t vCellDIFF_mV = vCellMAX_mV - vCellMIN_mV;
+		uSend("vCellMAX_mV ");
+		uSend_1m(vCellMAX_mV);
+		uSend("\n");
+		uSend("vCellMIN_mV ");
+		uSend_1m(vCellMIN_mV);
+		uSend("\n");
+		uSend("vCellDIFF_mV ");
+		uSend_1m(vCellDIFF_mV);
+		uSend("\n");
+
+		for (int csc=0; csc<4;csc++) {
+			if (cellStack.csc_err[csc]) {
+				uSend("Err in CSC");
+				uSendInt(csc+1);
+				uSend("\n");
+				for (uint8_t bit=0; bit<64; bit++) {
+					if ( (1<<bit) & cellStack.csc_err[csc]) {
+						const char * strerr = csc_err_str[bit];
+						Tx_len=strlen(strerr);
+						HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+						uSend("\n");
+					}
 				}
 			}
 		}
+	#endif
+
+	//	uSend("dutyB1 ");
+	//	itoa(debug_dutyB1, Tx_Buffer, 10);
+	//	Tx_len=strlen(Tx_Buffer);
+	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	//	uSend("\n");
+	//
+
+		uSend("Vdc FBboost ");
+		uSend_100m(VdcFBboost_sincfilt_100mV);
+		uSend("\n");
+	//
+	//	uSend("Vdc FBgrid  ");
+	//	uSend_100m(VdcFBgrid_sincfilt_100mV);
+	//	uSend("\n");
+	//
+	//	uSend("Vac_rms ");
+	//	uSend_100m(debug_Vac_rms_100mV);
+	//	uSend("\n");
+	//
+	//	uSend("iac ");
+	//	uSend_10m(iac_10mA);
+	//	uSend("\n");
+	//
+	//	uSend("fac ");
+	//	uSend_10m(debug_fac_10mHz);
+	//	uSend(" Hz\n");
+
+	//	uSend("re ");
+	//	itoa(debug_sigma_delta_re, Tx_Buffer, 10);
+	//	Tx_len=strlen(Tx_Buffer);
+	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	//	uSend("\n");
+
+
+
+	//	uSend("v_amp_pred ");
+	//	itoa(debug_v_amp_pred, Tx_Buffer, 10);
+	//	Tx_len=strlen(Tx_Buffer);
+	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	//	uSend("\n");
+	//
+	//	uSend("debug_i_ref_amp ");
+	//	itoa(debug_i_ref_amp, Tx_Buffer, 10);
+	//	Tx_len=strlen(Tx_Buffer);
+	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	//	uSend("\n");
+
+
+
+		uSend("Idc ");
+		uSend_10m(Idc_filt_10mA);
+		uSend("\n");
+	//	// no current 4avg: 2632-2634
+	//	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
+	//
+	//	uSend("Vg_raw_filt ");
+	//	itoa(debug_Vg_raw_filt, Tx_Buffer, 10);
+	//	Tx_len=strlen(Tx_Buffer);
+	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	//	uSend("\n");
+	//	// no voltage 4avg: 1971-1982
+	//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
+	//	// -5V: 1955-1964
+	//
+	//
+	//	uSend("Ig_raw_filt ");
+	//	itoa(debug_Ig_raw_filt, Tx_Buffer, 10);
+	//	Tx_len=strlen(Tx_Buffer);
+	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	//	uSend("\n");
+	//	// no current 4avg: 2627-2630
+	//	// ~+1A 2671
 	}
-#endif
-
-//	uSend("dutyB1 ");
-//	itoa(debug_dutyB1, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-//
-//	uSend("Vdc FBboost ");
-//	uSend_100m(VdcFBboost_sincfilt_100mV);
-//	uSend("\n");
-//
-//	uSend("Vdc FBgrid  ");
-//	uSend_100m(VdcFBgrid_sincfilt_100mV);
-//	uSend("\n");
-//
-//	uSend("Vac_rms ");
-//	uSend_100m(debug_Vac_rms_100mV);
-//	uSend("\n");
-//
-//	uSend("iac ");
-//	uSend_10m(iac_10mA);
-//	uSend("\n");
-//
-//	uSend("fac ");
-//	uSend_10m(debug_fac_10mHz);
-//	uSend(" Hz\n");
-
-//	uSend("re ");
-//	itoa(debug_sigma_delta_re, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-
-
-
-//	uSend("v_amp_pred ");
-//	itoa(debug_v_amp_pred, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-//
-//	uSend("debug_i_ref_amp ");
-//	itoa(debug_i_ref_amp, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-
-
-
-//	uSend("Idc ");
-//	float Idc = Idc_filt_10mA/100.0;
-//	Tx_len = snprintf(NULL, 0, "%.02f", Idc);
-//	char *str_Idc = (char *)malloc(Tx_len + 1);
-//	snprintf(str_Idc, Tx_len + 1, "%f.02", Idc);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)str_Idc, Tx_len, 10);
-//	uSend("\n");
-//	free(str_Idc);
-
-//	// no current 4avg: 2632-2634
-//	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
-//
-//	uSend("Vg_raw_filt ");
-//	itoa(debug_Vg_raw_filt, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-//	// no voltage 4avg: 1971-1982
-//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
-//	// -5V: 1955-1964
-//
-//
-//	uSend("Ig_raw_filt ");
-//	itoa(debug_Ig_raw_filt, Tx_Buffer, 10);
-//	Tx_len=strlen(Tx_Buffer);
-//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-//	uSend("\n");
-//	// no current 4avg: 2627-2630
-//	// ~+1A 2671
 
 
 
@@ -667,7 +680,10 @@ int main(void)
 	uint8_t Rx_Buffer = 0;
 	HAL_UART_Receive(&huart3, &Rx_Buffer, 1, 10);
 
-	if (Rx_Buffer == 'b') {
+	if (Rx_Buffer == 'm') {
+	    uSend("Monitoring ENABLE\n");
+	    monitoring_binary = true;
+	} else if (Rx_Buffer == 'b') {
 	    uSend("BALANCING ENABLE\n");
 
 	    //cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen

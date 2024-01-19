@@ -53,7 +53,7 @@ static inline void nextState(enum stateAC_t state)
 
 int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 {
-GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
+//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	static int16_t duty = 0;
 	static uint32_t cnt_pll_locked = 0;
 
@@ -100,7 +100,7 @@ GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	switch (stateAC) {
 	  case INIT_AC:
 		shutdownAC();
-		if (sys_errcode == 0 )
+		if (sys_errcode == EC_NO_ERROR )
 			nextState(WAIT_AC_VOLTAGE);
 		break;
 
@@ -204,7 +204,7 @@ GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	  duty = 0;
 	}
 
-	GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 23us -> too much
+	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 23us -> too much
 
 	return duty;
 
@@ -253,7 +253,9 @@ void measVdcFBgrid()
 	// @9.55V Vdc=400.6-401.2V, re=71-72
 	// @12.57V Vdc=528.4-529.1V, re=14-16
 
-	uint16_t sigma_delta_re = TIM2->CNT;
+//	uint16_t sigma_delta_re = TIM2->CNT;
+	uint16_t sigma_delta_re = 250;  //for DC debugging todo remove
+
 	TIM2->CNT = 0;
 
 	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
