@@ -1,7 +1,7 @@
 
 # PVBatteryInverter - High efficient photovoltaic and battery inverter using GaN semiconductors
 This project was inspired by multiple drivers:
- * AC-connected battery systems have dissadvantages in case of charging efficiency ( PV -> DC/AC -> AC/DC -> Battery ) and cost/environmental impact, because of the extra inverter.
+ * AC-connected battery systems have dissadvantages in terms of charging efficiency ( PV -> DC/AC -> AC/DC -> Battery ) and cost/environmental impact, because of the extra inverter.
  * DC-connected battery systems do not guarantee a better efficiency by default. E.g. in case of a large inverter (~10 kW) operating under small loads during nighttime (30-150 Watt).
  * Commercial solutions require an additional power meter for the self-consumption power control. In my opinion, this is a complete waste of time, space, resources and energy:
    * installation is complicated, and requires space in the meter cabinet
@@ -9,14 +9,14 @@ This project was inspired by multiple drivers:
    * extra power meter has an offset and can not control the official meter measurement to zero
    * The digital energy meters in Germany already offer an optical interface, which can be set to send the actual power every second  [More details below](#head_electricityMeter)
  * GaN instead of SiC or Si-IGBT offers improved efficiency.
- * No GaN-based inverter out there at the moment 9.12.2023
- * Second-life 6 kWh battery was there
- * GaN full-bridge cells were there
- * New west PV plant has some shaded areas, which are directly connected to microinverter. But 8 PV-modules are unshaded and require a string inverter.
+ * No GaN-based inverter is out there at the moment 9.12.2023
+ * Second-life 6 kWh battery was available
+ * GaN full-bridge cells were available from another project
+ * New west oriented PV plant has some shaded areas, which are directly connected to microinverter. But 8 PV-modules are unshaded most of the time and require a string inverter.
  * -> Small Hybrid (PV+Battery) Inverter for some PV-modules and microinverter or PV-sting inverter for the other PV-modules looks like the optimal solution
 
 
-Let's build an efficient 2kW hybrid inverter, which solves all problems shown above!
+Let's build an efficient 2kW hybrid inverter, which solves all the problems shown above!
 
 
 # Components
@@ -37,8 +37,9 @@ Voc_string(-15°C)  = 411.9 V
 ## High-Voltage Battery
 ```
 cells = 96
+Vmin = 96*3.3 V = 316.8 V (feed into grid is only possible when grid voltage is below 224V)
 Vnom = 96*3.7 V = 355.2 V
-Vmax = 96*3.7 V = 403.2 V
+Vmax = 96*4.2 V = 403.2 V
 energy = 18 Ah * 355.2V = 6.4 kWh
 ```
 

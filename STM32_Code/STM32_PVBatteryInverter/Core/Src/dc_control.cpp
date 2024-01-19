@@ -9,39 +9,118 @@
 #include "gpio.h"
 #include "dc_control.h"
 #include "battery/STW_mBMS.hpp"
-
-// defines for MPP tracking algorithm
-#define I_ADCR 50
-//#define VIN_ADCR (450/1)  // tested okay with ~30V
-
-#define MPPT_PRECISION_BITS 16
-#define MPPT_V_RANGE (6554)  // voltage range [0, +6553.6] 16bit in 100mV
-#define MPPT_I_RANGE (655)  // current range [-327.68, +327.67] 16bit in 10mA
-
-#define MPPT_VIN_MIN 62  // 2 modules * 31V
-#define MPPT_VIN_MAX 320  // 8 modules * 40V
-#define MPPT_VOUT_MIN 288  // 96 Li-cells * 3.0
-#define MPPT_VOUT_MAX 384  // 96 Li-cells * 4.0
-
-#define MPPT_DUTY_ABSMAX 4250
-#define MPPT_DUTY_MIN_BOOTSTRAP 0  // High side has isolated supply and no bootstrap capacitor
+#include "mpptracker.hpp"
 
 // single PWM step has 1/170MHz = 5.88ns -> center aligned PWM -> 11.8ns
 // deadtime is configured to 64ns (10k resistor)
 #define MIN_PULSE 9  // min pulse duration is 106ns - 64ns deadtime = 42ns
-#include "mpptracker.h"
 
 #define DC_CTRL_FREQ 20000
 #define DC_CTRL_FREQ_MPPT 50
 
+bool monitoring_binary = false;
+
+
+typedef struct {
+	uint32_t ID;
+	uint16_t stateDC;
+	uint16_t duty;
+	float pdc_filt50Hz;
+	float v_pv_filt50Hz;
+	float v_dc_filt50Hz;
+} __attribute__((__packed__)) monitor_vars_t;
+
+volatile monitor_vars_t monitor_vars;
+
+// configure PV system and PWM dutycycle parameters of microcontroller here:
+
+// Jinko JKM405N-6RL3
+// Voc(25°C)=46.3
+// Vmpp(25°C)=36.48
+// Voc(-20°C)=46,3×(1+45×0,28÷100)=52,13
+// Vmpp(70°C)=46,3×(1+45×0,28÷100)=31,88
+constexpr pvModule_t PVMODULE = pvModule_t{
+	.v_mp = 36.48,
+	.i_mp = 11.1,
+	.coef_v_temp = -0.0028,  // The open-circuit voltage temperature coefficient of the module [%/K]
+	.v_bypassDiode = 0.5,
+	.nr_bypassDiodes = 3
+};
+
+//constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
+//	.vin_min = 62,  // 2 modules * 31V
+//	.vin_max = 424,  // 8 modules * 53V
+//	.vout_min = 256,  // 80 Li-cells * 3.2
+//	.vout_max = 336,  // 80 Li-cells * 4.2
+//	.nr_pv_modules = 8,
+//	.nr_substring_search_per_interval = 6
+//};
+
+// PV emulator:
+// 2*Voc = 2*46.3 = 92.6V
+// 2*Vmp = 2*36.48 = 73.0V
+// 30%*Isc = 0.3*11.84 = 3.55A
+// 30%*Imp = 0.3*11.1 = 3.33A
+
+constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
+	.vin_min = 1*31,  // 1 modules * 31V
+	.vin_max = 2*53,  // 2 modules * 53V
+	.vout_min = 40,
+	.vout_max = 135,
+	.nr_pv_modules = 2,
+	.nr_substring_search_per_interval = 6
+};
+
+
+constexpr unsigned int MPPT_FREQ = DC_CTRL_FREQ_MPPT;
+//constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 10*60;  // 10 minutes
+//constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 2*60;  // 2 minutes when power drops
+constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 60;  // 1 minute
+constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 30;  // 30 sec when power drops
+
+constexpr unsigned int MPPT_DUTY_ABSMAX = 4250;
+constexpr unsigned int MPPT_DUTY_MIN_BOOTSTRAP = 0;  // High side has isolated supply and no bootstrap capacitor
+
+
 volatile uint16_t VdcFBboost_sincfilt_100mV;
 volatile int16_t Idc_filt_10mA;
 
+volatile float pdc_filt50Hz;
+volatile float v_pv_filt50Hz;
+volatile float v_dc_filt50Hz;
+volatile bool mppt_calc_request;
+volatile bool mppt_calc_complete;
+
+MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
 
 extern volatile uint16_t debug_sigma_delta_re;
 
 volatile enum stateDC_t stateDC = INIT_DC;
+volatile bool monitoring_request;
 
+
+void calc_and_wait(uint32_t delay, UART_HandleTypeDef *huart)
+{
+	for (uint32_t i=0; i<delay; i++){
+		if (monitoring_binary && monitoring_request) {
+				monitoring_request = false;
+				monitor_vars.stateDC = stateDC;
+				monitor_vars.duty = mppTracker.duty_raw;
+				monitor_vars.pdc_filt50Hz = pdc_filt50Hz;
+				monitor_vars.v_pv_filt50Hz = v_pv_filt50Hz;
+				monitor_vars.v_dc_filt50Hz = v_dc_filt50Hz;
+
+				HAL_UART_Transmit(huart, (uint8_t *)&monitor_vars, sizeof(monitor_vars), 10);
+		}
+		if (mppt_calc_request) {
+			mppTracker.step(pdc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
+			mppt_calc_request = false;
+			mppt_calc_complete = true;
+		}
+
+		HAL_Delay(1);  //ms
+	}
+}
 
 
 void shutdownDC()
@@ -60,11 +139,13 @@ static inline void nextState(enum stateDC_t state)
 
 int16_t dcControlStep()
 {
+	GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
 	static int16_t dutyLS1 = 0;
+	static uint16_t cnt50Hz;
+
 
 	static STW_mBMS bms(2);  // BMS address
-	static MPPTracker mppTracker;
 
 	bool vdc_inRange = false;
 
@@ -78,30 +159,33 @@ int16_t dcControlStep()
 		stateDC = INIT_DC;
 	}
 
-	if (sys_errcode != 0 ) {
+	if (sys_errcode != EC_NO_ERROR ) {
 		shutdownDC();
 		stateDC = INIT_DC;
 	}
 
 	cnt_rel++;
 
-	static uint16_t cnt50Hz;
 	cnt50Hz++;
 
-	uint16_t vdc_filt50Hz_100mV;
+	uint16_t vdc_filt50Hz_100mV = 0;
 	static uint32_t vdc_sum;
 	vdc_sum += VdcFBboost_sincfilt_100mV;
 
-	int16_t idc_filt50Hz_10mA;
-	static int32_t idc_sum;
-	idc_sum += Idc_filt_10mA;
+	static float pdc_sum;
+	pdc_sum += (Idc_filt_10mA*VdcFBboost_sincfilt_100mV)/1000.0;
 
 	if (cnt50Hz >= (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT) ) {
 		cnt50Hz = 0;
+		monitoring_request = true;
+		monitor_vars.ID++;
 		vdc_filt50Hz_100mV = vdc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
 		vdc_sum = 0;
-		idc_filt50Hz_10mA = idc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
-		idc_sum = 0;
+		pdc_filt50Hz = pdc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
+		pdc_sum = 0;
+
+		v_dc_filt50Hz = (float)vdc_filt50Hz_100mV/10.0;
+		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
 
 		if (sys_mode == OFF) {
 			bmsPower(0);
@@ -115,19 +199,21 @@ int16_t dcControlStep()
 	  case INIT_DC:
 		shutdownDC();
 		nextState(WAIT_PV_VOLTAGE);
+		//memset(&monitor_vars, 0, sizeof(monitor_vars));
 		break;
 
 	  case WAIT_PV_VOLTAGE:
+	  {
 		if (vdc_inRange && cnt_rel >= 5*DC_CTRL_FREQ) {  // wait at least 5 sec to avoid instabilities
 			dutyLS1 = 0;
 			nextState(VOLTAGE_CONTROL);
 		}
 		break;
-
+	  }
 	  case VOLTAGE_CONTROL:
 	  {  // curly braces to have scope for variable initialization
 		gatedriverDC(1);
-		uint16_t vdc_ref_100mV = 2900;  // todo insert battery voltage
+		uint16_t vdc_ref_100mV = 100*10;  // todo insert battery voltage
 
 		if (cnt50Hz == 0) {
 			if ( vdc_filt50Hz_100mV < (vdc_ref_100mV-VDC_TOLERANCE_100mV) ) {
@@ -138,7 +224,6 @@ int16_t dcControlStep()
 				dutyLS1--;
 			}
 		}
-
 
 		if (   VdcFBboost_sincfilt_100mV > (vdc_ref_100mV-VDC_TOLERANCE_100mV)
 		    && VdcFBboost_sincfilt_100mV < (vdc_ref_100mV+VDC_TOLERANCE_100mV)
@@ -151,8 +236,6 @@ int16_t dcControlStep()
 	  }
 	  case WAIT_CONTACTOR_DC:
 		if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
-			mppTracker.i_prev = idc_filt50Hz_10mA;
-			mppTracker.v_prev = vdc_filt50Hz_100mV;
 			mppTracker.duty_raw = dutyLS1;
 			nextState(MPPT);
 		}
@@ -160,11 +243,14 @@ int16_t dcControlStep()
 
 	  case MPPT:
 		if (cnt50Hz == 0) {
-			//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
-			mppTracker_step(&mppTracker, vdc_filt50Hz_100mV, idc_filt50Hz_10mA);  // todo meas exec time; find better way for #defines in mppt
-			dutyLS1 = mppTracker.duty_raw;
-			//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+			mppt_calc_request = true;
 		}
+
+		if (mppt_calc_complete) {
+			dutyLS1 = mppTracker.duty_raw;
+			mppt_calc_complete = false;
+		}
+
 		break;
 
       default:
@@ -173,14 +259,15 @@ int16_t dcControlStep()
 
 	  int16_t dutyB1 = MPPT_DUTY_ABSMAX - dutyLS1;
 
-	  if (dutyB1 > (MPPT_DUTY_ABSMAX-MIN_PULSE)) {
+	  if (dutyB1 > ((int)MPPT_DUTY_ABSMAX-MIN_PULSE)) {
 		  dutyB1 = MPPT_DUTY_ABSMAX;
 	  } else if (dutyB1 < MIN_PULSE){
 		  dutyB1 = 0;
 	  }
 
-	  return dutyB1;
+	  GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 
+	  return dutyB1;
 
 //		  // A leg
 //		  __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, duty1);  //update pwm value
@@ -225,8 +312,8 @@ void measVdcFBboost()
 	// @9.55V Vdc=400.6-401.2V, re=71-72
 	// @12.57V Vdc=528.4-529.1V, re=14-16
 
-	//uint16_t sigma_delta_re = TIM4->CNT;
-	uint16_t sigma_delta_re = 250;  //for AC debugging todo remove
+	uint16_t sigma_delta_re = TIM4->CNT;
+	//uint16_t sigma_delta_re = 250;  //for AC debugging todo remove
 	TIM4->CNT = 0;
 
 	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
@@ -304,7 +391,8 @@ void measVdcFBboost()
 		// 1V = 90% bitstream ones = 50 edges counted in 50us
 		// pos value range from 50 to 250 -> div by 200
 //#define V_DC_MAX_FBboost (1+33)
-#define V_DC_MAX_FBboost (1+450)  // todo 450 voltage divider
+#define V_DC_MAX_FBboost (1+150)
+//#define V_DC_MAX_FBboost (1+450)  // todo 450 voltage divider
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
 		VdcFBboost_sincfilt_100mV = (V_DC_MAX_FBboost * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
 
