@@ -38,32 +38,71 @@
 #define OCD           (1<<0)
 
 
-typedef struct {
-    uint8_t status;
-    volatile uint8_t faultsDetectedByMicrocontroller;
-    uint8_t soc;
-    int8_t temperatureBatteryMAX;
-    int8_t temperatureBatteryMIN;
-    int8_t temperatureMOSFET;
-    int16_t current_mA;
-    uint32_t voltage_mV;
-    uint16_t vCell_min_mV;
-    uint16_t vCell_max_mV;
-} __attribute__((__packed__)) battery_t;
+// for STW_mBMS
+// typedef struct {
+//     uint8_t status;
+//     volatile uint8_t faultsDetectedByMicrocontroller;
+//     uint8_t soc;
+//     int8_t temperatureBatteryMAX;
+//     int8_t temperatureBatteryMIN;
+//     int8_t temperatureMOSFET;
+//     int16_t current_mA;
+//     uint32_t voltage_mV;
+//     uint16_t vCell_min_mV;
+//     uint16_t vCell_max_mV;
+// } __attribute__((__packed__)) battery_t;
+//
+//struct CellStack {
+//    uint16_t vCell_mV[96];
+//    bool balancingState[96];
+//    int8_t temperature[14*4];
+//    uint64_t csc_err[4];
+//} __attribute__((__packed__));
 
-struct DualBMS {
-    battery_t battery[2];
-    uint8_t crc;
-} __attribute__((__packed__));
+
+// for ETI_DUAL_BMS
+ typedef struct {
+     uint8_t status;
+     volatile uint8_t faultsDetectedByMicrocontroller;
+     uint8_t soc;
+     uint8_t soc_kalman;
+     uint16_t cycles;
+     int8_t temperatureAmbient;
+     int8_t temperatureBattery;
+     int8_t temperatureMOSFET;
+     int16_t current_mA;
+     uint32_t voltage_mV;
+     uint16_t vCell_min_mV;
+     uint16_t vCell_max_mV;
+ } __attribute__((__packed__)) battery_t;
+
+ struct DualBMS {
+     battery_t battery[2];
+     uint8_t crc;
+ } __attribute__((__packed__));
 
 
-struct CellStack {
-    uint16_t vCell_mV[96];
-    bool balancingState[96];
-    int8_t temperature[14*4];
-    uint64_t csc_err[4];
-} __attribute__((__packed__));
+ struct CellStack {
+     uint16_t vCell_mV[45];
+     bool balancingState[45];
+ } __attribute__((__packed__));
 
+ //enum TempSensType_t : uint8_t {T_None, T_Ambient, T_Battery, T_MOSFET};
+ typedef enum TempSensType_t {T_None, T_Ambient, T_Battery, T_MOSFET} TempSensType_t;
+
+
+ typedef struct TemperatureSensor
+ {
+     TempSensType_t type;
+     int8_t temp;
+     int8_t temp_min;
+     int8_t temp_max;
+     uint8_t commErrCNT;
+ } __attribute__((__packed__)) TemperatureSensor;
+
+ struct TemperatureSensors {
+     TemperatureSensor temperatureSensor[3];
+ } __attribute__((__packed__));
 
 #ifdef __cplusplus
 }

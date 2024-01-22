@@ -36,6 +36,7 @@
 
 
 battery_t battery;
+volatile monitor_vars_t monitor_vars = {0};
 
 // todo
 typedef struct {
@@ -72,6 +73,8 @@ FDCAN_HandleTypeDef hfdcan2;
 
 HRTIM_HandleTypeDef hhrtim1;
 
+IWDG_HandleTypeDef hiwdg;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
@@ -79,21 +82,17 @@ TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
 uint16_t ADC1ConvertedData[2];
 uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
 
-extern volatile int debug_Vac_rms_100mV;
-extern volatile int debug_fac_10mHz;
 
 volatile int16_t debug_dutyB1;
 volatile uint16_t debug_Vg_raw_filt;
 volatile uint16_t debug_Ig_raw_filt;
-
-extern volatile int16_t debug_v_amp_pred;
-extern volatile int16_t debug_i_ref_amp;
 
 extern volatile float pdc_filt50Hz;
 extern volatile float v_pv_filt50Hz;
@@ -101,7 +100,9 @@ extern volatile float v_dc_filt50Hz;
 extern volatile bool mppt_calc_request;
 extern volatile bool mppt_calc_complete;
 
-extern volatile enum stateDC_t stateDC;
+extern int battery_voltage_mV;
+
+volatile uint16_t v_dc_ref_100mV;
 
 extern bool monitoring_binary;
 
@@ -193,6 +194,7 @@ static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_UART5_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_IWDG_Init(void);
 /* USER CODE BEGIN PFP */
 static void FDCAN_Config(void);
 
@@ -210,6 +212,45 @@ uint16_t lowpass4(uint16_t in, uint16_t* prev)
     return filt;
 }
 
+void resetWatchdog()
+{
+	// Watchdog runs at 32/8=4kHz -> ~1sec for 4095
+    /* Refresh IWDG: reload counter */
+    if(HAL_IWDG_Refresh(&hiwdg) != HAL_OK) {
+      /* Refresh Error */
+      Error_Handler();
+    }
+}
+
+void calc_and_wait(uint32_t delay)
+{
+	resetWatchdog();
+	for (uint32_t i=0; i<delay; i++){
+		calc_async_dc_control();
+		if (!monitoring_binary) {
+			HAL_Delay(1);  //ms
+		}
+	}
+	resetWatchdog();
+}
+
+void send_monitor_vars()
+{
+
+	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
+
+	monitor_vars.VdcFBgrid_sincfilt_100mV = VdcFBgrid_sincfilt_100mV;
+	// V1 : FIFO 30bytes transmit best case: 2607us
+//	HAL_UART_Transmit(&huart3, (uint8_t *)&monitor_vars, sizeof(monitor_vars), 10);
+
+	// V2 : FIFO+DMA 30bytes transmit best case: 1.65us  worst case : 17.9us
+	if (HAL_UART_Transmit_DMA(&huart3, (uint8_t *)&monitor_vars, sizeof(monitor_vars)) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+}
+
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
@@ -218,7 +259,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	static uint32_t blankingCnt = 0;
 
 	if (blankingCnt > 240) {  // dont check sigmadelta data during startup for 240/20kHz/3ADCs = 4ms
-		error_t limitErr = checkDCLimits();
+		errorPVBI_t limitErr = checkDCLimits();
 		if (limitErr != EC_NO_ERROR) {
 			shutdown();
 			sys_errcode = limitErr;
@@ -386,6 +427,7 @@ int main(void)
   MX_TIM4_Init();
   MX_UART5_Init();
   MX_USART3_UART_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 
   /* Configure the FDCAN peripheral */
@@ -455,6 +497,15 @@ int main(void)
   uSend("\n");
   GPIOB->BSRR = (1<<0);  // disable red LED
 
+  /*## Check if the system has resumed from IWDG reset ####################*/
+  if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != 0x00u)
+  {
+    uSend("Watchdog caused reset!");
+    uSend("\n");
+  }
+  /* Clear reset flags anyway */
+  __HAL_RCC_CLEAR_RESET_FLAGS();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -466,23 +517,55 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	checkErrors();
-
 	GPIOB->BRR = (1<<1);  // enable green LED
-	calc_and_wait(500, &huart3);  //ms
+	calc_and_wait(250);  //ms
+	calc_and_wait(250);  //ms
 	GPIOB->BSRR = (1<<1);  // disable green LED
-	calc_and_wait(250, &huart3);  //ms
+	calc_and_wait(250);  //ms
 
-	// RS485
-	itoa(sys_errcode, Tx_Buffer, 10);
-	Tx_len=strlen(Tx_Buffer);
-	HAL_UART_Transmit(&huart5, (uint8_t *)Tx_Buffer, Tx_len, 10);
+	sys_mode = PV2AC;
 
-	calc_and_wait(250, &huart3);  //ms
+	switch (sys_mode) {
+	   case OFF:
+		v_dc_ref_100mV = 0;
+		sys_mode_needs_ACside = false;
+		sys_mode_needs_battery = false;
+		break;
+
+	  case PV2AC:
+		v_dc_ref_100mV = 48*10;
+		if (stateDC >= VOLTAGE_CONTROL) {
+			sys_mode_needs_ACside = true;
+		} else {
+			sys_mode_needs_ACside = false;
+		}
+		sys_mode_needs_battery = false;
+		// todo: implement switchoff if pdc_filt50Hz < 10Watt for 10sec
+		break;
+
+	  case PV2BAT:
+		//vdc_ref_100mV = bms.voltage_mV/100;  // battery voltage
+		sys_mode_needs_ACside = false;
+		sys_mode_needs_battery = true;
+		break;
+
+	  case HYBRID_OFFLINE:
+		sys_mode_needs_ACside = true;
+		sys_mode_needs_battery = true;
+		break;
+
+	  case HYBRID_ONLINE:
+		sys_mode_needs_ACside = true;
+		sys_mode_needs_battery = true;
+		break;
+
+	  default:
+		break;
+	}
 
 	// UART
 	if (!monitoring_binary) {
 		if (sys_errcode!=EC_NO_ERROR) {
-			GPIOB->BRR = (1<<0);  // enable red LED
 			uSend("Err ");
 			itoa(sys_errcode, Tx_Buffer, 10);
 			Tx_len=strlen(Tx_Buffer);
@@ -503,6 +586,13 @@ int main(void)
 		itoa(stateAC, Tx_Buffer, 10);
 		Tx_len=strlen(Tx_Buffer);
 		HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		uSend("\n");
+
+		calc_and_wait(250);  //ms
+
+#if SYSTEM_HAS_BATTERY == 1
+		uSend("bat ");
+		uSend_1m(battery_voltage_mV);
 		uSend("\n");
 
 		//can_bus_read();  // todo implement anti lockup
@@ -597,6 +687,7 @@ int main(void)
 			}
 		}
 	#endif
+#endif  // SYSTEM_HAS_BATTERY
 
 	//	uSend("dutyB1 ");
 	//	itoa(debug_dutyB1, Tx_Buffer, 10);
@@ -613,39 +704,17 @@ int main(void)
 	//	uSend_100m(VdcFBgrid_sincfilt_100mV);
 	//	uSend("\n");
 	//
-	//	uSend("Vac_rms ");
-	//	uSend_100m(debug_Vac_rms_100mV);
-	//	uSend("\n");
+		uSend("v_ac_rms ");
+		uSend_100m(debug_v_ac_rms_100mV);
+		uSend("\n");
 	//
 	//	uSend("iac ");
 	//	uSend_10m(iac_10mA);
 	//	uSend("\n");
 	//
-	//	uSend("fac ");
-	//	uSend_10m(debug_fac_10mHz);
-	//	uSend(" Hz\n");
-
-	//	uSend("re ");
-	//	itoa(debug_sigma_delta_re, Tx_Buffer, 10);
-	//	Tx_len=strlen(Tx_Buffer);
-	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	//	uSend("\n");
-
-
-
-	//	uSend("v_amp_pred ");
-	//	itoa(debug_v_amp_pred, Tx_Buffer, 10);
-	//	Tx_len=strlen(Tx_Buffer);
-	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	//	uSend("\n");
-	//
-	//	uSend("debug_i_ref_amp ");
-	//	itoa(debug_i_ref_amp, Tx_Buffer, 10);
-	//	Tx_len=strlen(Tx_Buffer);
-	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	//	uSend("\n");
-
-
+//		uSend("f_ac ");
+//		uSend_10m(debug_f_ac_10mHz);
+//		uSend(" Hz\n");
 
 		uSend("Idc ");
 		uSend_10m(Idc_filt_10mA);
@@ -670,60 +739,58 @@ int main(void)
 	//	uSend("\n");
 	//	// no current 4avg: 2627-2630
 	//	// ~+1A 2671
+
 	}
 
-
-
-
-#if 1
-
+	// UART RX
 	uint8_t Rx_Buffer = 0;
-	HAL_UART_Receive(&huart3, &Rx_Buffer, 1, 10);
+	HAL_UART_Receive(&huart3, &Rx_Buffer, 1, 10);  // todo: watchdog is triggered if this line missing in monitor mode
 
-	if (Rx_Buffer == 'm') {
-	    uSend("Monitoring ENABLE\n");
-	    monitoring_binary = true;
-	} else if (Rx_Buffer == 'b') {
-	    uSend("BALANCING ENABLE\n");
+	if (!monitoring_binary) {
+		if (Rx_Buffer == 'm') {
+			uSend("Monitoring ENABLE\n");
+			monitoring_binary = true;
+		} else if (Rx_Buffer == 'b') {
+			uSend("BALANCING ENABLE\n");
 
-	    //cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
+			//cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
 
-	    TxHeader.Identifier = 0x110;
-	    TxHeader.DataLength = FDCAN_DLC_BYTES_8;
+			TxHeader.Identifier = 0x110;
+			TxHeader.DataLength = FDCAN_DLC_BYTES_8;
 
-	    /* Set the data to be transmitted */
-	    memset(TxData, 0, sizeof(TxData));
-	    TxData[0] = 0x0F;  // CSC1-4
-	    TxData[5] = 0x01;  // Enable_Threshold
-//	    TxData[6] = 0x74;
-//	    TxData[7] = 0x0E;
-	    uint16_t vCellBalTarget_mV = 3700;
-	    memcpy(&TxData[6], &vCellBalTarget_mV, 2);
-	    /* Start the Transmission process */
-	    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
-	    {
-	      /* Transmission request Error */
-	      Error_Handler();
-	    }
-	} else	if (Rx_Buffer == 'd') {
-	    uSend("BALANCING DISABLE\n");
+			/* Set the data to be transmitted */
+			memset(TxData, 0, sizeof(TxData));
+			TxData[0] = 0x0F;  // CSC1-4
+			TxData[5] = 0x01;  // Enable_Threshold
+	//	    TxData[6] = 0x74;
+	//	    TxData[7] = 0x0E;
+			uint16_t vCellBalTarget_mV = 3700;
+			memcpy(&TxData[6], &vCellBalTarget_mV, 2);
+			/* Start the Transmission process */
+			if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
+			{
+			  /* Transmission request Error */
+			  Error_Handler();
+			}
+		} else	if (Rx_Buffer == 'd') {
+			uSend("BALANCING DISABLE\n");
 
-	    //cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
+			//cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
 
-	    TxHeader.Identifier = 0x110;
-	    TxHeader.DataLength = FDCAN_DLC_BYTES_8;
+			TxHeader.Identifier = 0x110;
+			TxHeader.DataLength = FDCAN_DLC_BYTES_8;
 
-	    /* Set the data to be transmitted */
-	    memset(TxData, 0, sizeof(TxData));
+			/* Set the data to be transmitted */
+			memset(TxData, 0, sizeof(TxData));
 
-	    /* Start the Transmission process */
-	    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
-	    {
-	      /* Transmission request Error */
-	      Error_Handler();
-	    }
+			/* Start the Transmission process */
+			if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
+			{
+			  /* Transmission request Error */
+			  Error_Handler();
+			}
+		}
 	}
-#endif
 
   }
   /* USER CODE END 3 */
@@ -745,8 +812,9 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV3;
@@ -1079,6 +1147,35 @@ static void MX_HRTIM1_Init(void)
 }
 
 /**
+  * @brief IWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
+
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
+
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_8;
+  hiwdg.Init.Window = 4095;
+  hiwdg.Init.Reload = 4095;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
+
+  /* USER CODE END IWDG_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -1333,7 +1430,7 @@ static void MX_UART5_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_UARTEx_DisableFifoMode(&huart5) != HAL_OK)
+  if (HAL_UARTEx_EnableFifoMode(&huart5) != HAL_OK)
   {
     Error_Handler();
   }
@@ -1381,7 +1478,7 @@ static void MX_USART3_UART_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_UARTEx_DisableFifoMode(&huart3) != HAL_OK)
+  if (HAL_UARTEx_EnableFifoMode(&huart3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -1408,6 +1505,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
 
