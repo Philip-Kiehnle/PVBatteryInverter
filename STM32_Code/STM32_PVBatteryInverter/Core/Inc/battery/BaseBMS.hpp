@@ -5,6 +5,7 @@
 #include <string.h>
 
 extern "C" {
+    #include "serial.h"
     #include "bms_types.h"
 }
 
@@ -59,8 +60,8 @@ protected:
     uint16_t address;
     int serial_fd_;
 
-//    msg_t tx_msg;
-//    msg_t rx_msg;
+    msg_t tx_msg;
+    msg_t rx_msg;
 
     // uint32_t battery_cells = 1;
     // //float Vcharge_stop = battery_cells*3.4;

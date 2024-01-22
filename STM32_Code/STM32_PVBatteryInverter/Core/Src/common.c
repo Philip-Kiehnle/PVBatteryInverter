@@ -14,14 +14,14 @@ struct _sys_modedesc {
     { OFF, "OFF : System inactive." },
     { PV2AC, "PV2AC (default): PV power completely fed into the AC grid." },
 	{ PV2BAT, "PV2BAT : PV power completely fed into the battery." },
-	{ HYBRID_OFFLINE, "HYBRID_OFFLINE : PV power 50% into battery and 50% into grid. 100W into AC grid if no PV power."},
+	{ HYBRID_OFFLINE, "HYBRID_OFFLINE : PCC controlled to zero. Without PCC sensor: PV power 50% into battery and 50% into grid. 100W into AC grid if no PV power."},
 	{ HYBRID_ONLINE, "HYBRID_ONLINE : Externally controlled power distribution, regarding limits: Pbat_charge=1.6kW (0.25C), Pac=1.5kW."}
 };
 
 volatile enum mode_t sys_mode;
 
 static char strerror_buf[1024];
-volatile error_t sys_errcode;
+volatile errorPVBI_t sys_errcode;
 
 struct _sys_errordesc {
     int  errcode;
@@ -61,7 +61,6 @@ static void checkEmergencyStop()
         if ( !HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
         	shutdown();
         	sys_errcode = EC_EMERGENCY_STOP;
-    		GPIOB->BRR = (1<<0);  // enable red LED
         }
     }
 }
@@ -81,5 +80,6 @@ void checkErrors()
 
 	if (sys_errcode != 0 ) {
 		shutdown();
+		GPIOB->BRR = (1<<0);  // enable red LED
 	}
 }

@@ -28,13 +28,15 @@ int32_t get_VIN_ADCR();
 //#define VIN_START_RAW ((1<<ADC_BITS)*VIN_START/VIN_ADCR)
 //#define VDC_REF_100mV 25.0*10  // 23.4V with 33k
 //#define VDC_REF_100mV 27.0*10  // 25.1V with 33k todo
-#define VDC_REF_100mV 30.0*10  // 28.0V with 33k
+//#define VDC_REF_100mV 30.0*10  // 28.0V with 33k
+//#define VDC_REF_100mV 50.0*10  //
 
 //#define VDC_REF_RAW ((1<<ADC_BITS_VIN)*VDC_REF/VIN_ADCR)
 //#define VIN_MAX 35.0
 //#define VIN_MAX_RAW ((1<<ADC_BITS)*VIN_MAX/VIN_ADCR)
 
-#define VGRID_TRATIO 14  // transformer winding ratio
+//#define VGRID_TRATIO 14  // transformer winding ratio
+#define VGRID_TRATIO 7  // transformer winding ratio
 #define VGRID_AMP 325/VGRID_TRATIO  // todo
 int32_t get_VGRID_TRATIO();
 #define CAPACITANCE (2*390e-6)

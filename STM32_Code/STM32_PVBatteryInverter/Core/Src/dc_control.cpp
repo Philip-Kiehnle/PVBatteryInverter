@@ -4,11 +4,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <algorithm>
+
 
 #include "common.h"
 #include "gpio.h"
 #include "dc_control.h"
-#include "battery/STW_mBMS.hpp"
+//#include "battery/STW_mBMS.hpp"
+#include "battery/ETI_DualBMS.hpp"
 #include "mpptracker.hpp"
 
 // single PWM step has 1/170MHz = 5.88ns -> center aligned PWM -> 11.8ns
@@ -19,18 +22,10 @@
 #define DC_CTRL_FREQ_MPPT 50
 
 bool monitoring_binary = false;
+volatile bool sys_mode_needs_battery = false;
+extern volatile uint16_t v_dc_ref_100mV;
 
-
-typedef struct {
-	uint32_t ID;
-	uint16_t stateDC;
-	uint16_t duty;
-	float pdc_filt50Hz;
-	float v_pv_filt50Hz;
-	float v_dc_filt50Hz;
-} __attribute__((__packed__)) monitor_vars_t;
-
-volatile monitor_vars_t monitor_vars;
+volatile uint16_t debug_duty;
 
 // configure PV system and PWM dutycycle parameters of microcontroller here:
 
@@ -63,12 +58,12 @@ constexpr pvModule_t PVMODULE = pvModule_t{
 // 30%*Imp = 0.3*11.1 = 3.33A
 
 constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
-	.vin_min = 1*31,  // 1 modules * 31V
+	.vin_min = 0.33*31,  // 1/3 modules * 31V
 	.vin_max = 2*53,  // 2 modules * 53V
 	.vout_min = 40,
-	.vout_max = 135,
+	.vout_max = 58,
 	.nr_pv_modules = 2,
-	.nr_substring_search_per_interval = 6
+	.nr_substring_search_per_interval = 1
 };
 
 
@@ -93,33 +88,65 @@ volatile bool mppt_calc_complete;
 
 MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
 
+//static STW_mBMS bms(2);  // BMS address
+ETI_DualBMS bms(15);  // BMS address
+int battery_voltage_mV;
+
 extern volatile uint16_t debug_sigma_delta_re;
 
 volatile enum stateDC_t stateDC = INIT_DC;
 volatile bool monitoring_request;
 
+volatile bool bms_update_request;
+volatile bool bms_battery_request;
+volatile bool batteryON;
 
-void calc_and_wait(uint32_t delay, UART_HandleTypeDef *huart)
+
+static uint32_t cnt_rel = 0;
+
+
+void calc_async_dc_control()
 {
-	for (uint32_t i=0; i<delay; i++){
-		if (monitoring_binary && monitoring_request) {
-				monitoring_request = false;
-				monitor_vars.stateDC = stateDC;
-				monitor_vars.duty = mppTracker.duty_raw;
-				monitor_vars.pdc_filt50Hz = pdc_filt50Hz;
-				monitor_vars.v_pv_filt50Hz = v_pv_filt50Hz;
-				monitor_vars.v_dc_filt50Hz = v_dc_filt50Hz;
+	if (monitoring_binary && monitoring_request) {
+		monitoring_request = false;
+		monitor_vars.sys_errcode = sys_errcode;
+		monitor_vars.stateDC = stateDC;
+		monitor_vars.duty = debug_duty;
+		monitor_vars.pdc_filt50Hz = pdc_filt50Hz;
+		monitor_vars.v_pv_filt50Hz = v_pv_filt50Hz;
+		monitor_vars.v_dc_filt50Hz = v_dc_filt50Hz;
 
-				HAL_UART_Transmit(huart, (uint8_t *)&monitor_vars, sizeof(monitor_vars), 10);
-		}
-		if (mppt_calc_request) {
-			mppTracker.step(pdc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
-			mppt_calc_request = false;
-			mppt_calc_complete = true;
-		}
+		monitor_vars.stateAC = stateAC;
+		monitor_vars.f_ac_10mHz = debug_f_ac_10mHz;
+		monitor_vars.v_ac_rms_100mV = debug_v_ac_rms_100mV;
+		monitor_vars.v_amp_pred_100mV = debug_v_amp_pred_100mV;
+		monitor_vars.i_ac_amp_10mA = debug_i_ac_amp_10mA;
 
-		HAL_Delay(1);  //ms
+		send_monitor_vars();
 	}
+	if (mppt_calc_request) {
+		mppTracker.step(pdc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
+		mppt_calc_request = false;
+		mppt_calc_complete = true;
+	}
+
+#if SYSTEM_HAS_BATTERY == 1
+	if (bms_update_request) {
+		bms_update_request = false;
+		bms.get_summary();
+		battery_voltage_mV = bms.voltage_mV;
+	}
+
+	if (bms_battery_request) {
+		if (batteryON) {
+			bms.batteryOn();
+		} else {
+			bms.batteryOff();
+		}
+		bms_battery_request = false;
+	}
+#endif
+
 }
 
 
@@ -127,9 +154,10 @@ void shutdownDC()
 {
 	gatedriverDC(0);
 	contactorBattery(0);
+	batteryON = false;
+	bms_battery_request = true;
 }
 
-static uint32_t cnt_rel = 0;
 
 static inline void nextState(enum stateDC_t state)
 {
@@ -143,14 +171,15 @@ int16_t dcControlStep()
 
 	static int16_t dutyLS1 = 0;
 	static uint16_t cnt50Hz;
-
-
-	static STW_mBMS bms(2);  // BMS address
+	static uint16_t vdc_filt50Hz_100mV = 0;
 
 	bool vdc_inRange = false;
 
-	if (VdcFBboost_sincfilt_100mV > VDC_BOOST_STOP_100mV && VdcFBboost_sincfilt_100mV < E_VDC_MAX_100mV) {
-		if (VdcFBboost_sincfilt_100mV > VDC_BOOST_START_100mV) {
+	// 50Hz more robust: for critical increase from 400V to 500V in 20ms: 0.5*4*390uF*(500^2-400^2)/0.02 = 3.5kW
+	if (vdc_filt50Hz_100mV > VDC_BOOST_STOP_100mV && vdc_filt50Hz_100mV < E_VDC_MAX_100mV) {
+		if (vdc_filt50Hz_100mV > VDC_BOOST_START_100mV) {
+//	if (VdcFBboost_sincfilt_100mV > VDC_BOOST_STOP_100mV && VdcFBboost_sincfilt_100mV < E_VDC_MAX_100mV) {
+//		if (VdcFBboost_sincfilt_100mV > VDC_BOOST_START_100mV) {
 		    vdc_inRange = true;
 		}
 	} else {
@@ -165,10 +194,8 @@ int16_t dcControlStep()
 	}
 
 	cnt_rel++;
-
 	cnt50Hz++;
 
-	uint16_t vdc_filt50Hz_100mV = 0;
 	static uint32_t vdc_sum;
 	vdc_sum += VdcFBboost_sincfilt_100mV;
 
@@ -187,11 +214,17 @@ int16_t dcControlStep()
 		v_dc_filt50Hz = (float)vdc_filt50Hz_100mV/10.0;
 		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
 
-		if (sys_mode == OFF) {
-			bmsPower(0);
-		} else {
+		if (sys_mode_needs_battery) {
 			bmsPower(1);
-			//bms->update();
+		} else {
+			bmsPower(0);
+		}
+
+		static uint16_t cnt_1Hz_from_50Hz = 0;
+		cnt_1Hz_from_50Hz++;
+		if (cnt_1Hz_from_50Hz >= DC_CTRL_FREQ_MPPT ) {
+			cnt_1Hz_from_50Hz = 0;
+			bms_update_request = true;
 		}
 	}
 
@@ -199,7 +232,6 @@ int16_t dcControlStep()
 	  case INIT_DC:
 		shutdownDC();
 		nextState(WAIT_PV_VOLTAGE);
-		//memset(&monitor_vars, 0, sizeof(monitor_vars));
 		break;
 
 	  case WAIT_PV_VOLTAGE:
@@ -213,43 +245,63 @@ int16_t dcControlStep()
 	  case VOLTAGE_CONTROL:
 	  {  // curly braces to have scope for variable initialization
 		gatedriverDC(1);
-		uint16_t vdc_ref_100mV = 100*10;  // todo insert battery voltage
 
 		if (cnt50Hz == 0) {
-			if ( vdc_filt50Hz_100mV < (vdc_ref_100mV-VDC_TOLERANCE_100mV) ) {
+			if ( VdcFBboost_sincfilt_100mV < (v_dc_ref_100mV-VDC_TOLERANCE_100mV) ) {
 				dutyLS1 += 2;
-			} else if (vdc_filt50Hz_100mV < vdc_ref_100mV) {
+			} else if (VdcFBboost_sincfilt_100mV < v_dc_ref_100mV) {
 				dutyLS1++;
-			} else {
-				dutyLS1--;
+			} else if ( VdcFBboost_sincfilt_100mV > (v_dc_ref_100mV+VDC_TOLERANCE_100mV/4) ) {
+				dutyLS1 -= 2;
 			}
+			dutyLS1 = std::clamp(dutyLS1, (int16_t)0, (int16_t)MPPT_DUTY_ABSMAX);
 		}
 
-		if (   VdcFBboost_sincfilt_100mV > (vdc_ref_100mV-VDC_TOLERANCE_100mV)
-		    && VdcFBboost_sincfilt_100mV < (vdc_ref_100mV+VDC_TOLERANCE_100mV)
+		if (   VdcFBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
+		    && VdcFBboost_sincfilt_100mV < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
+		    && v_dc_filt50Hz*10          > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
+		    && v_dc_filt50Hz*10          < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
 			){
 
-			contactorBattery(1);
-			nextState(WAIT_CONTACTOR_DC);
+			if (sys_mode_needs_battery) {
+				contactorBattery(1);
+				batteryON = true;
+				bms_battery_request = true;
+				nextState(WAIT_CONTACTOR_DC);
+			} else {
+				mppTracker.duty_raw = dutyLS1;
+				nextState(MPPT);
+			}
+
 		}
 		break;
 	  }
 	  case WAIT_CONTACTOR_DC:
-		if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
+		//if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
+		if (cnt_rel == 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable
 			mppTracker.duty_raw = dutyLS1;
 			nextState(MPPT);
 		}
 		break;
 
 	  case MPPT:
-		if (cnt50Hz == 0) {
-			mppt_calc_request = true;
+		if ( VdcFBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
+			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
+			dutyLS1 = 0;
+			nextState(VOLTAGE_CONTROL);
+		} else {
+			if (cnt50Hz == 0) {
+				mppt_calc_request = true;
+			}
+
+			if (mppt_calc_complete) {
+				dutyLS1 = mppTracker.duty_raw;
+				mppt_calc_complete = false;
+			}
 		}
 
-		if (mppt_calc_complete) {
-			dutyLS1 = mppTracker.duty_raw;
-			mppt_calc_complete = false;
-		}
+		// todo
+		// if no current comes from the PV part and in PV mode, turn off
 
 		break;
 
@@ -257,6 +309,7 @@ int16_t dcControlStep()
           break;
       }
 
+	  debug_duty = dutyLS1;
 	  int16_t dutyB1 = MPPT_DUTY_ABSMAX - dutyLS1;
 
 	  if (dutyB1 > ((int)MPPT_DUTY_ABSMAX-MIN_PULSE)) {
@@ -279,7 +332,7 @@ int16_t dcControlStep()
 
 }
 
-error_t checkDCLimits(){
+errorPVBI_t checkDCLimits(){
 	if ( VdcFBboost_sincfilt_100mV > E_VDC_MAX_100mV ) {
 		return EC_V_DC_MAX_FB_BOOST;
 	}
@@ -390,9 +443,12 @@ void measVdcFBboost()
 		// 0V = 50% bitstream ones = 250 edges counted in 50us -> probability of doubles high -> less edges
 		// 1V = 90% bitstream ones = 50 edges counted in 50us
 		// pos value range from 50 to 250 -> div by 200
-//#define V_DC_MAX_FBboost (1+33)
-#define V_DC_MAX_FBboost (1+150)
+#define V_DC_MAX_FBboost (1+59)  // 68kOhm 450×68÷(450+68)
 //#define V_DC_MAX_FBboost (1+450)  // todo 450 voltage divider
+
+#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBboost*97)/100)
+#error Choose E_VDC_MAX_100mV lower than FBboost sensor range
+#endif
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
 		VdcFBboost_sincfilt_100mV = (V_DC_MAX_FBboost * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
 

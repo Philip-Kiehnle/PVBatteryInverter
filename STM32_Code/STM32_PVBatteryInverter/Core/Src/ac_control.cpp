@@ -26,13 +26,17 @@
 volatile uint16_t VdcFBgrid_sincfilt_100mV;
 volatile int16_t iac_10mA;
 
-volatile int debug_Vac_rms_100mV;
-volatile int debug_fac_10mHz;
-volatile int16_t debug_v_amp_pred;
-volatile int16_t debug_i_ref_amp;
+volatile int16_t debug_v_ac_rms_100mV;
+volatile int16_t debug_f_ac_10mHz;
+volatile int16_t debug_v_amp_pred_100mV;
+volatile int16_t debug_i_ac_amp_10mA;
 
 
 volatile enum stateAC_t stateAC = INIT_AC;
+
+volatile bool sys_mode_needs_ACside = false;
+
+extern volatile uint16_t v_dc_ref_100mV;
 
 static uint32_t cnt_rel = 0;
 
@@ -62,9 +66,9 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 	// Vgrid
 	int32_t vd = pll_get_vd();
 #define SQRT2 1.414213562
-	debug_Vac_rms_100mV = (((int32_t)vd) * ((10*VGRID_ADCR)/SQRT2) )/(1<<ADC_BITS_VGRID);
+	debug_v_ac_rms_100mV = (((int32_t)vd) * ((10*VGRID_ADCR)/SQRT2) )/(1<<ADC_BITS_VGRID);
 	int32_t w = pll_get_w();
-	debug_fac_10mHz = (w*100)>>15; // todo: check if (2^15)-1
+	debug_f_ac_10mHz = (w*100)>>15; // todo: check if (2^15)-1
 
 	if (vd > VD_MIN_RAW && vd < VD_MAX_RAW &&
 	   w > W_MIN_RAW && w < W_MAX_RAW) {
@@ -86,6 +90,9 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 	if (sys_errcode != EC_NO_ERROR ) {
 		shutdownAC();
 		stateAC = INIT_AC;
+	} else if (sys_mode_needs_ACside == false) {
+		gatedriverAC(0);  // get current to zero before contactor action. todo: check
+		stateAC = INIT_AC;
 	}
 
 	cnt_rel++;
@@ -96,83 +103,100 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 20us; 14us with -O1
 
+	int16_t phase_shiftRL = 0;
+	int16_t duty_v_amp_pred = 0;
 
 	switch (stateAC) {
 	  case INIT_AC:
 		shutdownAC();
-		if (sys_errcode == EC_NO_ERROR )
-			nextState(WAIT_AC_VOLTAGE);
-		break;
-
-	  case WAIT_AC_VOLTAGE:
-		if (acGrid_valid && cnt_rel >= 4*AC_CTRL_FREQ) {  // wait at least 4 sec to avoid instabilities
-			contactorAC(1);
-			nextState(WAIT_CONTACTOR_AC);
+		if (sys_errcode == EC_NO_ERROR ) {
+			if (sys_mode_needs_ACside) {
+				nextState(WAIT_AC_DC_VOLTAGE);
+			}
 		}
 		break;
 
+	  case WAIT_AC_DC_VOLTAGE:
+		if (   acGrid_valid
+		    && VdcFBgrid_sincfilt_100mV > ( ((float)debug_v_ac_rms_100mV) * SQRT2 )  // no precharge resistors available
+			&& cnt_rel >= 4*AC_CTRL_FREQ)  // wait at least 4 sec to avoid instabilities
+		 {
+			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched
+			nextState(WAIT_ZERO_CROSSING);
+		}
+		break;
+
+	  case WAIT_ZERO_CROSSING:  // for LCL charge without overshoot
+		if ( phase > (0.25*INT16_MAX) && phase < (0.27*INT16_MAX) ) {
+			nextState(CLOSE_CONTACTOR_AC);
+		}
+		break;
+
+	  case CLOSE_CONTACTOR_AC:
+		gatedriverAC(1);
+		contactorAC(1);
+		nextState(WAIT_CONTACTOR_AC);
+
+
 	  case WAIT_CONTACTOR_AC:
 		if (cnt_rel == 0.025*AC_CTRL_FREQ) {  // 25ms delay for contactor action
-  			piCtrl.y = 0;
-  			piCtrl.x_prev = 0;
-  			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched
   			nextState(GRID_CONNECTING);
 		}
 		break;
 
 	  case GRID_CONNECTING:
 		  // todo implement islanding detection in GRID_CONNECTING
+		piCtrl.y = 0;
+		piCtrl.x_prev = 0;
 		nextState(GRID_SYNC);
 		break;
 
 	  case GRID_SYNC:
 	  {
-		gatedriverAC(1);
 
-		if (cnt_rel >= 3.0*AC_CTRL_FREQ) {  // turnon for testing
-			nextState(WAIT_AC_VOLTAGE);
-			gatedriverAC(0);
-		}
+//		if (cnt_rel >= 2.0*AC_CTRL_FREQ) {  // short turnon for testing
+//			nextState(WAIT_AC_DC_VOLTAGE);
+//			gatedriverAC(0);
+//		}
+
+		// trafo with
+		// 2 winding systems in series and 5 windings in opposite direction has 44.7Vpeak at 227.0V grid and 1.6W loss
+		// 2 winding systems in series and 5 windings in same direction has 47.9Vpeak at 227,0V grid
+		// -> feedin down to 2.98Vcell
+
+		// 0,5mm2 white wire inside inverter can carry max 12A : todo check
 
 		// #########################
 		// ### control algorithm ###
 		// #########################
 
 		// problems:
-		// 1. high delay from grid current rise until voltage rise ~1ms. Maybe cause by LCL filter -> old
+		// 1. high delay from grid current rise until voltage rise ~1ms. Maybe caused by LCL filter -> old
 		// 2. unloaded LCL output and high dutycycle causes ringing with 1.66kHz 70Vpp
-		//    starts with Umid1 not switching at all for 100us = 2PWM periods. Pulse before was 400us so no ditycycle limit
+		//    starts with Umid1 not switching at all for 100us = 2PWM periods. Pulse before was 400us so no dutycycle limit
 		//    starts also with Umid2 not switching at all for 54us = 1PWM periods
 		//    problem exists in PWM 3.3V signal
 		//    => solved by compare unit 1 config: "greater than" instead of "equal"
+		// 3. clipping : if DC voltage is too small for clean sine wave, reduce current
 
 //#define EXTEND_LOC 8
 ////#define SCALE_VAC2VDC (int32_t)( ((VGRID_ADCR/VGRID_TRATIO) / VIN_ADCR ) * (1<<EXTEND_LOC) )
 //#define SCALE_VAC2VDC (int32_t)( ((VGRID_ADCR) / (VIN_ADCR) ) * (1<<EXTEND_LOC) )
 
-		// grid voltage feedforward
-		int32_t Vac_amp_100mV = (((int32_t)pll_get_vd()) * ((10*VGRID_ADCR)) )/(1<<ADC_BITS_VGRID);
-
-		int16_t duty_pll = (Vac_amp_100mV * AC_DUTY_HALF) / VdcFBgrid_sincfilt_100mV ;  // seems correct
-		//int16_t duty_pll = (Vac_amp_100mV * AC_DUTY_HALF) / VdcFBgrid_sincfilt_100mV ;
-		//int16_t duty_pll = ( Vac_amp_100mV * AC_DUTY_HALF / VdcFBgrid_sincfilt_100mV ) >> EXTEND_LOC;
-
 		// grid current feedforward
-		int16_t duty_v_amp_pred = 0;
-		if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
-			int16_t Iac_amp_10mA = step_pi_Vdc2IacAmp( VDC_REF_100mV*10, VdcFBgrid_sincfilt_100mV*10 );
+		//if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
+			int16_t i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_100mV*10, VdcFBgrid_sincfilt_100mV*10 );
 			//int16_t i_ref_amp = step_pi_Vdc2IacAmp_volt_comp( VDC_REF_RAW, Vdc_filt, phase );
-			debug_i_ref_amp = Iac_amp_10mA;
+			debug_i_ac_amp_10mA = i_ac_amp_10mA;
 
-			int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(Iac_amp_10mA)/10;
-			debug_v_amp_pred = v_amp_pred_100mV;
+			int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
+			debug_v_amp_pred_100mV = v_amp_pred_100mV;
 			duty_v_amp_pred = ( v_amp_pred_100mV * AC_DUTY_HALF ) / VdcFBgrid_sincfilt_100mV;
-		}
-		int16_t phase_shiftRL = get_IacPhase();
+		//}
+		phase_shiftRL = get_IacPhase();
 		//int16_t phase_shiftRL = get_IacPhase()+ (int16_t)(((1<<15)*1.08)/20);
 		//OLD: Strom(3,5Aamp) in Phase bei 40,5W/42,5VA (25,4Vdc bis 27,3Vdc)
 
-		duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
 
 		break;
 	  }
@@ -180,6 +204,11 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
           break;
       }
 
+	// grid voltage feedforward
+	int32_t v_ac_amp_100mV = (((int32_t)pll_get_vd()) * ((10*VGRID_ADCR)) )/(1<<ADC_BITS_VGRID);
+	int16_t duty_pll = (v_ac_amp_100mV * AC_DUTY_HALF) / VdcFBgrid_sincfilt_100mV;
+
+	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
 
 	//duty = 8500 - 2*3; // PWMA 35.6ns low  -> 6*2*2.94ns
@@ -210,14 +239,8 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 }
 
-//error_t checkLimits(){
-////	if ( Vdc_sincfilt_100mV > E_VDC_MAX_100mV ) {
-////		return EC_V_DC_MAX;
-////	}
-//	return EC_NO_ERROR;
-//}
 
-error_t checkACLimits() {
+errorPVBI_t checkACLimits() {
 	if ( iac_10mA > E_IAC_MAX_10mA ) {
 		return EC_I_AC_MAX;
 	}
@@ -253,9 +276,8 @@ void measVdcFBgrid()
 	// @9.55V Vdc=400.6-401.2V, re=71-72
 	// @12.57V Vdc=528.4-529.1V, re=14-16
 
-//	uint16_t sigma_delta_re = TIM2->CNT;
-	uint16_t sigma_delta_re = 250;  //for DC debugging todo remove
-
+	uint16_t sigma_delta_re = TIM2->CNT;
+	//uint16_t sigma_delta_re = 250;  //for DC debugging todo remove
 	TIM2->CNT = 0;
 
 	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
@@ -331,8 +353,13 @@ void measVdcFBgrid()
 		// 0V = 50% bitstream ones = 250 edges counted in 50us -> probability of doubles high -> less edges
 		// 1V = 90% bitstream ones = 50 edges counted in 50us
 		// pos value range from 50 to 250 -> div by 200
-#define V_DC_MAX_FBgrid (1+33)
+
+#define V_DC_MAX_FBgrid (1+59)  // 68kOhm 450×68÷(450+68)
 //#define V_DC_MAX_FBgrid (1+450)  // todo 450 voltage divider
+
+#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBgrid*97)/100)
+#error Choose E_VDC_MAX_100mV lower than FBgrid sensor range
+#endif
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
 		VdcFBgrid_sincfilt_100mV = (V_DC_MAX_FBgrid * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
 

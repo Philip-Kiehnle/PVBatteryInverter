@@ -125,7 +125,7 @@ void can_bus_read()
 		}
 		// else ... todo
 	}
-	memcpy(&cellStack.csc_err, csc_err, sizeof(cellStack.csc_err));
+	//memcpy(&cellStack.csc_err, csc_err, sizeof(cellStack.csc_err));  // todo
 
 	/*********************************/
 	/* read CSC cell balancing state */
@@ -184,7 +184,7 @@ void can_bus_read()
 			}
 		}
 	}
-	memcpy(&cellStack.temperature, temperature, sizeof(cellStack.temperature));
+	//memcpy(&cellStack.temperature, temperature, sizeof(cellStack.temperature));  // todo
 
 
 	/***********************/
