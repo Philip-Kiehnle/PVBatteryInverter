@@ -6,7 +6,8 @@
 //#define L (2*139e-6 + 4.7e-6 + 7.65e-6)  // 2 x large choke + small choke + transformer
 #define L (2*2e-3 + 2*150e-6 + 7.65e-6)  // 2 x large choke + 2xsmall choke (todo check 150uH) + transformer
 #define ZL (2*M_PI*FGRID*L)
-#define R (2*0.1 + 2*0.01 + 0.077 + 4.0)  // todo: 2 x large choke + 2xsmall choke + transformer + R-precharge
+//#define R (2*0.1 + 2*0.01 + 0.077 + 4.0)  // todo: 2 x large choke + 2xsmall choke + transformer + R-precharge
+#define R (2*0.1 + 2*0.01 + 0.077)  // todo: 2 x large choke + 2xsmall choke + transformer
 #define T (1/20e3)
 
 //#define EXTEND 30
