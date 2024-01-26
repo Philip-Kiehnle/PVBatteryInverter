@@ -90,7 +90,6 @@ uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
 
 
-volatile int16_t debug_dutyB1;
 volatile uint16_t debug_Vg_raw_filt;
 volatile uint16_t debug_Ig_raw_filt;
 
@@ -332,11 +331,34 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		Ipv_prev[1] = Ipv_prev[0];
 		Ipv_prev[0] = ADC2ConvertedData[0];
 
-		int16_t dutyB1 = dcControlStep();
-		debug_dutyB1 = dutyB1;
-	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
-    }
+		int16_t dutyHS = dcControlStep();
 
+		int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
+		int16_t dutyB2 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
+
+		switch(dcdc_mode) {
+			case DCDC_HB1:
+				dutyB1 = dutyHS;
+				break;
+
+			case DCDC_HB2:
+				dutyB2 = dutyHS;
+				break;
+
+			case DCDC_INTERLEAVED:
+				dutyB1 = dutyHS;
+				dutyB2 = dutyHS;
+				break;
+
+			default:
+				dutyB1 = dutyHS;
+				break;
+		}
+
+	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
+	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
+
+    }
 }
 
 void uartSend(char* ptr, int len)
@@ -441,17 +463,17 @@ int main(void)
   // ### Timer configuration ###
   // ###########################
 
+  // start PWM for PV boost Half-bridge 1 (PWMA)
+  if (   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK) {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  // start PWM for PV boost Half-bridge 2 (PWMB)
+  if (  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
   // start PWM timer for PV boost Full-bridge
-  if (   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
-  {
-    /* PWM Generation Error */
-    Error_Handler();
-  }
-  if (  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
-  {
-    /* PWM Generation Error */
-    Error_Handler();
-  }
   if (  HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
   {
     Error_Handler();
@@ -689,12 +711,6 @@ int main(void)
 	#endif
 #endif  // SYSTEM_HAS_BATTERY
 
-	//	uSend("dutyB1 ");
-	//	itoa(debug_dutyB1, Tx_Buffer, 10);
-	//	Tx_len=strlen(Tx_Buffer);
-	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	//	uSend("\n");
-	//
 
 		uSend("Vdc FBboost ");
 		uSend_100m(VdcFBboost_sincfilt_100mV);
@@ -1215,10 +1231,15 @@ static void MX_TIM1_Init(void)
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
