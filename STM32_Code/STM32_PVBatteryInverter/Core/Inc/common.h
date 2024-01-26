@@ -6,6 +6,7 @@
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 
 enum mode_t {OFF, PV2AC, PV2BAT, HYBRID_OFFLINE, HYBRID_ONLINE};
 extern volatile enum mode_t sys_mode;
@@ -17,6 +18,8 @@ enum stateAC_t {INIT_AC, WAIT_AC_DC_VOLTAGE, WAIT_ZERO_CROSSING, CLOSE_CONTACTOR
 #define E_VDC_MAX_MPPT_100mV 54*10  // 54V / 15cells = 3.6V
 //#define E_VDC_MAX_FB_GRID_100mV 4000  // 400/96 = 4.16Vcell
 #define E_VDC_MAX_FB_GRID_100mV 58*10  // todo
+
+#define DEF_MPPT_DUTY_ABSMAX 4250
 
 
 typedef struct {

@@ -73,7 +73,7 @@ constexpr unsigned int MPPT_FREQ = DC_CTRL_FREQ_MPPT;
 constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 60;  // 1 minute
 constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 30;  // 30 sec when power drops
 
-constexpr unsigned int MPPT_DUTY_ABSMAX = 4250;
+constexpr unsigned int MPPT_DUTY_ABSMAX = DEF_MPPT_DUTY_ABSMAX;
 constexpr unsigned int MPPT_DUTY_MIN_BOOTSTRAP = 0;  // High side has isolated supply and no bootstrap capacitor
 
 
@@ -83,6 +83,7 @@ volatile int16_t Idc_filt_10mA;
 volatile float pdc_filt50Hz;
 volatile float v_pv_filt50Hz;
 volatile float v_dc_filt50Hz;
+volatile float i_pv_filt50Hz;
 volatile bool mppt_calc_request;
 volatile bool mppt_calc_complete;
 
@@ -101,6 +102,7 @@ volatile bool bms_update_request;
 volatile bool bms_battery_request;
 volatile bool batteryON;
 
+volatile enum dcdc_mode_t dcdc_mode;
 
 static uint32_t cnt_rel = 0;
 
@@ -124,6 +126,7 @@ void calc_async_dc_control()
 
 		send_monitor_vars();
 	}
+
 	if (mppt_calc_request) {
 		mppTracker.step(pdc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
 		mppt_calc_request = false;
@@ -213,6 +216,7 @@ int16_t dcControlStep()
 
 		v_dc_filt50Hz = (float)vdc_filt50Hz_100mV/10.0;
 		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
+		i_pv_filt50Hz = pdc_filt50Hz/v_pv_filt50Hz;
 
 		if (sys_mode_needs_battery) {
 			bmsPower(1);
@@ -292,6 +296,7 @@ int16_t dcControlStep()
 		} else {
 			if (cnt50Hz == 0) {
 				mppt_calc_request = true;
+
 			}
 
 			if (mppt_calc_complete) {
@@ -309,6 +314,54 @@ int16_t dcControlStep()
           break;
       }
 
+
+//	GaN Booster Interleaved Mode for full PV panel current
+//	25°C 50mOhm
+//	50°C 60mOhm
+//	70°C 72mOhm
+//	115°C 100mOhm
+//	max PV input current 12A
+//	each HB 100mOhm * 6A^2 = 3,6W
+//	switching loss assumption: 20kHz -> 1 W for each HB
+//	-> 2,3 W maximum loss for each transistor
+//
+//	Switching to interleaved mode at 5A PV input current:
+//	Ploss_1HB = 80mOhm * 5A^2 + 1W = 2W + 1W = 3W                 (/2 -> 1.5W each GaN)
+//	Ploss_2HB = 2 * 70mOhm * 2,5A^2  + 2*1W = 0.875W+2W = 2,875W  (/4 -> 0.72W each GaN)
+//	-> more loss in single HB mode
+//
+//	Switching back to single mode at 4A (see code)
+//	Ploss_1HB = 75mOhm * 4A^2 + 1W = 1,2W+1W = 2,2W               (/2 -> 1.1W each GaN)
+//	Ploss_2HB = 2 * 65mOhm * 2,0A^2 + 2*1W = 0.52W+2W = 2,52W     (/4 -> 0.63W each GaN)
+//	-> more loss in interleaved mode
+
+	  static uint16_t cnt_interleaved_mode = 0;
+
+	  if (dcdc_mode == DCDC_INTERLEAVED) {
+		  cnt_interleaved_mode++;
+	  } else {
+		  cnt_interleaved_mode = 0;
+	  }
+
+	  static dcdc_mode_t hb_prev;
+
+	  // no discontinuous mode can occur, because of high currents
+	  if ( i_pv_filt50Hz > 5.0 ) {
+		  if (dcdc_mode != DCDC_INTERLEAVED) {
+			  dcdc_mode = DCDC_INTERLEAVED;
+		  }
+	  } else if ( (i_pv_filt50Hz < 4.0) && (cnt_interleaved_mode >= 1.0*DC_CTRL_FREQ) ) {  // min 1sec in interleaved mode
+		  if (dcdc_mode != DCDC_HB1 && dcdc_mode != DCDC_HB2) {
+			  if ( hb_prev == DCDC_HB1 ) {  // equal distribution between both halfbridges
+				  dcdc_mode = DCDC_HB2;
+				  hb_prev = DCDC_HB2;
+			  } else {
+				  dcdc_mode = DCDC_HB1;
+				  hb_prev = DCDC_HB1;
+			  }
+	  	  }
+	  }
+
 	  debug_duty = dutyLS1;
 	  int16_t dutyB1 = MPPT_DUTY_ABSMAX - dutyLS1;
 
@@ -318,18 +371,11 @@ int16_t dcControlStep()
 		  dutyB1 = 0;
 	  }
 
+
+
 	  GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 
 	  return dutyB1;
-
-//		  // A leg
-//		  __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, duty1);  //update pwm value
-//
-//		  // B leg
-//		  int16_t duty2 = PWM_MAX_HALF+(PWM_MAX_HALF-duty1);
-//		  __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, duty2);  //update pwm value
-//		  __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, duty2);  //update pwm value
-
 }
 
 errorPVBI_t checkDCLimits(){

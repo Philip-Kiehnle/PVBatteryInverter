@@ -21,6 +21,9 @@ extern "C" {
 
 #define SYSTEM_HAS_BATTERY 0
 
+enum dcdc_mode_t {INACTIVE, DCDC_HB1, DCDC_HB2, DCDC_INTERLEAVED};
+
+extern volatile enum dcdc_mode_t dcdc_mode;
 
 extern volatile uint16_t VdcFBboost_sincfilt_100mV;
 extern volatile int16_t Idc_filt_10mA;
