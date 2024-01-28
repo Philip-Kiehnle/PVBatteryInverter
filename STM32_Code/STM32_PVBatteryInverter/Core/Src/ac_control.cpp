@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <math.h>
+#include <algorithm>
 
 #include "common.h"
 #include "gpio.h"
@@ -36,8 +38,6 @@ volatile enum stateAC_t stateAC = INIT_AC;
 
 volatile bool sys_mode_needs_ACside = false;
 
-extern volatile uint16_t v_dc_ref_100mV;
-
 static uint32_t cnt_rel = 0;
 
 
@@ -55,7 +55,7 @@ static inline void nextState(enum stateAC_t state)
 }
 
 
-int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
+int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref)
 {
 //GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	static int16_t duty = 0;
@@ -65,8 +65,8 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 	// Vgrid
 	int32_t vd = pll_get_vd();
-#define SQRT2 1.414213562
-	debug_v_ac_rms_100mV = (((int32_t)vd) * ((10*VGRID_ADCR)/SQRT2) )/(1<<ADC_BITS_VGRID);
+	int16_t v_ac_rms_100mV = (((int32_t)vd) * ((10*VGRID_ADCR)/M_SQRT2) )/(1<<ADC_BITS_VGRID);
+	debug_v_ac_rms_100mV = v_ac_rms_100mV;
 	int32_t w = pll_get_w();
 	debug_f_ac_10mHz = (w*100)>>15; // todo: check if (2^15)-1
 
@@ -99,7 +99,7 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 	// GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 3us
 
-	int16_t phase = pll_singlephase_step(vac_raw-1976);  // todo check offset
+	int16_t phase = pll_singlephase_step(vac_raw);
 
 	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 20us; 14us with -O1
 
@@ -118,7 +118,7 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 	  case WAIT_AC_DC_VOLTAGE:
 		if (   acGrid_valid
-		    && VdcFBgrid_sincfilt_100mV > ( ((float)debug_v_ac_rms_100mV) * SQRT2 )  // no precharge resistors available
+		    && VdcFBgrid_sincfilt_100mV > ( ((float)debug_v_ac_rms_100mV) * M_SQRT2 )  // no precharge resistors available
 			&& cnt_rel >= 4*AC_CTRL_FREQ)  // wait at least 4 sec to avoid instabilities
 		 {
 			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched
@@ -134,7 +134,7 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 	  case CLOSE_CONTACTOR_AC:
 		gatedriverAC(1);
-		contactorAC(1);
+		//contactorAC(1);
 		nextState(WAIT_CONTACTOR_AC);
 
 
@@ -185,13 +185,22 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 		// grid current feedforward
 		//if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
-			int16_t i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_100mV*10, VdcFBgrid_sincfilt_100mV*10 );
-			//int16_t i_ref_amp = step_pi_Vdc2IacAmp_volt_comp( VDC_REF_RAW, Vdc_filt, phase );
+			int16_t i_ac_amp_10mA = 0;
+			if (v_dc_ref_100mV == 0) {
+				// use power reference from power controller
+				int i_ac_amp_10mA_unclamped = 100*M_SQRT2 * (p_ac_rms_ref) / ( ((float)v_ac_rms_100mV) / 10);
+				i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
+			} else {
+				// DC voltage control
+				i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_100mV*10, vdc_sinc_mix_100mV*10 );
+				//i_ref_amp = step_pi_Vdc2IacAmp_volt_comp( VDC_REF_RAW, Vdc_filt, phase );
+			}
+
 			debug_i_ac_amp_10mA = i_ac_amp_10mA;
 
 			int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
 			debug_v_amp_pred_100mV = v_amp_pred_100mV;
-			duty_v_amp_pred = ( v_amp_pred_100mV * AC_DUTY_HALF ) / VdcFBgrid_sincfilt_100mV;
+			duty_v_amp_pred = ( v_amp_pred_100mV * AC_DUTY_HALF ) / vdc_sinc_mix_100mV;
 		//}
 		phase_shiftRL = get_IacPhase();
 		//int16_t phase_shiftRL = get_IacPhase()+ (int16_t)(((1<<15)*1.08)/20);
@@ -206,7 +215,7 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw)
 
 	// grid voltage feedforward
 	int32_t v_ac_amp_100mV = (((int32_t)pll_get_vd()) * ((10*VGRID_ADCR)) )/(1<<ADC_BITS_VGRID);
-	int16_t duty_pll = (v_ac_amp_100mV * AC_DUTY_HALF) / VdcFBgrid_sincfilt_100mV;
+	int16_t duty_pll = (v_ac_amp_100mV * AC_DUTY_HALF) / vdc_sinc_mix_100mV;
 
 	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
@@ -355,13 +364,15 @@ void measVdcFBgrid()
 		// pos value range from 50 to 250 -> div by 200
 
 #define V_DC_MAX_FBgrid (1+59)  // 68kOhm 450×68÷(450+68)
+#define V_DC_CALIB_FBgrid  992  // per mil for 68kOhm 450×68÷(450+68)
 //#define V_DC_MAX_FBgrid (1+450)  // todo 450 voltage divider
 
 #if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBgrid*97)/100)
 #error Choose E_VDC_MAX_100mV lower than FBgrid sensor range
 #endif
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
-		VdcFBgrid_sincfilt_100mV = (V_DC_MAX_FBgrid * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
+		uint32_t vdc_no_calib = (V_DC_MAX_FBgrid * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
+		VdcFBgrid_sincfilt_100mV = (vdc_no_calib*V_DC_CALIB_FBgrid)/1000;
 
 		cnt_intr = 0;
 	}

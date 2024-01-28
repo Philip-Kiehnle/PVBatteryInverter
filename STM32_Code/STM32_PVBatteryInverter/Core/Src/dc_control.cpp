@@ -18,9 +18,6 @@
 // deadtime is configured to 64ns (10k resistor)
 #define MIN_PULSE 9  // min pulse duration is 106ns - 64ns deadtime = 42ns
 
-#define DC_CTRL_FREQ 20000
-#define DC_CTRL_FREQ_MPPT 50
-
 bool monitoring_binary = false;
 volatile bool sys_mode_needs_battery = false;
 extern volatile uint16_t v_dc_ref_100mV;
@@ -89,9 +86,11 @@ volatile bool mppt_calc_complete;
 
 MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
 
+#if SYSTEM_HAS_BATTERY == 1
 //static STW_mBMS bms(2);  // BMS address
 ETI_DualBMS bms(15);  // BMS address
 int battery_voltage_mV;
+#endif
 
 extern volatile uint16_t debug_sigma_delta_re;
 
@@ -104,16 +103,40 @@ volatile bool batteryON;
 
 volatile enum dcdc_mode_t dcdc_mode;
 
+volatile uint16_t debug_vdcFBboost_filt50Hz_100mV;
+volatile uint16_t debug_vdcFBgrid_filt50Hz_100mV;
+
 static uint32_t cnt_rel = 0;
 
 
-void calc_async_dc_control()
+void calc_async_dc_control(bool bus_comm_allowed)
 {
+
+#if SYSTEM_HAS_BATTERY == 1
+	if (bus_comm_allowed) {
+		if (bms_update_request) {
+			bms_update_request = false;
+			bms.get_summary();
+			battery_voltage_mV = bms.voltage_mV;
+		}
+
+		if (bms_battery_request) {
+			if (batteryON) {
+				bms.batteryOn();
+			} else {
+				bms.batteryOff();
+			}
+			bms_battery_request = false;
+		}
+	}
+#endif
+
 	if (monitoring_binary && monitoring_request) {
 		monitoring_request = false;
-		monitor_vars.sys_errcode = sys_errcode;
+
 		monitor_vars.stateDC = stateDC;
-		monitor_vars.duty = debug_duty;
+		monitor_vars.dcdc_mode = dcdc_mode;
+		monitor_vars.dutyDC_HS = debug_duty;
 		monitor_vars.pdc_filt50Hz = pdc_filt50Hz;
 		monitor_vars.v_pv_filt50Hz = v_pv_filt50Hz;
 		monitor_vars.v_dc_filt50Hz = v_dc_filt50Hz;
@@ -132,24 +155,6 @@ void calc_async_dc_control()
 		mppt_calc_request = false;
 		mppt_calc_complete = true;
 	}
-
-#if SYSTEM_HAS_BATTERY == 1
-	if (bms_update_request) {
-		bms_update_request = false;
-		bms.get_summary();
-		battery_voltage_mV = bms.voltage_mV;
-	}
-
-	if (bms_battery_request) {
-		if (batteryON) {
-			bms.batteryOn();
-		} else {
-			bms.batteryOff();
-		}
-		bms_battery_request = false;
-	}
-#endif
-
 }
 
 
@@ -168,13 +173,11 @@ static inline void nextState(enum stateDC_t state)
 	cnt_rel = 0;
 }
 
-int16_t dcControlStep()
+int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV)
 {
-	GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
+	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
 	static int16_t dutyLS1 = 0;
-	static uint16_t cnt50Hz;
-	static uint16_t vdc_filt50Hz_100mV = 0;
 
 	bool vdc_inRange = false;
 
@@ -197,26 +200,14 @@ int16_t dcControlStep()
 	}
 
 	cnt_rel++;
-	cnt50Hz++;
-
-	static uint32_t vdc_sum;
-	vdc_sum += VdcFBboost_sincfilt_100mV;
 
 	static float pdc_sum;
 	pdc_sum += (Idc_filt_10mA*VdcFBboost_sincfilt_100mV)/1000.0;
 
-	if (cnt50Hz >= (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT) ) {
-		cnt50Hz = 0;
-		monitoring_request = true;
-		monitor_vars.ID++;
-		vdc_filt50Hz_100mV = vdc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
-		vdc_sum = 0;
-		pdc_filt50Hz = pdc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
-		pdc_sum = 0;
+	if (cnt50Hz == 0) {
 
-		v_dc_filt50Hz = (float)vdc_filt50Hz_100mV/10.0;
-		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
-		i_pv_filt50Hz = pdc_filt50Hz/v_pv_filt50Hz;
+		monitor_vars.ID++;
+		monitoring_request = true;
 
 		if (sys_mode_needs_battery) {
 			bmsPower(1);
@@ -230,6 +221,13 @@ int16_t dcControlStep()
 			cnt_1Hz_from_50Hz = 0;
 			bms_update_request = true;
 		}
+
+		v_dc_filt50Hz = (float)vdc_filt50Hz_100mV/10.0;
+		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
+		i_pv_filt50Hz = pdc_filt50Hz/v_pv_filt50Hz;
+
+		pdc_filt50Hz = pdc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
+		pdc_sum = 0;
 	}
 
 	switch (stateDC) {
@@ -372,8 +370,7 @@ int16_t dcControlStep()
 	  }
 
 
-
-	  GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+	  //GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 
 	  return dutyB1;
 }
@@ -490,13 +487,16 @@ void measVdcFBboost()
 		// 1V = 90% bitstream ones = 50 edges counted in 50us
 		// pos value range from 50 to 250 -> div by 200
 #define V_DC_MAX_FBboost (1+59)  // 68kOhm 450×68÷(450+68)
+#define V_DC_CALIB_FBboost  995  // per mil for 68kOhm 450×68÷(450+68)
+
 //#define V_DC_MAX_FBboost (1+450)  // todo 450 voltage divider
 
 #if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBboost*97)/100)
 #error Choose E_VDC_MAX_100mV lower than FBboost sensor range
 #endif
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
-		VdcFBboost_sincfilt_100mV = (V_DC_MAX_FBboost * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
+		uint32_t vdc_no_calib = (V_DC_MAX_FBboost * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
+		VdcFBboost_sincfilt_100mV = (vdc_no_calib*V_DC_CALIB_FBboost)/1000;
 
 		cnt_intr = 0;
 	}

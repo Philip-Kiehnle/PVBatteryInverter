@@ -133,7 +133,7 @@ int ETI_DualBMS::custom_query(unsigned int response_len)
 {
     //serial_baud(serial_fd_, B115200);
     serial_write(serial_fd_, (char*)&tx_msg, 6);        
-    serial_write(serial_fd_, (char*)&tx_msg.data, tx_msg.dLen);  // checksum
+    serial_write(serial_fd_, (char*)&tx_msg.data, tx_msg.dLen);
 
 #define RX_BUFLEN 6
     uint8_t rx_buf[RX_BUFLEN+1];  // without +1 android causes "stack corruption detected"

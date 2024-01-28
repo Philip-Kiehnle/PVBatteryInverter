@@ -81,16 +81,36 @@ fileinfo = os.stat(path)
 #int16_t i_ac_amp_10mA;
 #	uint16_t VdcFBgrid_sincfilt_100mV;
 
+#	uint16_t ID;  // sys variables
+#	uint8_t sys_mode;
+#	int8_t sys_errcode;
+#	uint8_t stateDC;  // DC variables
+#	uint8_t dcdc_mode;
+#	uint16_t dutyDC_HS;
+#	float pdc_filt50Hz;
+#	float v_pv_filt50Hz;
+#	float v_dc_filt50Hz;
+#	uint16_t stateAC;  // AC variables
+#	int16_t f_ac_10mHz;
+#	int16_t v_ac_rms_100mV;
+#	int16_t v_amp_pred_100mV;
+#	int16_t i_ac_amp_10mA;
+#	int16_t p_ac;
+#	uint16_t VdcFBgrid_sincfilt_100mV;  // for debugging
+#	uint16_t VdcFBboost_sincfilt_100mV;
 
-monitor_vars_t = "HhHHfffHhhhhH"
+
+monitor_vars_t = "HBbBBHfffHhhhhhHH"
 struct_size = struct.calcsize(monitor_vars_t)
 print("struct_size", struct_size)
 
 d = np.dtype([
 ('ID', 'u2'),
-('sys_errcode', 'i2'),
-('stateDC', 'u2'),
-('duty', 'u2'),
+('sys_mode', 'u1'),
+('sys_errcode', 'i1'),
+('dcdc_mode', 'u1'),
+('stateDC', 'u1'),
+('dutyDC_HS', 'u2'),
 ('pdc_filt50Hz', 'f4'),
 ('v_pv_filt50Hz', 'f4'),
 ('v_dc_filt50Hz', 'f4'),
@@ -99,7 +119,9 @@ d = np.dtype([
 ('v_ac_rms_100mV', 'i2'),
 ('v_amp_pred_100mV', 'i2'),
 ('i_ac_amp_10mA', 'i2'),
-('VdcFBgrid_sincfilt_100mV', 'u2')
+('p_ac', 'i2'),
+('VdcFBgrid_sincfilt_100mV', 'u2'),
+('VdcFBboost_sincfilt_100mV', 'u2')
 ])
 
 for name in d.names:
@@ -166,7 +188,7 @@ def plot_ax(name, gain = 1.0, vert_lines = False, color='b'):
 
 #plot_ax('ID')
 plot_ax('sys_errcode')
-plot_ax('duty')
+plot_ax('dutyDC_HS')
 plot_ax('stateDC', vert_lines=True)
 plot_ax('stateAC', vert_lines=True, color='r')
 
