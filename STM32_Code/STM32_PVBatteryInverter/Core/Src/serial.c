@@ -3,7 +3,7 @@
 
 extern UART_HandleTypeDef huart5;
 
-__IO ITStatus UartReady = RESET;
+//__IO ITStatus UartReady = RESET;
 
 void serial_write(int serial_fd_, const char* data, int size)
 {
@@ -22,22 +22,27 @@ void serial_write(int serial_fd_, const char* data, int size)
 int serial_read(int serial_fd_, char* data, int size, int timeout_usec)
 {
 
-// V1: polling 1 byte is too slow without UART in FIFO mode
+// V1a: polling 1 byte is too slow without UART in FIFO mode; FIFO mode okay
 
+//	uint16_t rx_len = 0;
+
+//	for (int i= 0; i<size; i++) {
+//
+//		HAL_StatusTypeDef status = HAL_UART_Receive(&huart5, (uint8_t*)&data[rx_len], 1, timeout_usec/1000);
+//
+//		if (status == HAL_OK) {
+//			rx_len++;
+//		} else if (status == HAL_TIMEOUT) {
+//			break;
+//		} else {
+//			Error_Handler();
+//		}
+//	}
+//	return rx_len;
+
+// V1b: use HAL function
 	uint16_t rx_len = 0;
-
-	for (int i= 0; i<size; i++) {
-
-		HAL_StatusTypeDef status = HAL_UART_Receive(&huart5, (uint8_t*)&data[rx_len], 1, timeout_usec/1000);
-
-		if (status == HAL_TIMEOUT) {
-			break;
-		} else if (status != HAL_OK) {
-			Error_Handler();
-		}
-		rx_len++;
-	}
-
+	HAL_UARTEx_ReceiveToIdle(&huart5, (uint8_t *)data, size, &rx_len, timeout_usec/1000);
 	return rx_len;
 
 

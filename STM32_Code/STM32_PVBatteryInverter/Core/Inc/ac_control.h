@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "controller.h"
 
 
 #define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
@@ -30,8 +31,12 @@ extern volatile bool sys_mode_needs_ACside;
 
 void measVdcFBgrid();
 errorPVBI_t checkACLimits();
-int16_t acControlStep(int16_t vac_raw, int16_t iac_raw);
+int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref);
 
+inline int acControl_RAW_to_100mV(int vac_raw)
+{
+	return (vac_raw * (10*VGRID_ADCR) )/(1<<ADC_BITS_VGRID);
+}
 
 
 #ifdef __cplusplus

@@ -19,8 +19,6 @@ extern "C" {
 
 #define VDC_TOLERANCE_100mV 2*10  // 2V tolerance for connecting battery
 
-#define SYSTEM_HAS_BATTERY 0
-
 enum dcdc_mode_t {INACTIVE, DCDC_HB1, DCDC_HB2, DCDC_INTERLEAVED};
 
 extern volatile enum dcdc_mode_t dcdc_mode;
@@ -29,10 +27,10 @@ extern volatile uint16_t VdcFBboost_sincfilt_100mV;
 extern volatile int16_t Idc_filt_10mA;
 extern volatile bool sys_mode_needs_battery;
 
-void calc_async_dc_control();
+void calc_async_dc_control(bool bus_comm_allowed);
 void measVdcFBboost();
 errorPVBI_t checkDCLimits();
-int16_t dcControlStep();
+int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV);
 
 
 
