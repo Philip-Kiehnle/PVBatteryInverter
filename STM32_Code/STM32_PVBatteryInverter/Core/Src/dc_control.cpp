@@ -18,7 +18,7 @@
 // deadtime is configured to 64ns (10k resistor)
 #define MIN_PULSE 9  // min pulse duration is 106ns - 64ns deadtime = 42ns
 
-bool monitoring_binary = false;
+bool monitoring_binary_en = false;
 volatile bool sys_mode_needs_battery = false;
 extern volatile uint16_t v_dc_ref_100mV;
 
@@ -103,11 +103,28 @@ volatile bool batteryON;
 
 volatile enum dcdc_mode_t dcdc_mode;
 
+volatile uint16_t ID;
 volatile uint16_t debug_vdcFBboost_filt50Hz_100mV;
 volatile uint16_t debug_vdcFBgrid_filt50Hz_100mV;
 
 static uint32_t cnt_rel = 0;
 
+void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
+{
+	mon_vars->ID = ID;
+	mon_vars->stateDC = stateDC;
+	mon_vars->dcdc_mode = dcdc_mode;
+	mon_vars->dutyDC_HS = debug_duty;
+	mon_vars->pdc_filt50Hz = pdc_filt50Hz;
+	mon_vars->v_pv_filt50Hz = v_pv_filt50Hz;
+	mon_vars->v_dc_filt50Hz = v_dc_filt50Hz;
+
+	mon_vars->stateAC = stateAC;
+	mon_vars->f_ac_10mHz = debug_f_ac_10mHz;
+	mon_vars->v_ac_rms_100mV = debug_v_ac_rms_100mV;
+	mon_vars->v_amp_pred_100mV = debug_v_amp_pred_100mV;
+	mon_vars->i_ac_amp_10mA = debug_i_ac_amp_10mA;
+}
 
 void calc_async_dc_control(bool bus_comm_allowed)
 {
@@ -131,22 +148,8 @@ void calc_async_dc_control(bool bus_comm_allowed)
 	}
 #endif
 
-	if (monitoring_binary && monitoring_request) {
+	if (monitoring_binary_en && monitoring_request) {
 		monitoring_request = false;
-
-		monitor_vars.stateDC = stateDC;
-		monitor_vars.dcdc_mode = dcdc_mode;
-		monitor_vars.dutyDC_HS = debug_duty;
-		monitor_vars.pdc_filt50Hz = pdc_filt50Hz;
-		monitor_vars.v_pv_filt50Hz = v_pv_filt50Hz;
-		monitor_vars.v_dc_filt50Hz = v_dc_filt50Hz;
-
-		monitor_vars.stateAC = stateAC;
-		monitor_vars.f_ac_10mHz = debug_f_ac_10mHz;
-		monitor_vars.v_ac_rms_100mV = debug_v_ac_rms_100mV;
-		monitor_vars.v_amp_pred_100mV = debug_v_amp_pred_100mV;
-		monitor_vars.i_ac_amp_10mA = debug_i_ac_amp_10mA;
-
 		send_monitor_vars();
 	}
 
@@ -158,12 +161,14 @@ void calc_async_dc_control(bool bus_comm_allowed)
 }
 
 
-void shutdownDC()
+void shutdownDC(bool include_bms_bus_cmd)
 {
 	gatedriverDC(0);
 	contactorBattery(0);
-	batteryON = false;
-	bms_battery_request = true;
+	if (include_bms_bus_cmd){
+		batteryON = false;
+		bms_battery_request = true;
+	}
 }
 
 
@@ -189,13 +194,13 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV)
 		    vdc_inRange = true;
 		}
 	} else {
-		shutdownDC();
+		shutdownDC(false);
 		vdc_inRange = false;
 		stateDC = INIT_DC;
 	}
 
 	if (sys_errcode != EC_NO_ERROR ) {
-		shutdownDC();
+		shutdownDC(true);
 		stateDC = INIT_DC;
 	}
 
@@ -206,7 +211,7 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV)
 
 	if (cnt50Hz == 0) {
 
-		monitor_vars.ID++;
+		ID++;
 		monitoring_request = true;
 
 		if (sys_mode_needs_battery) {
@@ -232,7 +237,7 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV)
 
 	switch (stateDC) {
 	  case INIT_DC:
-		shutdownDC();
+		shutdownDC(false);
 		nextState(WAIT_PV_VOLTAGE);
 		break;
 
@@ -412,7 +417,8 @@ void measVdcFBboost()
 	//uint16_t sigma_delta_re = 250;  //for AC debugging todo remove
 	TIM4->CNT = 0;
 
-	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
+	// if sensor sees more than 1V, 90% high increase up to only a single zero in 128cycles, which equals 1.25V
+	if (sigma_delta_re < 35 || sigma_delta_re > 500) {
 		sys_errcode = EC_V_DC_SENSOR_FB_BOOST;
 	}
 

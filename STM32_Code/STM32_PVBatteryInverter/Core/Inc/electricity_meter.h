@@ -13,12 +13,6 @@
 enum el_meter_status_t {EL_METER_OKAY, EL_METER_CONN_WARN, EL_METER_CONN_ERR};
 typedef enum el_meter_status_t el_meter_status_t;
 
-typedef struct {
-	int power;
-	unsigned int e_consumed;
-	unsigned int e_produced;
-} meterdata_t;
-
 
 el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart);
 int electricity_meter_get_power();

@@ -88,8 +88,9 @@ int16_t get_IacPhase()
 int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp)  // returns amplitude at secondary side
 {
 	#define Ztot sqrt(R*R + ZL*ZL)
-	const int32_t coeff = Ztot;  // DC scale
-	return (coeff*i_amp);
+	const int32_t coeff = Ztot*(1<<14);  // DC scale
+	int32_t v_amp = (coeff*i_amp)>>14;
+	return v_amp;
 }
 
 // scale i_dc to i_ac_rms to i_ac_amp

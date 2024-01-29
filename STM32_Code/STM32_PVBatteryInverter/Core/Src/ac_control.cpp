@@ -55,7 +55,7 @@ static inline void nextState(enum stateAC_t state)
 }
 
 
-int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref)
+int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref)
 {
 //GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	static int16_t duty = 0;
@@ -65,8 +65,21 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_10
 
 	// Vgrid
 	int32_t vd = pll_get_vd();
+	int16_t v_ac_amp_100mV = (((int32_t)vd) * (10*VGRID_ADCR) )/(1<<ADC_BITS_VGRID);
 	int16_t v_ac_rms_100mV = (((int32_t)vd) * ((10*VGRID_ADCR)/M_SQRT2) )/(1<<ADC_BITS_VGRID);
 	debug_v_ac_rms_100mV = v_ac_rms_100mV;
+
+	//static int16_t v_ac_rms_filt50Hz_100mV = 0;
+	static int16_t v_ac_amp_filt50Hz_100mV = 0;
+	static int32_t v_ac_amp_sum = 0;
+	v_ac_amp_sum += v_ac_amp_100mV;
+
+	if (cnt50Hz == 0) {
+		v_ac_amp_filt50Hz_100mV = v_ac_amp_sum/CYCLES_CNT_50HZ;
+		//v_ac_rms_filt50Hz_100mV = ((float)v_ac_amp_filt50Hz_100mV) / M_SQRT2;
+		v_ac_amp_sum = 0;
+	}
+
 	int32_t w = pll_get_w();
 	debug_f_ac_10mHz = (w*100)>>15; // todo: check if (2^15)-1
 
@@ -118,10 +131,11 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_10
 
 	  case WAIT_AC_DC_VOLTAGE:
 		if (   acGrid_valid
-		    && VdcFBgrid_sincfilt_100mV > ( ((float)debug_v_ac_rms_100mV) * M_SQRT2 )  // no precharge resistors available
+		    && VdcFBgrid_sincfilt_100mV > v_ac_amp_100mV  // no precharge resistors available
 			&& cnt_rel >= 4*AC_CTRL_FREQ)  // wait at least 4 sec to avoid instabilities
 		 {
-			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched
+			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched: +-1us
+
 			nextState(WAIT_ZERO_CROSSING);
 		}
 		break;
@@ -188,7 +202,7 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_10
 			int16_t i_ac_amp_10mA = 0;
 			if (v_dc_ref_100mV == 0) {
 				// use power reference from power controller
-				int i_ac_amp_10mA_unclamped = 100*M_SQRT2 * (p_ac_rms_ref) / ( ((float)v_ac_rms_100mV) / 10);
+				int i_ac_amp_10mA_unclamped = 100 * (2*p_ac_rms_ref*10) / v_ac_amp_filt50Hz_100mV;
 				i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
 			} else {
 				// DC voltage control
@@ -202,7 +216,7 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_10
 			debug_v_amp_pred_100mV = v_amp_pred_100mV;
 			duty_v_amp_pred = ( v_amp_pred_100mV * AC_DUTY_HALF ) / vdc_sinc_mix_100mV;
 		//}
-		phase_shiftRL = get_IacPhase();
+		phase_shiftRL = 0;//get_IacPhase();
 		//int16_t phase_shiftRL = get_IacPhase()+ (int16_t)(((1<<15)*1.08)/20);
 		//OLD: Strom(3,5Aamp) in Phase bei 40,5W/42,5VA (25,4Vdc bis 27,3Vdc)
 
@@ -214,10 +228,9 @@ int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_10
       }
 
 	// grid voltage feedforward
-	int32_t v_ac_amp_100mV = (((int32_t)pll_get_vd()) * ((10*VGRID_ADCR)) )/(1<<ADC_BITS_VGRID);
-	int16_t duty_pll = (v_ac_amp_100mV * AC_DUTY_HALF) / vdc_sinc_mix_100mV;
+	int16_t duty_pll = (((int32_t)v_ac_amp_filt50Hz_100mV) * AC_DUTY_HALF) / vdc_sinc_mix_100mV;
 
-	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
+	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + 0*duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
 
 	//duty = 8500 - 2*3; // PWMA 35.6ns low  -> 6*2*2.94ns

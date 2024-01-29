@@ -35,10 +35,10 @@
 #include "battery/bms_types.h"
 #include "electricity_meter.h"
 #include "power_controller.h"
+#include <sml/sml_crc16.h>
 
 
 battery_t battery;
-volatile monitor_vars_t monitor_vars = {0};
 
 // todo
 typedef struct {
@@ -110,7 +110,7 @@ extern int battery_voltage_mV;
 volatile uint16_t v_dc_ref_100mV;
 volatile float p_ac_rms_ref;
 
-extern bool monitoring_binary;
+extern bool monitoring_binary_en;
 
 
 uint8_t ubKeyNumber = 0x0;
@@ -228,38 +228,57 @@ void resetWatchdog()
     }
 }
 
+static void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
+{
+	mon_vars->sys_mode = sys_mode;
+	mon_vars->sys_errcode = sys_errcode;
+
+	mon_vars->p_ac = p_ac_rms_ref;
+	mon_vars->VdcFBboost_sincfilt_100mV = VdcFBboost_sincfilt_100mV;
+	mon_vars->VdcFBgrid_sincfilt_100mV = VdcFBgrid_sincfilt_100mV;
+}
+
 #if COMM_READ_ELECTRICITY_METER == 1
+// sends monitor_vars + header + crc via RS485
 static void send_inverterdata()
 {
 	// if BMS is not part of the bus, add: Struct BMS Data : onoff Soc V I vmin vmax
 
-	// inverterdata consists of header + monitor vars
+	// inverterdata consists of header + crc + monitor vars
 	int header = 0xDEADBEEF;
-
-	if (HAL_UART_Transmit(&huart5, (uint8_t *)&header, sizeof(header), 10) != HAL_OK)
-	{
+	if (HAL_UART_Transmit(&huart5, (uint8_t *)&header, sizeof(header), 10) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_UART_Transmit_DMA(&huart5, (uint8_t *)&monitor_vars, sizeof(monitor_vars)) != HAL_OK)
-	{
+	monitor_vars_t mon_vars_snapshot = {0};
+	fill_monitor_vars_sys(&mon_vars_snapshot);
+	fill_monitor_vars_dc(&mon_vars_snapshot);
+
+	uint16_t crc = sml_crc16_calculate((uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot));
+	if (HAL_UART_Transmit(&huart5, (uint8_t *)&crc, sizeof(crc), 10) != HAL_OK)	{
 		Error_Handler();
 	}
+
+	if (HAL_UART_Transmit(&huart5, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot), 10) != HAL_OK) {
+		Error_Handler();
+	}
+//	if (HAL_UART_Transmit_DMA(&huart5, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot)) != HAL_OK) {
+//		Error_Handler();
+//	}
 }
 #endif
 
-
+// sends monitor_vars via UART
 void send_monitor_vars()
 {
 	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
-	monitor_vars.sys_mode = sys_mode;
-	monitor_vars.sys_errcode = sys_errcode;
 
-	monitor_vars.p_ac = p_ac_rms_ref;
-	monitor_vars.VdcFBboost_sincfilt_100mV = VdcFBboost_sincfilt_100mV;
-	monitor_vars.VdcFBgrid_sincfilt_100mV = VdcFBgrid_sincfilt_100mV;
+	static monitor_vars_t monitor_vars = {0};  // static for DMA
+	fill_monitor_vars_sys(&monitor_vars);
+	fill_monitor_vars_dc(&monitor_vars);
+
 	// V1 : FIFO 30bytes transmit best case: 2607us
-//	HAL_UART_Transmit(&huart3, (uint8_t *)&monitor_vars, sizeof(monitor_vars), 10);
+//	HAL_UART_Transmit(&huart3, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot), 10);
 
 	// V2 : FIFO+DMA 30bytes transmit best case: 1.65us  worst case : 17.9us
 	if (HAL_UART_Transmit_DMA(&huart3, (uint8_t *)&monitor_vars, sizeof(monitor_vars)) != HAL_OK)
@@ -269,17 +288,30 @@ void send_monitor_vars()
 	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 }
 
-void reinitUART(UART_HandleTypeDef *huart)
+void reinitUART(UART_HandleTypeDef *huart, uint32_t BaudRate)
 {
-	if (HAL_UARTEx_DisableFifoMode(huart) != HAL_OK) {
-		Error_Handler();
+	if (huart->Init.BaudRate != BaudRate) {
+		huart->Init.BaudRate = BaudRate;
+		if (HAL_UARTEx_DisableFifoMode(huart) != HAL_OK) {
+			Error_Handler();
+		}
+		if (HAL_UART_Init(huart) != HAL_OK) {
+			Error_Handler();
+		}
+		if (HAL_UARTEx_EnableFifoMode(huart) != HAL_OK) {
+			Error_Handler();
+		}
 	}
-	if (HAL_UART_Init(huart) != HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_UARTEx_EnableFifoMode(huart) != HAL_OK) {
-		Error_Handler();
-	}
+}
+
+
+void shutdownALL()
+{
+	gatedriverAC(0);
+	gatedriverDC(0);
+	contactorAC(0);
+	contactorBattery(0);
+	shutdownDC(true);
 }
 
 
@@ -289,7 +321,7 @@ void calc_and_wait(uint32_t delay)
 	for (uint32_t i=0; i<delay; i++) {
 		calc_async_dc_control(false);
 #if COMM_READ_ELECTRICITY_METER == 0
-		if (!monitoring_binary) {
+		if (!monitoring_binary_en) {
 			HAL_Delay(1);  //ms
 		}
 #endif
@@ -297,27 +329,26 @@ void calc_and_wait(uint32_t delay)
 
 #if COMM_READ_ELECTRICITY_METER == 1
 	UART_HandleTypeDef* huart_rs485 = &huart5;
-	if (huart_rs485->Init.BaudRate != 9600) {
-		huart_rs485->Init.BaudRate = 9600;
-		reinitUART(huart_rs485);
-	}
-	resetWatchdog();
-	int el_meter_status = electricity_meter_read(huart_rs485);
+	if (!monitoring_binary_en) {  // smart meter polling read takes too much time
+		reinitUART(huart_rs485, 9600);
+		resetWatchdog();
+		int el_meter_status = electricity_meter_read(huart_rs485);
 
-	//HAL_UART_Abort_IT(&huart1);
-	if ( el_meter_status == EL_METER_OKAY) {
-		p_ac_rms_ref = power_controller_step(electricity_meter_get_power());
-	} else if (el_meter_status == EL_METER_CONN_ERR ) {
-		p_ac_rms_ref = 0;
-	}
-
-	if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
-		if (huart_rs485->Init.BaudRate != 115200) {
-			huart_rs485->Init.BaudRate = 115200;
-			reinitUART(huart_rs485);
+		//HAL_UART_Abort_IT(&huart1);
+		if ( el_meter_status == EL_METER_OKAY) {
+			p_ac_rms_ref = power_controller_step(electricity_meter_get_power());
+		} else if (el_meter_status == EL_METER_CONN_ERR ) {
+			p_ac_rms_ref = 0;
 		}
+
+		if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
+			reinitUART(huart_rs485, 115200);
+			calc_async_dc_control(true);
+			send_inverterdata();
+		}
+	} else {
+		reinitUART(huart_rs485, 115200);
 		calc_async_dc_control(true);
-		send_inverterdata();
 	}
 #endif
 	resetWatchdog();
@@ -333,12 +364,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	if (blankingCnt > 240) {  // dont check sigmadelta data during startup for 240/20kHz/3ADCs = 4ms
 		errorPVBI_t limitErr = checkDCLimits();
 		if (limitErr != EC_NO_ERROR) {
-			shutdown();
+			shutdownALL();
 			sys_errcode = limitErr;
 		}
 		limitErr = checkACLimits();
 		if (limitErr != EC_NO_ERROR) {
-			shutdown();  // todo shutdown AC only
+			shutdownALL();  // todo shutdown AC only
 			sys_errcode = limitErr;
 		}
 	} else {
@@ -354,6 +385,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 #define IAC_RAW_TO_10mA IDC_RAW_TO_10mA
 
 	static volatile uint16_t vdc_sinc_mix_100mV;
+	static volatile uint16_t cnt50Hz = 0;
 
 	// two channels -> called twice
     if (hadc == &hadc1) {
@@ -382,7 +414,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 			iac_10mA = (iac_raw-IAC_OFFSET_RAW) * IAC_RAW_TO_10mA;
 
-			int16_t duty = acControlStep(vac_raw, iac_raw, vdc_sinc_mix_100mV, v_dc_ref_100mV, p_ac_rms_ref);
+			int16_t duty = acControlStep(cnt50Hz, vac_raw, iac_raw, vdc_sinc_mix_100mV, v_dc_ref_100mV, p_ac_rms_ref);
 
 			// set the PWM duty cycle value (into a 'shadow register')
 			__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
@@ -408,7 +440,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		Ipv_prev[1] = Ipv_prev[0];
 		Ipv_prev[0] = ADC2ConvertedData[0];
 
-		static uint16_t cnt50Hz = 0;
 		cnt50Hz++;
 
 		static uint16_t vdc_filt50Hz_100mV;
@@ -422,14 +453,14 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		vdc_sum += vdc_sinc_mix_100mV;  // average of both Vdc sensors
 		vac_sum += debug_v_ac_100mV;  // for AC calibration
 
-		if (cnt50Hz >= (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT) ) {
+		if (cnt50Hz >= CYCLES_CNT_50HZ ) {
 			cnt50Hz = 0;
 
-			vdc_filt50Hz_100mV = vdc_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
+			vdc_filt50Hz_100mV = vdc_sum/CYCLES_CNT_50HZ;
 			debug_vdc_filt50Hz_100mV = vdc_filt50Hz_100mV;
 			vdc_sum = 0;
 
-			debug_vac_filt50Hz_100mV = vac_sum/(DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT);
+			debug_vac_filt50Hz_100mV = vac_sum/CYCLES_CNT_50HZ;
 			vac_sum = 0;
 		}
 
@@ -692,7 +723,7 @@ int main(void)
 	}
 
 	// UART
-	if (!monitoring_binary) {
+	if (!monitoring_binary_en) {
 #if COMM_READ_ELECTRICITY_METER == 0
 		if (sys_errcode!=EC_NO_ERROR) {
 			uSend("Err ");
@@ -820,10 +851,6 @@ int main(void)
 #endif  // SYSTEM_HAS_BATTERY
 
 #if COMM_READ_ELECTRICITY_METER == 0
-		uSend("vdc_filt50Hz ");
-		uSend_100m(debug_vdc_filt50Hz_100mV);
-		uSend("\n");
-
 //		uSend("VdcFBboost_sinc ");
 //		uSend_100m(VdcFBboost_sincfilt_100mV);
 //		uSend("\n");
@@ -836,6 +863,10 @@ int main(void)
 //		uSend_100m(debug_vac_filt50Hz_100mV);
 //		uSend("\n");
 #endif  // COMM_READ_ELECTRICITY_METER
+
+		uSend("vdc_filt50Hz ");
+		uSend_100m(debug_vdc_filt50Hz_100mV);
+		uSend("\n");
 
 		uSend("p ");
 		uSendInt(electricity_meter_get_power());
@@ -879,10 +910,10 @@ int main(void)
 	uint8_t Rx_Buffer = 0;
 	HAL_UART_Receive(&huart3, &Rx_Buffer, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
 
-	if (!monitoring_binary) {
+	if (!monitoring_binary_en) {
 		if (Rx_Buffer == 'm') {
 			uSend("Monitoring ENABLE\n");
-			monitoring_binary = true;
+			monitoring_binary_en = true;
 		} else if (Rx_Buffer == 'b') {
 			uSend("BALANCING ENABLE\n");
 
@@ -1861,7 +1892,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-	  shutdown();
+	  shutdownALL();
 	  uSend("Error_Handler\n");
   }
   /* USER CODE END Error_Handler_Debug */
