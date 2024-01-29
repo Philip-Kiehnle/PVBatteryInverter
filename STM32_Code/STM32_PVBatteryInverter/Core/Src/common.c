@@ -59,19 +59,12 @@ static void checkEmergencyStop()
   	if ( !HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
   		// prevent noise
         if ( !HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
-        	shutdown();
+        	shutdownALL();
         	sys_errcode = EC_EMERGENCY_STOP;
         }
     }
 }
 
-void shutdown()
-{
-	gatedriverAC(0);
-	gatedriverDC(0);
-	contactorAC(0);
-	contactorBattery(0);
-}
 
 void checkErrors()
 {
@@ -79,7 +72,7 @@ void checkErrors()
 	checkEmergencyStop();
 
 	if (sys_errcode != 0 ) {
-		shutdown();
+		shutdownALL();
 		GPIOB->BRR = (1<<0);  // enable red LED
 	}
 }

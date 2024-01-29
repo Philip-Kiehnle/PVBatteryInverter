@@ -67,19 +67,6 @@ fileinfo = os.stat(path)
 # i uint32
 # I uint32
 # f float32
-	
-#uint16_t ID;
-#int16_t sys_errcode;
-#uint16_t duty;
-#float pdc_filt50Hz;
-#float v_pv_filt50Hz;
-#float v_dc_filt50Hz;
-#uint16_t stateAC;
-#int16_t f_ac_10mHz;
-#int16_t v_ac_rms_100mV;
-#int16_t v_amp_pred_100mV;
-#int16_t i_ac_amp_10mA;
-#	uint16_t VdcFBgrid_sincfilt_100mV;
 
 #	uint16_t ID;  // sys variables
 #	uint8_t sys_mode;
@@ -108,8 +95,8 @@ d = np.dtype([
 ('ID', 'u2'),
 ('sys_mode', 'u1'),
 ('sys_errcode', 'i1'),
-('dcdc_mode', 'u1'),
 ('stateDC', 'u1'),
+('dcdc_mode', 'u1'),
 ('dutyDC_HS', 'u2'),
 ('pdc_filt50Hz', 'f4'),
 ('v_pv_filt50Hz', 'f4'),
@@ -142,14 +129,16 @@ vars = np.zeros(samples_to_consume, dtype=d)
 #var_stateDC = np.zeros(samples_to_consume, dtype=int)
 
 prev_ID = 0
+id_errors = 0
 
 for i in range(samples_to_consume):
 
 	vars[i] = struct.unpack_from(monitor_vars_t,filehandle.read(struct_size))
 
 	ID = vars['ID'][i]
-	if ID != prev_ID+1:
+	if ID != prev_ID+1 and i != 0:
 		print(ID, ' != prev_ID+1 at pos', i)
+		id_errors += 1
 	prev_ID = ID
 
 #exit()
@@ -158,11 +147,25 @@ ax1.grid(axis='x')
 
 #ax1.set_ylabel(r'v$_\mathrm{pv}$'+' (V), ' + r'p$_\mathrm{pv}$'+' (W)')
 
+x_is_ID = False
 
-#x = range(samples_to_consume)
-x = np.arange(samples_to_consume)
-#x_scale = 1
-x_scale = 1/50
+if id_errors > 5:  # too many ID errors distort x-axis
+    x_scale = 1
+    print('Too many ID errors distort x-axis -> using ID and scale=', x_scale)
+    x = vars['ID']-vars['ID'][0]
+    x_is_ID = True
+    id_offset = 0
+    x_prev = 0
+    for i in range(len(x)):
+        x[i] += id_offset
+        if x[i] < x_prev:
+            id_offset += 65536  # 2^16
+            x[i] += id_offset
+else:
+    #x = range(samples_to_consume)
+    x = np.arange(samples_to_consume)
+    #x_scale = 1
+    x_scale = 1/50
 
 if x_scale == 1:
     ax1.set_xlabel(r'$x$' + ' in samples')
@@ -178,19 +181,26 @@ def plot_ax(name, gain = 1.0, vert_lines = False, color='b'):
     curr_ax.plot(x, y, label=filename + ' ' + name)
 
     if vert_lines:
-        y_prev = 0
+        y_prev = y[0]
         for idx, y_single in enumerate(y):
             if y_single != y_prev:
 #                plt.axvline(x=idx)
-                plt.axvline(x=x_scale*idx, color=color, label='state:' + str(y_single))
+                if x_is_ID:
+                    x_loc = x[idx]
+                else:
+                    x_loc = x_scale*idx
+                plt.axvline(x=x_loc, color=color, label='state:' + str(y_single))
             y_prev = y_single
 
 
 #plot_ax('ID')
-plot_ax('sys_errcode')
+plot_ax('sys_errcode', vert_lines=True, color='r')
 plot_ax('dutyDC_HS')
-plot_ax('stateDC', vert_lines=True)
-plot_ax('stateAC', vert_lines=True, color='r')
+plot_ax('stateDC', vert_lines=True, color='b')
+plot_ax('dcdc_mode', vert_lines=True, color='y')
+plot_ax('stateAC')
+
+
 
 ax2 = ax1.twinx()
 ax2._get_lines.prop_cycler = ax1._get_lines.prop_cycler
@@ -200,7 +210,7 @@ plot_ax('pdc_filt50Hz')
 plot_ax('v_pv_filt50Hz')
 plot_ax('v_dc_filt50Hz')
 
-plot_ax('f_ac_10mHz', 0.01)
+#plot_ax('f_ac_10mHz', 0.01)
 plot_ax('v_ac_rms_100mV', 0.1)
 plot_ax('v_amp_pred_100mV', 0.1)
 plot_ax('i_ac_amp_10mA', 0.01)

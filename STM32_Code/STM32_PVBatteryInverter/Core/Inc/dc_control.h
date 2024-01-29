@@ -27,7 +27,9 @@ extern volatile uint16_t VdcFBboost_sincfilt_100mV;
 extern volatile int16_t Idc_filt_10mA;
 extern volatile bool sys_mode_needs_battery;
 
+void shutdownDC(bool include_bms_bus_cmd);
 void calc_async_dc_control(bool bus_comm_allowed);
+void fill_monitor_vars_dc(monitor_vars_t* mon_vars);
 void measVdcFBboost();
 errorPVBI_t checkDCLimits();
 int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV);

@@ -20,6 +20,7 @@
 
 #define DC_CTRL_FREQ 20000
 #define DC_CTRL_FREQ_MPPT 50
+#define CYCLES_CNT_50HZ (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT)
 
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
@@ -29,8 +30,6 @@ extern volatile enum mode_t sys_mode;
 
 enum stateDC_t {INIT_DC, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR_DC, MPPT};
 enum stateAC_t {INIT_AC, WAIT_AC_DC_VOLTAGE, WAIT_ZERO_CROSSING, CLOSE_CONTACTOR_AC, WAIT_CONTACTOR_AC, GRID_CONNECTING, GRID_SYNC};
-
-
 
 
 typedef struct {
@@ -52,8 +51,6 @@ typedef struct {
 	uint16_t VdcFBgrid_sincfilt_100mV;  // for debugging
 	uint16_t VdcFBboost_sincfilt_100mV;
 } __attribute__((__packed__)) monitor_vars_t;
-
-extern volatile monitor_vars_t monitor_vars;
 
 extern volatile enum stateDC_t stateDC;
 extern volatile enum stateAC_t stateAC;

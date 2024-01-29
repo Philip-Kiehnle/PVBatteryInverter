@@ -31,7 +31,8 @@ extern volatile bool sys_mode_needs_ACside;
 
 void measVdcFBgrid();
 errorPVBI_t checkACLimits();
-int16_t acControlStep(int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref);
+int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref);
+
 
 inline int acControl_RAW_to_100mV(int vac_raw)
 {

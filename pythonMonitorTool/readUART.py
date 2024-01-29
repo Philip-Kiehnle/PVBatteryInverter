@@ -29,7 +29,9 @@ with open('monitor_vars.bin', 'wb') as file:
     start_monitor_mode()
     while True:
         bytesToRead = ser.inWaiting()
-        if (bytesToRead >= 31) :
-            bytes = ser.read(31)
+        RX_LEN = 40
+        if (bytesToRead >= RX_LEN) :
+            bytes = ser.read(RX_LEN)
             file.write(bytes)
-            print(bytes)
+            print('r', RX_LEN)
+            #print(bytes)
