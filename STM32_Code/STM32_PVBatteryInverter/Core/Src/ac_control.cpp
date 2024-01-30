@@ -131,7 +131,7 @@ int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16
 
 	  case WAIT_AC_DC_VOLTAGE:
 		if (   acGrid_valid
-		    && VdcFBgrid_sincfilt_100mV > v_ac_amp_100mV  // no precharge resistors available
+		    && VdcFBgrid_sincfilt_100mV > ((v_ac_amp_100mV+v_ac_amp_filt50Hz_100mV)/2)  // no precharge resistors available
 			&& cnt_rel >= 4*AC_CTRL_FREQ)  // wait at least 4 sec to avoid instabilities
 		 {
 			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched: +-1us
@@ -148,7 +148,7 @@ int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16
 
 	  case CLOSE_CONTACTOR_AC:
 		gatedriverAC(1);
-		//contactorAC(1);
+		contactorAC(1);
 		nextState(WAIT_CONTACTOR_AC);
 
 
@@ -216,7 +216,7 @@ int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16
 			debug_v_amp_pred_100mV = v_amp_pred_100mV;
 			duty_v_amp_pred = ( v_amp_pred_100mV * AC_DUTY_HALF ) / vdc_sinc_mix_100mV;
 		//}
-		phase_shiftRL = 0;//get_IacPhase();
+		phase_shiftRL = get_IacPhase();
 		//int16_t phase_shiftRL = get_IacPhase()+ (int16_t)(((1<<15)*1.08)/20);
 		//OLD: Strom(3,5Aamp) in Phase bei 40,5W/42,5VA (25,4Vdc bis 27,3Vdc)
 
@@ -230,7 +230,7 @@ int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16
 	// grid voltage feedforward
 	int16_t duty_pll = (((int32_t)v_ac_amp_filt50Hz_100mV) * AC_DUTY_HALF) / vdc_sinc_mix_100mV;
 
-	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + 0*duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
+	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
 
 	//duty = 8500 - 2*3; // PWMA 35.6ns low  -> 6*2*2.94ns

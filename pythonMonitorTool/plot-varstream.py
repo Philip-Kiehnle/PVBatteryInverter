@@ -178,9 +178,10 @@ curr_ax = ax1
 def plot_ax(name, gain = 1.0, vert_lines = False, color='b'):
 
     y = np.clip(gain*vars[name], -5000, 5000)  # clip UART errors
-    curr_ax.plot(x, y, label=filename + ' ' + name)
+
 
     if vert_lines:
+        curr_ax.plot(x, y, color=color, label=filename + ' ' + name)
         y_prev = y[0]
         for idx, y_single in enumerate(y):
             if y_single != y_prev:
@@ -191,6 +192,8 @@ def plot_ax(name, gain = 1.0, vert_lines = False, color='b'):
                     x_loc = x_scale*idx
                 plt.axvline(x=x_loc, color=color, label='state:' + str(y_single))
             y_prev = y_single
+    else:
+        curr_ax.plot(x, y, label=filename + ' ' + name)
 
 
 #plot_ax('ID')
@@ -198,7 +201,7 @@ plot_ax('sys_errcode', vert_lines=True, color='r')
 plot_ax('dutyDC_HS')
 plot_ax('stateDC', vert_lines=True, color='b')
 plot_ax('dcdc_mode', vert_lines=True, color='y')
-plot_ax('stateAC')
+plot_ax('stateAC', vert_lines=True, color='g')
 
 
 

@@ -273,15 +273,15 @@ void send_monitor_vars()
 {
 	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
-	static monitor_vars_t monitor_vars = {0};  // static for DMA
-	fill_monitor_vars_sys(&monitor_vars);
-	fill_monitor_vars_dc(&monitor_vars);
+	static monitor_packet_t mon_packet = {.header=0xDEADBEEF, 0};  // static for DMA
+	fill_monitor_vars_sys(&mon_packet.monitor_vars);
+	fill_monitor_vars_dc(&mon_packet.monitor_vars);
 
 	// V1 : FIFO 30bytes transmit best case: 2607us
 //	HAL_UART_Transmit(&huart3, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot), 10);
 
 	// V2 : FIFO+DMA 30bytes transmit best case: 1.65us  worst case : 17.9us
-	if (HAL_UART_Transmit_DMA(&huart3, (uint8_t *)&monitor_vars, sizeof(monitor_vars)) != HAL_OK)
+	if (HAL_UART_Transmit_DMA(&huart3, (uint8_t *)&mon_packet, sizeof(mon_packet)) != HAL_OK)
 	{
 		Error_Handler();
 	}
@@ -880,9 +880,9 @@ int main(void)
 //		uSend_10m(debug_f_ac_10mHz);
 //		uSend(" Hz\n");
 
-//		uSend("Idc ");
-//		uSend_10m(Idc_filt_10mA);
-//		uSend("\n");
+		uSend("Idc ");
+		uSend_10m(Idc_filt_10mA);
+		uSend("\n");
 	//	// no current 4avg: 2632-2634
 	//	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
 	//
