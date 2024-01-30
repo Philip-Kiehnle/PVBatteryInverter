@@ -52,6 +52,12 @@ typedef struct {
 	uint16_t VdcFBboost_sincfilt_100mV;
 } __attribute__((__packed__)) monitor_vars_t;
 
+typedef struct {
+	uint32_t header;
+	uint32_t crc;
+	monitor_vars_t monitor_vars;
+} __attribute__((__packed__)) monitor_packet_t;
+
 extern volatile enum stateDC_t stateDC;
 extern volatile enum stateAC_t stateAC;
 
