@@ -14,6 +14,9 @@
 
 #include <stdint.h>
 
+#define CAPACITANCE (4*390e-6)
+#define R (0.7005)   // see calc sheet
+
 //#define ADC_BITS 12
 //int32_t get_ADC_BITS();
 
@@ -39,7 +42,6 @@ int32_t get_VIN_ADCR();
 #define VGRID_TRATIO 7  // transformer winding ratio
 #define VGRID_AMP 325/VGRID_TRATIO  // todo
 int32_t get_VGRID_TRATIO();
-#define CAPACITANCE (2*390e-6)
 float get_C();
 
 //#define VGRID_ADCR (1.056 * 3.3 * 325/0.67)  // signed; additional transformer winding scales 325V down  // same RMS
@@ -72,7 +74,7 @@ int32_t get_VGRID_ADCR();
 int32_t get_IGRID_ADCR();
 #define ADC_BITS_IGRID 12
 //#define IAC_AMP_MAX 7  //(5 * sqrt(2))
-#define IAC_AMP_MAX_10mA 3.0*100
+#define IAC_AMP_MAX_10mA 6.0*100  // 6Aamp*45V/2=135W
 //#define IAC_AMP_MAX_RAW ((1<<ADC_BITS_IGRID) * IAC_AMP_MAX/IGRID_ADCR)
 //#define I_REF_AMP_MIN 0.4
 //#define I_REF_AMP_MIN_RAW ((1<<ADC_BITS_IGRID) * I_REF_AMP_MIN/IGRID_ADCR)

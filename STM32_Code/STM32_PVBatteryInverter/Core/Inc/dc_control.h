@@ -23,17 +23,16 @@ enum dcdc_mode_t {INACTIVE, DCDC_HB1, DCDC_HB2, DCDC_INTERLEAVED};
 
 extern volatile enum dcdc_mode_t dcdc_mode;
 
-extern volatile uint16_t VdcFBboost_sincfilt_100mV;
-extern volatile int16_t Idc_filt_10mA;
+extern volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 extern volatile bool sys_mode_needs_battery;
 
-void shutdownDC(bool include_bms_bus_cmd);
-void calc_async_dc_control(bool bus_comm_allowed);
+uint16_t get_v_dc_FBboost_sincfilt_100mV();
+void shutdownDC();
+void calc_async_dc_control();
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars);
 void measVdcFBboost();
 errorPVBI_t checkDCLimits();
-int16_t dcControlStep(uint16_t cnt50Hz, uint16_t vdc_filt50Hz_100mV);
-
+int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA);
 
 
 #ifdef __cplusplus

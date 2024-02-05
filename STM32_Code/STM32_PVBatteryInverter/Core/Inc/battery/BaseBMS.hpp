@@ -9,16 +9,6 @@ extern "C" {
     #include "bms_types.h"
 }
 
-typedef struct {
-    uint32_t batID;  // minVolt_V,maxVolt_1V,maxChrgCurrent_A e.g. 40328804
-    float soc;
-    float power_W;
-    uint16_t minVcell_mV;
-    uint16_t maxVcell_mV;
-    int8_t minTemp;
-    int8_t maxTemp;
-} batteryStatus_t;
-
 class BaseBMS
 {
 public:

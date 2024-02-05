@@ -32,6 +32,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 // test in linux:
 // stty raw -F /dev/ttyUSB1  # without this command, linux adds \r to \n and corrupts data!
 // cat testmsg.bin > /dev/ttyUSB1
+// cat /dev/ttyUSB0 | /data/local/nc.openbsd -l 55000  # tx command for UART WiFi bridge
+// nc 192.168.2.2 55000 > /dev/ttyUSB1  # rx command for UART WiFi bridge
 el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 {
 	enum el_meter_status_t el_meter_status = EL_METER_CONN_WARN;

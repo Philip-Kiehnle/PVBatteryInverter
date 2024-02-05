@@ -35,10 +35,9 @@
 #include "battery/bms_types.h"
 #include "electricity_meter.h"
 #include "power_controller.h"
+#include "battery.h"
 #include <sml/sml_crc16.h>
 
-
-battery_t battery;
 
 // todo
 typedef struct {
@@ -93,25 +92,13 @@ uint16_t ADC1ConvertedData[2];
 uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
 
+volatile uint16_t id;
+volatile control_ref_t ctrl_ref;
+volatile bool print_request;
 
-volatile int16_t debug_v_ac_100mV;
-volatile uint16_t debug_Ig_raw_filt;
-volatile uint16_t debug_vdc_filt50Hz_100mV;
-volatile int16_t debug_vac_filt50Hz_100mV;
-
-extern volatile float pdc_filt50Hz;
-extern volatile float v_pv_filt50Hz;
-extern volatile float v_dc_filt50Hz;
-extern volatile bool mppt_calc_request;
-extern volatile bool mppt_calc_complete;
-
-extern int battery_voltage_mV;
-
-volatile uint16_t v_dc_ref_100mV;
-volatile float p_ac_rms_ref;
+volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 
 extern bool monitoring_binary_en;
-
 
 uint8_t ubKeyNumber = 0x0;
 //FDCAN_RxHeaderTypeDef RxHeader;
@@ -218,6 +205,7 @@ uint16_t lowpass4(uint16_t in, uint16_t* prev)
     return filt;
 }
 
+
 void resetWatchdog()
 {
 	// Watchdog runs at 32/8=4kHz -> ~1sec for 4095
@@ -228,15 +216,22 @@ void resetWatchdog()
     }
 }
 
+
 static void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
 {
+	mon_vars->id = id;
 	mon_vars->sys_mode = sys_mode;
 	mon_vars->sys_errcode = sys_errcode;
 
-	mon_vars->p_ac = p_ac_rms_ref;
-	mon_vars->VdcFBboost_sincfilt_100mV = VdcFBboost_sincfilt_100mV;
-	mon_vars->VdcFBgrid_sincfilt_100mV = VdcFBgrid_sincfilt_100mV;
+	fill_monitor_vars_dc(mon_vars);
+	fill_monitor_vars_ac(mon_vars);
+
+	const batteryStatus_t* battery = get_batteryStatus();
+	mon_vars->p_ac_ref = ctrl_ref.p_ac_rms;
+	mon_vars->bat_p = battery->power_W;
+	mon_vars->bat_soc = battery->soc;
 }
+
 
 #if COMM_READ_ELECTRICITY_METER == 1
 // sends monitor_vars + header + crc via RS485
@@ -244,22 +239,12 @@ static void send_inverterdata()
 {
 	// if BMS is not part of the bus, add: Struct BMS Data : onoff Soc V I vmin vmax
 
-	// inverterdata consists of header + crc + monitor vars
-	int header = 0xDEADBEEF;
-	if (HAL_UART_Transmit(&huart5, (uint8_t *)&header, sizeof(header), 10) != HAL_OK) {
-		Error_Handler();
-	}
+	static monitor_packet_t mon_packet = {.header=0xDEADBEEF, 0};  // static for DMA
+	fill_monitor_vars_sys(&mon_packet.monitor_vars);
 
-	monitor_vars_t mon_vars_snapshot = {0};
-	fill_monitor_vars_sys(&mon_vars_snapshot);
-	fill_monitor_vars_dc(&mon_vars_snapshot);
+	mon_packet.crc = sml_crc16_calculate((uint8_t *)&mon_packet.monitor_vars, sizeof(mon_packet.monitor_vars));
 
-	uint16_t crc = sml_crc16_calculate((uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot));
-	if (HAL_UART_Transmit(&huart5, (uint8_t *)&crc, sizeof(crc), 10) != HAL_OK)	{
-		Error_Handler();
-	}
-
-	if (HAL_UART_Transmit(&huart5, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot), 10) != HAL_OK) {
+	if (HAL_UART_Transmit(&huart5, (uint8_t *)&mon_packet, sizeof(mon_packet), 10) != HAL_OK) {
 		Error_Handler();
 	}
 //	if (HAL_UART_Transmit_DMA(&huart5, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot)) != HAL_OK) {
@@ -268,6 +253,7 @@ static void send_inverterdata()
 }
 #endif
 
+
 // sends monitor_vars via UART
 void send_monitor_vars()
 {
@@ -275,7 +261,6 @@ void send_monitor_vars()
 
 	static monitor_packet_t mon_packet = {.header=0xDEADBEEF, 0};  // static for DMA
 	fill_monitor_vars_sys(&mon_packet.monitor_vars);
-	fill_monitor_vars_dc(&mon_packet.monitor_vars);
 
 	// V1 : FIFO 30bytes transmit best case: 2607us
 //	HAL_UART_Transmit(&huart3, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot), 10);
@@ -287,6 +272,7 @@ void send_monitor_vars()
 	}
 	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 }
+
 
 void reinitUART(UART_HandleTypeDef *huart, uint32_t BaudRate)
 {
@@ -311,7 +297,8 @@ void shutdownALL()
 	gatedriverDC(0);
 	contactorAC(0);
 	contactorBattery(0);
-	shutdownDC(true);
+	shutdownDC();
+	shutdownBattery();
 }
 
 
@@ -319,7 +306,7 @@ void calc_and_wait(uint32_t delay)
 {
 	resetWatchdog();
 	for (uint32_t i=0; i<delay; i++) {
-		calc_async_dc_control(false);
+		calc_async_dc_control();
 #if COMM_READ_ELECTRICITY_METER == 0
 		if (!monitoring_binary_en) {
 			HAL_Delay(1);  //ms
@@ -336,19 +323,22 @@ void calc_and_wait(uint32_t delay)
 
 		//HAL_UART_Abort_IT(&huart1);
 		if ( el_meter_status == EL_METER_OKAY) {
-			p_ac_rms_ref = power_controller_step(electricity_meter_get_power());
+			ctrl_ref.p_ac_rms = power_controller_step(electricity_meter_get_power());
 		} else if (el_meter_status == EL_METER_CONN_ERR ) {
-			p_ac_rms_ref = 0;
+			ctrl_ref.p_ac_rms = 0;
 		}
 
 		if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
 			reinitUART(huart_rs485, 115200);
-			calc_async_dc_control(true);
+			calc_async_dc_control();
+			async_battery_communication();
 			send_inverterdata();
 		}
 	} else {
 		reinitUART(huart_rs485, 115200);
-		calc_async_dc_control(true);
+		resetWatchdog();
+		calc_async_dc_control();
+		async_battery_communication();
 	}
 #endif
 	resetWatchdog();
@@ -376,15 +366,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		blankingCnt++;
 	}
 
-#define IDC_OFFSET_RAW 2632  // 2635->-60mA
-#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
-#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
-#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
-
-#define IAC_OFFSET_RAW 2629
-#define IAC_RAW_TO_10mA IDC_RAW_TO_10mA
-
-	static volatile uint16_t vdc_sinc_mix_100mV;
+	//static volatile uint16_t vdc_sinc_mix_100mV;
 	static volatile uint16_t cnt50Hz = 0;
 
 	// two channels -> called twice
@@ -393,28 +375,26 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     	static uint8_t cnt_ac = 1;
     	cnt_ac++;
 
-    	if (cnt_ac == 2) {
+    	if (cnt_ac >= 2) {  // this section runs in X us with -O2
     		cnt_ac = 0;
-
 			measVdcFBgrid();
 
 #define V_AC_CALIB_OFFSET 1979
 #define V_AC_CALIB_GAIN_PER_MIL 989
 
-			int vac_raw_no_calib = ADC1ConvertedData[0];
-			int16_t vac_raw = ((vac_raw_no_calib-V_AC_CALIB_OFFSET)*V_AC_CALIB_GAIN_PER_MIL)/1000;
+			int v_ac_raw_no_calib = ADC1ConvertedData[0];
+			int16_t v_ac_raw = ((v_ac_raw_no_calib-V_AC_CALIB_OFFSET)*V_AC_CALIB_GAIN_PER_MIL)/1000;
 
-			debug_v_ac_100mV = acControl_RAW_to_100mV(vac_raw);
+			//debug_v_ac_100mV = acControl_RAW_to_100mV(v_ac_raw);
 
-			uint16_t iac_raw = ADC1ConvertedData[1];
+			uint16_t i_ac_raw = ADC1ConvertedData[1];
 			// Lowpass filter for Ig
-			static uint16_t Ig_prev[3] = {0};
-			uint16_t Ig_filt = lowpass4(iac_raw, Ig_prev);
-			debug_Ig_raw_filt = Ig_filt;
+//			static uint16_t Ig_prev[3] = {0};
+//			uint16_t Ig_filt = lowpass4(i_ac_raw, Ig_prev);
+			//debug_Ig_raw_filt = Ig_filt;
 
-			iac_10mA = (iac_raw-IAC_OFFSET_RAW) * IAC_RAW_TO_10mA;
-
-			int16_t duty = acControlStep(cnt50Hz, vac_raw, iac_raw, vdc_sinc_mix_100mV, v_dc_ref_100mV, p_ac_rms_ref);
+			uint16_t v_dc_FBboost_sincfilt_100mV = get_v_dc_FBboost_sincfilt_100mV();
+			int16_t duty = acControlStep(cnt50Hz, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_ac_raw, i_ac_raw);
 
 			// set the PWM duty cycle value (into a 'shadow register')
 			__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
@@ -426,45 +406,43 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 
     if (hadc == &hadc2) {
+	// called with f=40kHz when repetition counter = 0 -> for double current sense
+	// called with f=20kHz when repetition counter = 1 -> for single current sense or hardware oversampling
+	//
+	// In interleaved DCDC booster with diodes, discontinuous current can occur -> Sampling the whole period is necessary
+	// fadc = 170MHz/4 = 42.5MHz
+	// cycles = 2.5+12.5 = 15
+	// fsample = 42.5MHz/15 = 2.833Msamples/s
+	// oversampling 128 -> 22.135kHz
+	// todo: 22kHz vs 20kHz : no exact average current, but robust for MPPT and much better in discontinuous mode than double sample
+		GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
-      	//measVdc();  // called with f=200Hz when repetition counter = 200
-    	//measVdc();  // called with f=40kHz when repetition counter = 0
-    	measVdcFBboost();  // called with f=20kHz when repetition counter = 1
+		measVdcFBboost();
 
-		// Lowpass filter for Ipv
-		static uint16_t Ipv_prev[3] = {0};
+#define IDC_OFFSET_RAW 2632  // 2635->-60mA
+#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
+#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
+#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
 
-		int16_t idc_filt_raw = ((uint32_t)ADC2ConvertedData[0] + Ipv_prev[0] + Ipv_prev[1] + Ipv_prev[2]) >> 2;
-		Idc_filt_10mA = (idc_filt_raw-IDC_OFFSET_RAW) * IDC_RAW_TO_10mA;
-		Ipv_prev[2] = Ipv_prev[1];
-		Ipv_prev[1] = Ipv_prev[0];
-		Ipv_prev[0] = ADC2ConvertedData[0];
+#define CNT_I_DC_AVG 16  // +3bit in hardware
+		int16_t i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
 
 		cnt50Hz++;
 
-		static uint16_t vdc_filt50Hz_100mV;
-		static uint32_t vdc_sum;
-		static int32_t vac_sum;  // for calib
-
-		vdc_sinc_mix_100mV = (VdcFBboost_sincfilt_100mV+VdcFBgrid_sincfilt_100mV)/2;
-
-		//vdc_sum += VdcFBboost_sincfilt_100mV;  // VdcFBboost only
-		//vdc_sum += VdcFBgrid_sincfilt_100mV;  // VdcFBgrid only
-		vdc_sum += vdc_sinc_mix_100mV;  // average of both Vdc sensors
-		vac_sum += debug_v_ac_100mV;  // for AC calibration
-
 		if (cnt50Hz >= CYCLES_CNT_50HZ ) {
+			id++;
 			cnt50Hz = 0;
 
-			vdc_filt50Hz_100mV = vdc_sum/CYCLES_CNT_50HZ;
-			debug_vdc_filt50Hz_100mV = vdc_filt50Hz_100mV;
-			vdc_sum = 0;
-
-			debug_vac_filt50Hz_100mV = vac_sum/CYCLES_CNT_50HZ;
-			vac_sum = 0;
+			static uint16_t cnt_1Hz_from_50Hz = 0;
+			cnt_1Hz_from_50Hz++;
+			if (cnt_1Hz_from_50Hz >= DC_CTRL_FREQ_MPPT ) {
+				cnt_1Hz_from_50Hz = 0;
+				battery_update_request();
+				print_request = true;
+			}
 		}
 
-		int16_t dutyHS = dcControlStep(cnt50Hz, vdc_filt50Hz_100mV);
+		int16_t dutyHS = dcControlStep(cnt50Hz, ctrl_ref.v_dc_100mV, i_dc_filt_10mA);
 
 		int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
 		int16_t dutyB2 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
@@ -488,9 +466,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 				break;
 		}
 
-	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
-	    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
+		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
+		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
 
+		GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
     }
 #endif
 }
@@ -663,6 +642,8 @@ int main(void)
   /* Clear reset flags anyway */
   __HAL_RCC_CLEAR_RESET_FLAGS();
 
+  const batteryStatus_t* battery = get_batteryStatus();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -680,41 +661,53 @@ int main(void)
 	GPIOB->BSRR = (1<<1);  // disable green LED
 	calc_and_wait(250);  //ms
 
-	sys_mode = PV2AC;
+	sys_mode = HYBRID_OFFLINE;
 
 	switch (sys_mode) {
 	   case OFF:
-		v_dc_ref_100mV = 0;
-		sys_mode_needs_ACside = false;
+		ctrl_ref.mode = AC_OFF;
+		ctrl_ref.v_dc_100mV = 0;
 		sys_mode_needs_battery = false;
 		break;
 
 	  case PV2AC:
-		v_dc_ref_100mV = 48*10;
+		ctrl_ref.v_dc_100mV = VGRID_AMP*10; //48*10;
 		if (stateDC >= VOLTAGE_CONTROL) {
-			sys_mode_needs_ACside = true;
+		    ctrl_ref.mode = VDC_VARIABLE_CONTROL;
 		} else {
-			sys_mode_needs_ACside = false;
+			ctrl_ref.mode = AC_OFF;
+		    ctrl_ref.mode = VDC_CONTROL;
 		}
 		sys_mode_needs_battery = false;
 		// todo: implement switchoff if pdc_filt50Hz < 10Watt for 10sec
 		break;
 
 	  case PV2BAT:
-		//vdc_ref_100mV = bms.voltage_mV/100;  // battery voltage
-		sys_mode_needs_ACside = false;
-		sys_mode_needs_battery = true;
+		ctrl_ref.v_dc_100mV = battery->voltage_100mV;
+		ctrl_ref.mode = AC_OFF;
+		if (ctrl_ref.v_dc_100mV > (15*2.8) && ctrl_ref.v_dc_100mV > (15*3.65)) {
+			sys_mode_needs_battery = true;
+		} else {
+			sys_mode_needs_battery = false;
+		}
 		break;
 
 	  case HYBRID_OFFLINE:
-		v_dc_ref_100mV = 0;  // sets ac controller to current mode
-		sys_mode_needs_ACside = true;
-		sys_mode_needs_battery = true;
+		ctrl_ref.v_dc_100mV = battery->voltage_100mV;
+		if (ctrl_ref.v_dc_100mV > (15*2.8) && ctrl_ref.v_dc_100mV > (15*3.65)) {
+			sys_mode_needs_battery = true;
+			if (ctrl_ref.p_ac_rms > 50 && battery->power_W > 10) {  // todo find battery connected criterion
+				ctrl_ref.mode = PAC_CONTROL;
+			}
+		} else {
+			sys_mode_needs_battery = false;
+			ctrl_ref.mode = AC_OFF;
+		}
 		break;
 
 	  case HYBRID_ONLINE:
-		v_dc_ref_100mV = 0;  // sets ac controller to current mode
-		sys_mode_needs_ACside = true;
+		ctrl_ref.mode = PAC_CONTROL;
+		ctrl_ref.v_dc_100mV = battery->voltage_100mV;
 		sys_mode_needs_battery = true;
 		break;
 
@@ -752,10 +745,6 @@ int main(void)
 		calc_and_wait(250);  //ms
 
 #if SYSTEM_HAS_BATTERY == 1
-		uSend("bat ");
-		uSend_1m(battery_voltage_mV);
-		uSend("\n");
-
 		//can_bus_read();  // todo implement anti lockup
 	#if 0  // debug print battery info
 		/************************/
@@ -850,71 +839,76 @@ int main(void)
 	#endif
 #endif  // SYSTEM_HAS_BATTERY
 
-#if COMM_READ_ELECTRICITY_METER == 0
-//		uSend("VdcFBboost_sinc ");
-//		uSend_100m(VdcFBboost_sincfilt_100mV);
-//		uSend("\n");
-//
-//		uSend("VdcFBgrid_sinc  ");
-//		uSend_100m(VdcFBgrid_sincfilt_100mV);
-//		uSend("\n");
-//
-//		uSend("vac_filt50Hz ");
-//		uSend_100m(debug_vac_filt50Hz_100mV);
-//		uSend("\n");
-#endif  // COMM_READ_ELECTRICITY_METER
+		if (print_request) {
+			print_request = false;
 
-		uSend("vdc_filt50Hz ");
-		uSend_100m(debug_vdc_filt50Hz_100mV);
-		uSend("\n");
+			uSend("Vbat ");
+			uSend_100m(battery->voltage_100mV);
+			uSend("\n");
 
-		uSend("p ");
-		uSendInt(electricity_meter_get_power());
-		uSend("\n");
+	//		uSend("VdcFBboost_sinc ");
+	//		uSend_100m(VdcFBboost_sincfilt_100mV);
+	//		uSend("\n");
 	//
-	//	uSend("iac ");
-	//	uSend_10m(iac_10mA);
-	//	uSend("\n");
+	//		uSend("VdcFBgrid_sinc  ");
+	//		uSend_100m(VdcFBgrid_sincfilt_100mV);
+	//		uSend("\n");
 	//
-//		uSend("f_ac ");
-//		uSend_10m(debug_f_ac_10mHz);
-//		uSend(" Hz\n");
+	//		uSend("vac_filt50Hz ");
+	//		uSend_100m(debug_vac_filt50Hz_100mV);
+	//		uSend("\n");
 
-		uSend("Idc ");
-		uSend_10m(Idc_filt_10mA);
-		uSend("\n");
-	//	// no current 4avg: 2632-2634
-	//	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
-	//
-	//	uSend("Vg_raw_filt ");
-	//	itoa(debug_Vg_raw_filt, Tx_Buffer, 10);
-	//	Tx_len=strlen(Tx_Buffer);
-	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	//	uSend("\n");
-	//	// no voltage 4avg: 1971-1982
-	//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
-	//	// -5V: 1955-1964
-	//
-	//
-	//	uSend("Ig_raw_filt ");
-	//	itoa(debug_Ig_raw_filt, Tx_Buffer, 10);
-	//	Tx_len=strlen(Tx_Buffer);
-	//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-	//	uSend("\n");
-	//	// no current 4avg: 2627-2630
-	//	// ~+1A 2671
+			uSend("vdc ");
+			uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
+			uSend("\n");
 
+			uSend("p ");
+			uSendInt(electricity_meter_get_power());
+			uSend("\n");
+		//
+		//	uSend("iac ");
+		//	uSend_10m(iac_10mA);
+		//	uSend("\n");
+		//
+	//		uSend("f_ac ");
+	//		uSend_10m(debug_f_ac_10mHz);
+	//		uSend(" Hz\n");
+
+	//		uSend("Idc ");
+	//		uSend_10m(Idc_filt_10mA);
+	//		uSend("\n");
+		//	// no current 4avg: 2632-2634
+		//	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
+		//
+		//	uSend("Vg_raw_filt ");
+		//	itoa(debug_Vg_raw_filt, Tx_Buffer, 10);
+		//	Tx_len=strlen(Tx_Buffer);
+		//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		//	uSend("\n");
+		//	// no voltage 4avg: 1971-1982
+		//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
+		//	// -5V: 1955-1964
+		//
+		//
+		//	uSend("Ig_raw_filt ");
+		//	itoa(debug_Ig_raw_filt, Tx_Buffer, 10);
+		//	Tx_len=strlen(Tx_Buffer);
+		//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		//	uSend("\n");
+		//	// no current 4avg: 2627-2630
+		//	// ~+1A 2671
+		}
 	}
 
 	// UART RX
-	uint8_t Rx_Buffer = 0;
-	HAL_UART_Receive(&huart3, &Rx_Buffer, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
+	uint8_t rx_buf = 0;
+	HAL_UART_Receive(&huart3, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
 
 	if (!monitoring_binary_en) {
-		if (Rx_Buffer == 'm') {
+		if (rx_buf == 'm') {
 			uSend("Monitoring ENABLE\n");
 			monitoring_binary_en = true;
-		} else if (Rx_Buffer == 'b') {
+		} else if (rx_buf == 'b') {
 			uSend("BALANCING ENABLE\n");
 
 			//cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
@@ -936,7 +930,7 @@ int main(void)
 			  /* Transmission request Error */
 			  Error_Handler();
 			}
-		} else	if (Rx_Buffer == 'd') {
+		} else	if (rx_buf == 'd') {
 			uSend("BALANCING DISABLE\n");
 
 			//cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
@@ -1028,7 +1022,7 @@ static void MX_ADC1_Init(void)
   /** Common config
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV4;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.GainCompensation = 0;
@@ -1105,7 +1099,7 @@ static void MX_ADC2_Init(void)
   /** Common config
   */
   hadc2.Instance = ADC2;
-  hadc2.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV4;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc2.Init.Resolution = ADC_RESOLUTION_12B;
   hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc2.Init.GainCompensation = 0;
@@ -1119,7 +1113,11 @@ static void MX_ADC2_Init(void)
   hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc2.Init.DMAContinuousRequests = ENABLE;
   hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-  hadc2.Init.OversamplingMode = DISABLE;
+  hadc2.Init.OversamplingMode = ENABLE;
+  hadc2.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_128;
+  hadc2.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_3;
+  hadc2.Init.Oversampling.TriggeredMode = ADC_TRIGGEREDMODE_SINGLE_TRIGGER;
+  hadc2.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc2) != HAL_OK)
   {
     Error_Handler();

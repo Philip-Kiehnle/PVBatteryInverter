@@ -31,25 +31,41 @@ extern volatile enum mode_t sys_mode;
 enum stateDC_t {INIT_DC, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR_DC, MPPT};
 enum stateAC_t {INIT_AC, WAIT_AC_DC_VOLTAGE, WAIT_ZERO_CROSSING, CLOSE_CONTACTOR_AC, WAIT_CONTACTOR_AC, GRID_CONNECTING, GRID_SYNC};
 
+typedef enum
+{
+	AC_OFF = 0,
+	FFWD_ONLY = 1,
+	VDC_CONTROL = 2,
+	VDC_VARIABLE_CONTROL = 3,  // keeps DC voltage just above AC amplitude
+	PAC_CONTROL = 4
+} ac_ctrl_mode_t;
 
 typedef struct {
-	uint16_t ID;  // sys variables
+	ac_ctrl_mode_t mode;
+	uint16_t v_dc_100mV;
+	float p_ac_rms;
+} control_ref_t;
+
+typedef struct {
+	uint16_t id;  // sys variables
 	uint8_t sys_mode;
 	int8_t sys_errcode;
 	uint8_t stateDC;  // DC variables
 	uint8_t dcdc_mode;
 	uint16_t dutyDC_HS;
-	float pdc_filt50Hz;
-	float v_pv_filt50Hz;
+	float p_dc_filt50Hz;
 	float v_dc_filt50Hz;
 	uint16_t stateAC;  // AC variables
 	int16_t f_ac_10mHz;
 	int16_t v_ac_rms_100mV;
-	int16_t v_amp_pred_100mV;
 	int16_t i_ac_amp_10mA;
-	int16_t p_ac;
-	uint16_t VdcFBgrid_sincfilt_100mV;  // for debugging
-	uint16_t VdcFBboost_sincfilt_100mV;
+	int16_t p_ac_filt50Hz;
+	int16_t p_ac_ref;  // for debugging
+	int16_t bat_p;
+	uint8_t bat_soc;
+	uint8_t bat_soc_kalman;
+	uint16_t v_dc_FBboost_sincfilt_100mV;
+	uint16_t v_dc_FBgrid_sincfilt_100mV;
 } __attribute__((__packed__)) monitor_vars_t;
 
 typedef struct {
