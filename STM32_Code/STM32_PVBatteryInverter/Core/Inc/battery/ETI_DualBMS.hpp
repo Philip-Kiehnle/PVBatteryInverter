@@ -21,8 +21,6 @@ public:
 
     int custom_string_query(std::string custom_string);
 
-    uint32_t voltage_mV;
-
     DualBMS dual_bms;
     CellStack cellStack[1];
     TemperatureSensors temperatureSensors[1];

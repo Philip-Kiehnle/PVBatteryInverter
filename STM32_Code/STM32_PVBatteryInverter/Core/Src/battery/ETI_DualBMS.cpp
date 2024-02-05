@@ -53,13 +53,13 @@ int ETI_DualBMS::get_summary()
             return -1;
         }
 
+        batteryStatus.voltage_100mV = (dual_bms.battery[0].voltage_mV+dual_bms.battery[1].voltage_mV)/100;
         batteryStatus.soc = (dual_bms.battery[0].soc + dual_bms.battery[1].soc) / 2;
-        batteryStatus.minVcell_mV = std::min(dual_bms.battery[0].vCell_min_mV, dual_bms.battery[1].vCell_min_mV);
-        batteryStatus.maxVcell_mV = std::max(dual_bms.battery[0].vCell_max_mV, dual_bms.battery[1].vCell_max_mV);
         batteryStatus.power_W = (float)dual_bms.battery[0].voltage_mV /1000 * ((float)dual_bms.battery[0].current_mA) /1000
                                 +(float)dual_bms.battery[1].voltage_mV /1000 * ((float)dual_bms.battery[1].current_mA) /1000;
+        batteryStatus.minVcell_mV = std::min(dual_bms.battery[0].vCell_min_mV, dual_bms.battery[1].vCell_min_mV);
+        batteryStatus.maxVcell_mV = std::max(dual_bms.battery[0].vCell_max_mV, dual_bms.battery[1].vCell_max_mV);
 
-        voltage_mV = dual_bms.battery[0].voltage_mV+dual_bms.battery[1].voltage_mV;
         int8_t temperature_bat0 = dual_bms.battery[0].temperatureBattery;
         int8_t temperature_bat1 = dual_bms.battery[1].temperatureBattery;
 

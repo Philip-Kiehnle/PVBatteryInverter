@@ -6,6 +6,7 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
 #include "common.h"
 #include "controller.h"
 
@@ -24,19 +25,14 @@ extern "C" {
 //#define FGRID_MAX_mHz (51*1000)
 
 
-extern volatile enum stateAC_t stateAC;
-extern volatile uint16_t VdcFBgrid_sincfilt_100mV;
-extern volatile int16_t iac_10mA;
-extern volatile bool sys_mode_needs_ACside;
-
 void measVdcFBgrid();
 errorPVBI_t checkACLimits();
-int16_t acControlStep(uint16_t cnt50Hz, int16_t vac_raw, int16_t iac_raw, uint16_t vdc_sinc_mix_100mV, uint16_t v_dc_ref_100mV, float p_ac_rms_ref);
+int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, int16_t v_ac_raw, uint16_t i_ac_raw);
+void fill_monitor_vars_ac(monitor_vars_t* mon_vars);
 
-
-inline int acControl_RAW_to_100mV(int vac_raw)
+inline int acControl_RAW_to_100mV(int v_ac_raw)
 {
-	return (vac_raw * (10*VGRID_ADCR) )/(1<<ADC_BITS_VGRID);
+	return (v_ac_raw * (10*VGRID_ADCR) )/(1<<ADC_BITS_VGRID);
 }
 
 

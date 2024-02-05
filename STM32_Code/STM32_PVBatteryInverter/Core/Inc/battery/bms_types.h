@@ -38,6 +38,17 @@
 #define OCD           (1<<0)
 
 
+typedef struct {
+	uint32_t batID;  // minVolt_V,maxVolt_V,maxChrgCurrent_A e.g. 28840304
+	uint16_t voltage_100mV;
+	uint8_t soc;
+	int16_t power_W;
+	uint16_t minVcell_mV;
+	uint16_t maxVcell_mV;
+	int8_t minTemp;
+	int8_t maxTemp;
+} batteryStatus_t;
+
 // for STW_mBMS
 // typedef struct {
 //     uint8_t status;
