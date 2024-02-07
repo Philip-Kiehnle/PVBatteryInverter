@@ -2465,8 +2465,8 @@
     (effects (font (size 1.27 1.27) (thickness 0.254) bold) (justify left bottom))
     (uuid 5b979d68-838b-49bc-ad67-8f011343db32)
   )
-  (text "Differential input capacitance: 2pF\nSingle-ended input capacitance: 2pF\n-> 6pf total -> TODO: check"
-    (at 121.92 146.685 0)
+  (text "Differential input capacitance: 2pF\nSingle-ended input capacitance: 2pF\n-> 6pf total"
+    (at 132.715 146.05 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 5f18c4c1-edea-4ea9-b1ec-6ede7de102d9)
   )
@@ -2480,8 +2480,8 @@
     (effects (font (size 1.27 1.27) (thickness 0.254) bold) (justify left bottom))
     (uuid 8cacf207-1b67-4cf5-b44c-12707cffa4be)
   )
-  (text "Lowpass:\nf=1/(2*PI*R*C)\n =1/(2*PI*2*470k*(10p+6p))=10.58kHz"
-    (at 104.775 137.16 0)
+  (text "Lowpass:\nf=1/(2*PI*Rers*C)\n =1/(2*PI*R*Rl/(R+Rl)*C)\n =1/(2*PI*2*470k*2.7k/(2*470k+2.7k)*(470p+6p))\n =124kHz\nGroupdelay@50Hz = 1.28us"
+    (at 103.505 138.43 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid b1d05334-aa9c-433e-87db-89c116ea8a32)
   )
@@ -2606,6 +2606,11 @@
     (pin "1" (uuid cf62f61d-8b5b-43a9-a94f-30addeb393f0))
     (pin "2" (uuid 811915dc-3792-4012-8dc2-131084108731))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C310") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C310") (unit 1)
@@ -2632,6 +2637,11 @@
     (pin "1" (uuid 0fc1a733-d011-4d3d-bc6a-10fc1daf6ae9))
     (pin "2" (uuid 98e184cd-8b44-4756-9da6-f0a1f0c741d6))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C304") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C304") (unit 1)
@@ -2646,7 +2656,7 @@
     (property "Reference" "C301" (at 115.57 142.24 0)
       (effects (font (size 1.27 1.27)) (justify right))
     )
-    (property "Value" "10p" (at 115.57 144.78 0)
+    (property "Value" "470p" (at 115.57 144.78 0)
       (effects (font (size 1.27 1.27)) (justify right))
     )
     (property "Footprint" "Capacitor_SMD:C_0603_1608Metric" (at 110.7948 147.32 0)
@@ -2658,6 +2668,11 @@
     (pin "1" (uuid 756ccb9d-9809-451b-811a-da168cb890b4))
     (pin "2" (uuid ba3469cc-d1e3-4c1a-a465-25ce57e95bf5))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C301") (unit 1)
@@ -2684,6 +2699,11 @@
     (pin "1" (uuid a277b8e1-6cfb-46fc-8e73-494ed7ee82b5))
     (pin "2" (uuid d1543283-bc71-4ad9-889a-85b8502482dc))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C312") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C312") (unit 1)
@@ -2727,6 +2747,11 @@
     (pin "8" (uuid 407850f3-b77d-4691-aaac-ce643ad55b36))
     (pin "9" (uuid ece40d0b-9371-41f6-bc90-dec4a63a421b))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "U302") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "U302") (unit 1)
@@ -2752,6 +2777,11 @@
     )
     (pin "1" (uuid da9daab2-7f8d-4131-9149-cd9f079de153))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0308") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0308") (unit 1)
@@ -2777,6 +2807,11 @@
     )
     (pin "1" (uuid 415c6acc-0f88-4f09-8277-b5574432b991))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0315") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0315") (unit 1)
@@ -2807,6 +2842,11 @@
     (pin "2" (uuid 78bfdb0e-3cfd-4580-a55f-98e7bfae69b4))
     (pin "3" (uuid 599daf87-ff80-467c-a74c-85fe7baf6c81))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "J302") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "J302") (unit 1)
@@ -2833,6 +2873,11 @@
     (pin "1" (uuid a3bc606f-90d2-454c-baa8-505a7b9154a4))
     (pin "2" (uuid 8d4f37f8-7dcc-433f-aff8-f85ef71a3ef6))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C311") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C311") (unit 1)
@@ -2858,6 +2903,11 @@
     )
     (pin "1" (uuid 5a3c3dee-9efb-484c-882f-a14048106a9d))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0302") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0302") (unit 1)
@@ -2883,6 +2933,11 @@
     )
     (pin "1" (uuid 5e0e39a2-b524-4ac7-9a1d-5680c5973cdf))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0310") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0310") (unit 1)
@@ -2939,6 +2994,11 @@
     (pin "1" (uuid 82909300-bac0-4291-af2d-2e59c5eb8c76))
     (pin "2" (uuid afd96bb7-0f57-420e-b400-ce0e69e7b10e))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R302") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "R302") (unit 1)
@@ -2965,6 +3025,11 @@
     (pin "1" (uuid b4c9d3db-a31d-4ab1-87b3-514098b8021d))
     (pin "2" (uuid 764c9c75-ee85-4b61-9248-4f34a3b26663))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "R301") (unit 1)
@@ -2991,6 +3056,11 @@
     (pin "1" (uuid 89a70194-5f1e-453f-af60-c05676b266ff))
     (pin "2" (uuid f8c678e2-f2b3-4aeb-8e30-090fc5d7d592))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R110") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450"
           (reference "R110") (unit 1)
@@ -3034,6 +3104,11 @@
     (pin "8" (uuid db7530fb-ce63-4b8c-bf6e-abafb106eb63))
     (pin "9" (uuid 106225f3-a588-4326-9bfc-2a06b6057fdd))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "U303") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "U303") (unit 1)
@@ -3063,6 +3138,11 @@
     (pin "1" (uuid 10126fcc-6ba1-4501-a703-b6fb2e3713b4))
     (pin "2" (uuid 3f9a02b8-5292-4d46-a6a7-52dcd9fab7bf))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C313") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C313") (unit 1)
@@ -3092,6 +3172,11 @@
     (pin "1" (uuid 2e18d76f-f196-4144-a283-88ca3825ad38))
     (pin "2" (uuid ec330707-2b93-4313-9938-46f46a5f8ef0))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R307") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "R307") (unit 1)
@@ -3120,6 +3205,11 @@
     )
     (pin "1" (uuid 6a59d9b8-e1aa-4bcb-8473-fe9e781fee22))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR03") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR03") (unit 1)
@@ -3148,6 +3238,11 @@
     )
     (pin "1" (uuid 903586f6-1910-42a6-ad19-de9df735a39d))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0312") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0312") (unit 1)
@@ -3210,6 +3305,11 @@
     (pin "1" (uuid 5d406c59-c7ee-4ad4-bd00-0cceb2994a00))
     (pin "2" (uuid c45212a1-0c19-49d8-ae45-bfadb3e690b9))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C309") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C309") (unit 1)
@@ -3236,6 +3336,11 @@
     (pin "1" (uuid d4fae633-0ce8-453f-b2e2-f7642f732a10))
     (pin "2" (uuid 5d76d85d-4f1d-4902-bb0d-16d0bc742d00))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C305") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C305") (unit 1)
@@ -3262,6 +3367,11 @@
     (pin "1" (uuid fbdf8dae-ec21-4ddf-9d5a-6e1b8be384c9))
     (pin "2" (uuid 55ed3a1a-b56e-4964-b1e6-57200f669130))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "NT301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "NT301") (unit 1)
@@ -3288,6 +3398,11 @@
     (pin "1" (uuid 400d02e7-502b-408d-975b-32ce7ffc2b0d))
     (pin "2" (uuid d6034fbb-ce2c-4588-ac9d-e701779d9684))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C306") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C306") (unit 1)
@@ -3314,6 +3429,11 @@
     (pin "1" (uuid c685e155-ce62-4d3c-90f1-64ba59d9ed16))
     (pin "2" (uuid c5e00f80-30f5-4b62-a42a-25db5437995a))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R308") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "R308") (unit 1)
@@ -3342,6 +3462,11 @@
     )
     (pin "1" (uuid ba38607c-da62-4681-9686-aff3dad6152d))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0313") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0313") (unit 1)
@@ -3370,6 +3495,11 @@
     )
     (pin "1" (uuid 8e19ddca-a04f-43a0-a3b3-d620508f2aed))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0303") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0303") (unit 1)
@@ -3421,6 +3551,11 @@
     (pin "2" (uuid cf858329-d015-45a1-9ba9-691cc63a9ace))
     (pin "3" (uuid 37bf90a5-16e3-4f54-812f-346b0e7bbdb9))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "Q301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "Q301") (unit 1)
@@ -3477,6 +3612,11 @@
     (pin "2" (uuid 739b7497-f48f-4542-8e6d-13e9346d895d))
     (pin "1" (uuid 32a74a72-ad0f-43dd-8a56-986bc48db9c9))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R303") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "R303") (unit 1)
@@ -3509,6 +3649,11 @@
     (pin "1" (uuid d8afd465-1afe-44de-9a5e-5624f78d036f))
     (pin "2" (uuid 939ba94b-6e8e-4c97-887d-5f637326e621))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "D301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "D301") (unit 1)
@@ -3568,6 +3713,11 @@
     (pin "1" (uuid cd03b076-b7f5-4839-9b95-cd5c7a02a12c))
     (pin "2" (uuid 5d550c42-4a92-46b4-a19e-f4f00fe3441e))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C307") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C307") (unit 1)
@@ -3624,6 +3774,11 @@
     (pin "1" (uuid 5e038789-8e3a-497a-9992-b27599c26d32))
     (pin "2" (uuid 5ac9588b-2496-4b05-8828-85d46e5842ec))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "R304") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "R304") (unit 1)
@@ -3656,6 +3811,11 @@
     (pin "7" (uuid 5bdc1406-59d6-40e9-88f6-cfab22714a44))
     (pin "8" (uuid cd83ad58-c7a0-4f02-a399-2242162c0f35))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "RL1") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450"
           (reference "RL1") (unit 1)
@@ -3684,6 +3844,11 @@
     )
     (pin "1" (uuid d62e49b0-ae7e-428f-bdd8-81114ea4377a))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0309") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0309") (unit 1)
@@ -3711,6 +3876,11 @@
     (pin "2" (uuid 1abe2d22-88cd-4806-9189-59010d1abf25))
     (pin "3" (uuid be5ff8bd-c665-47a2-b8d7-ea9568cb809b))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "JP301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "JP301") (unit 1)
@@ -3736,6 +3906,11 @@
     )
     (pin "1" (uuid bf922805-e868-4005-b2ef-4e5d62c12412))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0301") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0301") (unit 1)
@@ -3761,6 +3936,11 @@
     )
     (pin "1" (uuid de3aca36-3765-4cf3-94f3-3f2badd61b8c))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0314") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0314") (unit 1)
@@ -3789,6 +3969,11 @@
     )
     (pin "1" (uuid 7c7849eb-711e-42c9-abe1-ec775bc3462c))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "#PWR0311") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "#PWR0311") (unit 1)
@@ -3848,11 +4033,20 @@
     (pin "1" (uuid 161db3bd-64e0-4102-b168-f67ff40f0d52))
     (pin "2" (uuid cb8102b4-940b-424a-87af-335725fd9b86))
     (instances
+      (project "ac_grid"
+        (path "/5d8ed3c7-be83-4bb7-9d80-cfe0dd1feab1"
+          (reference "C308") (unit 1)
+        )
+      )
       (project "PVBatteryInverter_Mainboard"
         (path "/ad76d7cc-a63c-4cf4-838d-c27316b74450/40bc38fd-52e1-4f4c-8a2a-271b3f25667e"
           (reference "C308") (unit 1)
         )
       )
     )
+  )
+
+  (sheet_instances
+    (path "/" (page "1"))
   )
 )
