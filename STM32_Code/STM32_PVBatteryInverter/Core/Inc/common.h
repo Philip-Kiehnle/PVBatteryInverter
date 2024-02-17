@@ -13,14 +13,20 @@
 //#define E_VDC_MAX_FB_GRID_100mV 4000  // 400/96 = 4.16Vcell
 #define E_VDC_MAX_FB_GRID_100mV 58*10  // todo
 
+//#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
+//#define E_IAC_MAX_10mA (10 * 100)  // 1625W÷230V×sqrt(2) amplitude
+#define E_IAC_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude
+
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
-#define P_AC_MAX 250  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
+#define P_AC_MAX 180  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
 
 #define DEF_MPPT_DUTY_ABSMAX 4250
 
 #define DC_CTRL_FREQ 20000
 #define DC_CTRL_FREQ_MPPT 50
 #define CYCLES_CNT_50HZ (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT)
+
+#define AC_CTRL_FREQ DC_CTRL_FREQ
 
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
@@ -46,43 +52,8 @@ typedef struct {
 	float p_ac_rms;
 } control_ref_t;
 
-typedef struct {
-	uint16_t id;  // sys variables
-	uint8_t sys_mode;
-	int8_t sys_errcode;
-	uint8_t stateDC;  // DC variables
-	uint8_t dcdc_mode;
-	uint16_t dutyDC_HS;
-	float p_dc_filt50Hz;
-	float v_dc_filt50Hz;
-	uint16_t stateAC;  // AC variables
-	int16_t f_ac_10mHz;
-	int16_t v_ac_rms_100mV;
-	int16_t i_ac_amp_10mA;
-	int16_t p_ac_filt50Hz;
-	int16_t p_ac_ref;  // for debugging
-	int16_t bat_p;
-	uint8_t bat_soc;
-	uint8_t bat_soc_kalman;
-	uint16_t v_dc_FBboost_sincfilt_100mV;
-	uint16_t v_dc_FBgrid_sincfilt_100mV;
-} __attribute__((__packed__)) monitor_vars_t;
-
-typedef struct {
-	uint32_t header;
-	uint32_t crc;
-	monitor_vars_t monitor_vars;
-} __attribute__((__packed__)) monitor_packet_t;
-
 extern volatile enum stateDC_t stateDC;
 extern volatile enum stateAC_t stateAC;
-
-extern volatile int16_t debug_f_ac_10mHz;
-extern volatile int16_t debug_v_ac_rms_100mV;
-extern volatile int16_t debug_v_amp_pred_100mV;
-extern volatile int16_t debug_i_ac_amp_10mA;
-
-void send_monitor_vars();
 
 
 enum _errorcode
@@ -95,7 +66,8 @@ enum _errorcode
 	EC_V_DC_SENSOR_FB_GRID = -5,
 	EC_I_DC_MAX = -6,
 	EC_I_AC_MAX = -7,
-	EC_GRID_SYNC_LOST = -8
+	EC_GRID_SYNC_LOST = -8,
+	EC_WATCHDOG_RESET = -9
 };
 
 typedef enum _errorcode errorPVBI_t;
@@ -105,6 +77,8 @@ extern volatile errorPVBI_t sys_errcode;
 
 void shutdown();
 void checkErrors();
+
+uint16_t lowpass4(uint16_t in, uint16_t* prev);
 
 #ifdef __cplusplus
 }

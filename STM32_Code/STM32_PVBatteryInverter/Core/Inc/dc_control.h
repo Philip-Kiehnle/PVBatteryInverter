@@ -27,6 +27,7 @@ extern volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 extern volatile bool sys_mode_needs_battery;
 
 uint16_t get_v_dc_FBboost_sincfilt_100mV();
+uint16_t get_v_dc_FBboost_filt50Hz_100mV();
 void shutdownDC();
 void calc_async_dc_control();
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars);

@@ -6,10 +6,11 @@
 #include <stdbool.h>
 #include <math.h>
 #include <algorithm>
+#include <climits>
 
-#include "common.h"
 #include "gpio.h"
-//#include "dc_control.h"
+#include "common.h"
+#include "monitoring.h"
 #include "ac_control.h"
 
 #include "controller.h"
@@ -18,8 +19,6 @@
 // single PWM step has 1/170MHz = 5.88ns
 // deadtime is configured to 64ns (10k resistor)
 //#define MIN_PULSE 18  // min pulse duration is 106ns - 64ns deadtime = 42ns
-
-#define AC_CTRL_FREQ 20000
 
 #define AC_DUTY_ABSMAX 8500
 #define AC_DUTY_HALF (AC_DUTY_ABSMAX/2)
@@ -35,8 +34,11 @@ volatile int16_t debug_i_ac_amp_10mA;
 
 
 volatile enum stateAC_t stateAC = INIT_AC;
+bool sampling_trig_en = false;
 
 static uint32_t cnt_rel = 0;
+
+static int cnt_intr = 0;  // for sigma_delta processing
 
 void fill_monitor_vars_ac(monitor_vars_t* mon_vars)
 {
@@ -48,6 +50,7 @@ void fill_monitor_vars_ac(monitor_vars_t* mon_vars)
 
 	mon_vars->v_dc_FBgrid_sincfilt_100mV = v_dc_FBgrid_sincfilt_100mV;
 }
+
 
 void shutdownAC()
 {
@@ -63,16 +66,13 @@ static inline void nextState(enum stateAC_t state)
 }
 
 
-int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
+int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
 {
 //GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	static int16_t duty = 0;
 	static uint32_t cnt_pll_locked = 0;
 
 	bool acGrid_valid = false;
-
-	// DC voltage
-	uint16_t v_dc_sinc_mix_100mV = (v_dc_FBboost_sincfilt_100mV + v_dc_FBgrid_sincfilt_100mV)/2;
 
 	// Grid current
 #define IAC_OFFSET_RAW 2629
@@ -99,9 +99,49 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 		v_ac_amp_sum = 0;
 	}
 
+	// DC voltage
+	uint16_t v_dc_sinc_mix_100mV = (v_dc_FBboost_sincfilt_100mV + v_dc_FBgrid_sincfilt_100mV)/2;
+
+	// no 100Hz ripple prediction + extra filter -> Pac ~100W: 45.6V to 47.0V instead of 44.9V to 47.8V FBgrid_sincfilt
+	//static uint16_t v_dc_prev[3] = {0};
+	//uint16_t v_dc_modulator_100mV = lowpass4(v_dc_sinc_mix_100mV, v_dc_prev);
+
+	// 100Hz ripple prediction because sinc filter is too slow to provide precise modulator voltage
+	// sinc filter adds average delay of 16/20kHz = 0.8ms. New sample 0.4ms up to 1.2ms
+	static uint16_t v_dc_modulator_100mV;
+	//static int16_t delta_v_prev8_10mV;
+	static int16_t delta_v_10mV;
+
+	int p_ac_mW = i_ac_10mA*v_ac_100mV;
+#define BATTERY_FACTOR_PERCENT 20  // define part of 100Hz ripple which is taken by battery
+
+//  fixed point capacitor ripple compensation
+//	disadvantage: battery part is hard to estimate
+//	              calculation time needed
+//	              external events are delayed
+//	=> todo: implement direct V_DC measurement without software sigma delta converter
+//	int32_t p_cap_10mW = ((100-BATTERY_FACTOR_PERCENT) * ( p_ac_filt50Hz - (p_ac_mW/1000)) );  // p_cap >0 (charging) if actual p_ac < pac_rms
+//	constexpr uint16_t COEF = AC_CTRL_FREQ*CAPACITANCE;  // 20000×4×390×10^−6 = 31.2
+//	delta_v_10mV += (p_cap_10mW*10)/(v_dc_modulator_100mV*COEF);
+//	if (cnt_intr == 0) {
+//		delta_v_10mV = (delta_v_10mV-delta_v_prev8_10mV);  // compensates measurement delay
+//	} else if (cnt_intr == 8) {
+//		delta_v_prev8_10mV = delta_v_10mV;
+//	}
+//
+//	v_dc_modulator_100mV = v_dc_sinc_mix_100mV + delta_v_10mV/10;
+
+	// for stability during test
+	//v_dc_modulator_100mV = 490;
+	//v_dc_modulator_100mV = v_dc_FBboost_filt50Hz_100mV;
+	v_dc_modulator_100mV = v_dc_sinc_mix_100mV;
+
+	// grid frequency
 	int32_t w = pll_get_w();
 	debug_f_ac_10mHz = (w*100)>>15; // todo: check if (2^15)-1
 
+#define DEBUG_OUTPUT_CURRENT 0  // for testing output current without grid
+#if DEBUG_OUTPUT_CURRENT == 0
 	if (vd > VD_MIN_RAW && vd < VD_MAX_RAW &&
 	   w > W_MIN_RAW && w < W_MAX_RAW) {
 	  if (cnt_pll_locked >= 0.2*AC_CTRL_FREQ) {  // 200ms
@@ -118,6 +158,12 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	  stateAC = INIT_AC;
 	  cnt_pll_locked = 0;
 	}
+	int16_t phase = pll_singlephase_step(v_ac_raw);
+#else
+	acGrid_valid = true;
+	static int16_t phase;
+	phase += SHRT_MAX/(50*8);
+#endif
 
 	if (sys_errcode != EC_NO_ERROR ) {
 		shutdownAC();
@@ -130,21 +176,16 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	cnt_rel++;
 
 	static int p_ac_sum_mW;  // max +-5.3kW
-	p_ac_sum_mW += i_ac_10mA*v_ac_100mV;
+	p_ac_sum_mW += p_ac_mW;
 
 	if (cnt50Hz == 0) {
 		p_ac_filt50Hz = p_ac_sum_mW/CYCLES_CNT_50HZ/1000;
 		p_ac_sum_mW = 0;
 	}
 
-	// GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 3us
-
-	int16_t phase = pll_singlephase_step(v_ac_raw);
-
-	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 20us; 14us with -O1
-
-	int16_t phase_shiftRL = 0;
-	int16_t duty_v_amp_pred = 0;
+	int16_t phaseshift_RL = 0;
+	int v_amp_pred_100mV = 0;
+	int v_prCtrl_10mV = 0;
 
 	switch (stateAC) {
 	  case INIT_AC:
@@ -162,8 +203,12 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 		    && v_dc_FBgrid_sincfilt_100mV > v_ac_amp_filt50Hz_100mV
 		    && cnt_rel >= 4*AC_CTRL_FREQ)  // wait at least 4 sec to avoid instabilities
 		 {
-			pll_set_phaseOffset((1<<15) * +10.0/20);  // zero crossing of grid and converter voltage matched: +-1us
-
+			// zero crossing of grid and converter voltage tuning:
+			//pll_set_phaseOffset((1<<15) * +10.05/20);  // i_rms 260-365mA
+			pll_set_phaseOffset((1<<15) * +10.0/20);  // i_rms 130-169mA; grid leading 5;10;13us lagging 6;13;18;28;47us
+			//pll_set_phaseOffset((1<<15) * +9.99/20);  // i_rms 121-147mA  sun/PV input has influence to grid: 260-320mA
+			//pll_set_phaseOffset((1<<15) * +9.98/20);  // i_rms 119-135mA; 209-213mA with sun; grid leading 0;18.1-18.7;41;47us
+			//pll_set_phaseOffset((1<<15) * +9.95/20);  // i_rms 120-138mA
 			nextState(WAIT_ZERO_CROSSING);
 		}
 		break;
@@ -205,6 +250,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 		// 2 winding systems in series and 5 windings in opposite direction has 44.7Vpeak at 227.0V grid and 1.6W loss
 		// 2 winding systems in series and 5 windings in same direction has 47.9Vpeak at 227,0V grid
 		// -> feedin down to 2.98Vcell
+		// -> added another 4 windings in opposite direction 45.8Vpeak when feedin 4A
 
 		// 0,5mm2 white wire inside inverter can carry max 12A : todo check
 
@@ -227,7 +273,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 
 		// grid current feedforward
 		//if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
-			int16_t i_ac_amp_10mA = 0;
+			static int16_t i_ac_amp_10mA = 0;
 			switch (ctrl_ref.mode) {
 			  case VDC_CONTROL:
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10 );
@@ -245,7 +291,17 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 			  {
 				// use power reference from power controller
 				int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;
-				i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
+
+				// V1: clamp
+				//i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
+
+				// V2: ramp: max decent per 50Hz period: 20kHz/50Hz * 10mA = 4A
+				if (i_ac_amp_10mA_unclamped > i_ac_amp_10mA  && i_ac_amp_10mA < IAC_AMP_MAX_10mA) {
+					i_ac_amp_10mA++;
+				} else if (i_ac_amp_10mA_unclamped < i_ac_amp_10mA  && i_ac_amp_10mA > -IAC_AMP_MAX_10mA) {
+					i_ac_amp_10mA--;
+				}
+
 				break;
 			  }
 			  case FFWD_ONLY:
@@ -254,14 +310,25 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 			}
 
 			debug_i_ac_amp_10mA = i_ac_amp_10mA;
+			int i_ref_10mA = (i_ac_amp_10mA * (int32_t)cos1(phase))>>15;
 
-			int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
-			duty_v_amp_pred = ( v_amp_pred_100mV * AC_DUTY_HALF ) / v_dc_sinc_mix_100mV;
+
+			// V1: linear inductor model
+			//int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
+
+			// V2: saturating inductor model; uses LUT with nonlinear inductance
+			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_10mA, i_ac_10mA/10)/10;  // i_meas -> audible noise 150Hz:-10dBV 250Hz:-23dBV
+			v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_10mA, i_ref_10mA/10)/10;  // i_ref -> audible noise 150Hz:-11dBV 250Hz:-26dBV
+
 		//}
-		phase_shiftRL = get_IacPhase();
+		phaseshift_RL = get_IacPhase();
 		//int16_t phase_shiftRL = get_IacPhase()+ (int16_t)(((1<<15)*1.08)/20);
 		//OLD: Strom(3,5Aamp) in Phase bei 40,5W/42,5VA (25,4Vdc bis 27,3Vdc)
 
+		// proportional resonant current controller
+		// 16.02.2024: does not compensate saturating inductor -> using 1D saturation LUT feedforward only
+//		v_prCtrl_10mV = pr_step(i_ref_10mA-i_ac_10mA);
+//		v_prCtrl_10mV = std::clamp(v_prCtrl_10mV, -3*100, 3*100);
 
 		break;
 	  }
@@ -270,9 +337,14 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
       }
 
 	// grid voltage feedforward
-	int16_t duty_pll = (((int32_t)v_ac_amp_filt50Hz_100mV) * AC_DUTY_HALF) / v_dc_sinc_mix_100mV;
+#if DEBUG_OUTPUT_CURRENT == 0
+	int v_amp_pll_100mV = v_ac_amp_filt50Hz_100mV;
+#else
+	int v_amp_pll_100mV = 0;
+#endif
 
-	duty = AC_DUTY_HALF + ( ( (duty_pll*(int32_t)cos1(phase) + duty_v_amp_pred*(int32_t)cos1(phase+phase_shiftRL)) ) >> 15 );
+	int32_t vout = (v_amp_pll_100mV*(int32_t)cos1(phase) + v_amp_pred_100mV*(int32_t)cos1(phase+phaseshift_RL) + (v_prCtrl_10mV<<15)/10 )/v_dc_modulator_100mV;
+	duty = AC_DUTY_HALF + ( (AC_DUTY_HALF*vout) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
 
 	//duty = 8500 - 2*3; // PWMA 35.6ns low  -> 6*2*2.94ns
@@ -288,24 +360,39 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 
 	// 100% duty: neg wave 571us high and not even small pulses. pos wave has 23.6ns low pulses
 	if (duty > (AC_DUTY_ABSMAX-MIN_PULSE_HRTIM/2)) {
-	  //duty = AC_DUTY_ABSMAX-MIN_PULSE_HRTIM;
 	  duty = AC_DUTY_ABSMAX-4;  // todo implement 100% duty: okay for now because gatedriver ignores small pulses
 	} else if (duty > (AC_DUTY_ABSMAX-MIN_PULSE_HRTIM)){
 	  duty = AC_DUTY_ABSMAX-MIN_PULSE_HRTIM;
-	} else if (duty < MIN_PULSE_HRTIM){
-	  //duty = MIN_PULSE_HRTIM;
-	  duty = 0;
+	} else if (duty < MIN_PULSE_HRTIM) {
+		if (duty > MIN_PULSE_HRTIM/2) {
+			duty = MIN_PULSE_HRTIM;
+		} else {
+			duty = 0;
+		}
 	}
 
-	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4   from function enter to here 23us -> too much
+	if (fast_mon_vars_trig) {
+		if (frame_nr < FAST_MON_FRAMES) {
+			//fast_monitor_vars[frame_nr].v_dc = v_dc_FBgrid_sincfilt_100mV;
+			//fast_monitor_vars[frame_nr].v_dc = delta_v_10mV;
+			fast_monitor_vars[frame_nr].v_dc = duty;
+			fast_monitor_vars[frame_nr].v_dc_modulator_100mV = v_dc_modulator_100mV;
+			frame_nr++;
+		}
+	}
+
+	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+	// from function enter to here
+	// with -O3 and delta_v float calculation 25.58us
+	// with -O3 and delta_v fixp calculation  19.08us  with -O2 19.14us
+	// with -O3 without delta_v               17.76us
 
 	return duty;
-
 }
 
 
 errorPVBI_t checkACLimits() {
-	if ( i_ac_10mA > E_IAC_MAX_10mA ) {
+	if ( i_ac_10mA > E_IAC_MAX_10mA || i_ac_10mA < -E_IAC_MAX_10mA) {
 		return EC_I_AC_MAX;
 	}
 	if ( v_dc_FBgrid_sincfilt_100mV > E_VDC_MAX_FB_GRID_100mV ) {
@@ -356,7 +443,7 @@ void measVdcFBgrid()
 	// -> 8 of 10 bits are ones
 	// => low probability of sequential zeros. Thus, edge counting should be sufficient!
 
-	static int cnt_intr = 0;
+	//static int cnt_intr = 0;
 	cnt_intr++;
 
 	// Lowpass filter for Vdc
