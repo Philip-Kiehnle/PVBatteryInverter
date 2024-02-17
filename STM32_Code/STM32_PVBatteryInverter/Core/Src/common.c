@@ -76,3 +76,12 @@ void checkErrors()
 		GPIOB->BRR = (1<<0);  // enable red LED
 	}
 }
+
+uint16_t lowpass4(uint16_t in, uint16_t* prev)
+{
+    uint16_t filt = ((uint32_t)in + prev[0] + prev[1] + prev[2]) >> 2;
+    prev[2] = prev[1];
+    prev[1] = prev[0];
+    prev[0] = in;
+    return filt;
+}

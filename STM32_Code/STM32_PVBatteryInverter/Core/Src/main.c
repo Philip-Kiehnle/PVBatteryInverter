@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "common.h"
+#include "monitoring.h"
 #include "gpio.h"
 #include "can_bus.h"
 #include "ac_control.h"
@@ -98,7 +99,6 @@ volatile bool print_request;
 
 volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 
-extern bool monitoring_binary_en;
 
 uint8_t ubKeyNumber = 0x0;
 //FDCAN_RxHeaderTypeDef RxHeader;
@@ -196,15 +196,6 @@ static void FDCAN_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-uint16_t lowpass4(uint16_t in, uint16_t* prev)
-{
-    uint16_t filt = ((uint32_t)in + prev[0] + prev[1] + prev[2]) >> 2;
-    prev[2] = prev[1];
-    prev[1] = prev[0];
-    prev[0] = in;
-    return filt;
-}
-
 
 void resetWatchdog()
 {
@@ -217,7 +208,7 @@ void resetWatchdog()
 }
 
 
-static void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
+void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
 {
 	mon_vars->id = id;
 	mon_vars->sys_mode = sys_mode;
@@ -252,26 +243,6 @@ static void send_inverterdata()
 //	}
 }
 #endif
-
-
-// sends monitor_vars via UART
-void send_monitor_vars()
-{
-	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
-
-	static monitor_packet_t mon_packet = {.header=0xDEADBEEF, 0};  // static for DMA
-	fill_monitor_vars_sys(&mon_packet.monitor_vars);
-
-	// V1 : FIFO 30bytes transmit best case: 2607us
-//	HAL_UART_Transmit(&huart3, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot), 10);
-
-	// V2 : FIFO+DMA 30bytes transmit best case: 1.65us  worst case : 17.9us
-	if (HAL_UART_Transmit_DMA(&huart3, (uint8_t *)&mon_packet, sizeof(mon_packet)) != HAL_OK)
-	{
-		Error_Handler();
-	}
-	//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
-}
 
 
 void reinitUART(UART_HandleTypeDef *huart, uint32_t BaudRate)
@@ -319,7 +290,8 @@ void calc_and_wait(uint32_t delay)
 	if (!monitoring_binary_en) {  // smart meter polling read takes too much time
 		reinitUART(huart_rs485, 9600);
 		resetWatchdog();
-		int el_meter_status = electricity_meter_read(huart_rs485);
+		//int el_meter_status = electricity_meter_read(huart_rs485);
+		int el_meter_status = EL_METER_OKAY;  // debug
 
 		//HAL_UART_Abort_IT(&huart1);
 		if ( el_meter_status == EL_METER_OKAY) {
@@ -342,6 +314,7 @@ void calc_and_wait(uint32_t delay)
 	}
 #endif
 	resetWatchdog();
+	async_monitor_check(&huart3);
 }
 
 
@@ -394,12 +367,17 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 			//debug_Ig_raw_filt = Ig_filt;
 
 			uint16_t v_dc_FBboost_sincfilt_100mV = get_v_dc_FBboost_sincfilt_100mV();
-			int16_t duty = acControlStep(cnt50Hz, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_ac_raw, i_ac_raw);
+			uint16_t v_dc_FBboost_filt50Hz_100mV = get_v_dc_FBboost_filt50Hz_100mV();
+			int16_t duty = acControlStep(cnt50Hz, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_dc_FBboost_filt50Hz_100mV, v_ac_raw, i_ac_raw);
+
+			// debug AC fullbridge
+//			int16_t duty = 4250;
+//			gatedriverAC(1);
 
 			// set the PWM duty cycle value (into a 'shadow register')
 			__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
 
-			// copy the PWM duty cycle value from the 'shadow register' to the 'active register' -> not necessary
+			// copy the PWM duty cycle value from the 'shadow register' to the 'active register' -> done by hardware
 			//HAL_HRTIM_SoftwareUpdate(&hhrtim1, HRTIM_TIMERUPDATE_A);
     	}
     }
@@ -415,7 +393,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	// fsample = 42.5MHz/15 = 2.833Msamples/s
 	// oversampling 128 -> 22.135kHz
 	// todo: 22kHz vs 20kHz : no exact average current, but robust for MPPT and much better in discontinuous mode than double sample
-		GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
+		//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
 		measVdcFBboost();
 
@@ -469,7 +447,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
 
-		GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+		//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
     }
 #endif
 }
@@ -637,12 +615,17 @@ int main(void)
   {
     uSend("Watchdog caused reset!");
     uSend("\n");
+    sys_errcode = EC_WATCHDOG_RESET;  // prevent ongoing inverter turnon in case of software bug
     HAL_Delay(300);  //ms
   }
   /* Clear reset flags anyway */
   __HAL_RCC_CLEAR_RESET_FLAGS();
 
   const batteryStatus_t* battery = get_batteryStatus();
+
+  bool uart_output_text = true;
+  bool uart_input_text = true;
+
 
   /* USER CODE END 2 */
 
@@ -716,7 +699,7 @@ int main(void)
 	}
 
 	// UART
-	if (!monitoring_binary_en) {
+	if (uart_output_text) {
 #if COMM_READ_ELECTRICITY_METER == 0
 		if (sys_errcode!=EC_NO_ERROR) {
 			uSend("Err ");
@@ -839,7 +822,7 @@ int main(void)
 	#endif
 #endif  // SYSTEM_HAS_BATTERY
 
-		if (print_request) {
+		if (print_request && uart_output_text) {
 			print_request = false;
 
 			uSend("Vbat ");
@@ -862,8 +845,16 @@ int main(void)
 			uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
 			uSend("\n");
 
-			uSend("p ");
+			uSend("Pm ");
 			uSendInt(electricity_meter_get_power());
+			uSend("\n");
+
+			uSend("Pb ");
+			uSendInt(battery->power_W);
+			uSend("\n");
+
+			uSend("SoC ");
+			uSendInt(battery->soc);
 			uSend("\n");
 		//
 		//	uSend("iac ");
@@ -904,10 +895,16 @@ int main(void)
 	uint8_t rx_buf = 0;
 	HAL_UART_Receive(&huart3, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
 
-	if (!monitoring_binary_en) {
+	if (uart_input_text) {
 		if (rx_buf == 'm') {
 			uSend("Monitoring ENABLE\n");
 			monitoring_binary_en = true;
+			uart_output_text = false;
+			uart_input_text = false;
+		} else if (rx_buf == 'f') {
+			uSend("Fast monitor TRIG\n");
+			fast_mon_vars_trig = true;
+			uart_output_text = false;
 		} else if (rx_buf == 'b') {
 			uSend("BALANCING ENABLE\n");
 
@@ -1240,7 +1237,7 @@ static void MX_HRTIM1_Init(void)
     Error_Handler();
   }
   pTimerCtl.UpDownMode = HRTIM_TIMERUPDOWNMODE_UPDOWN;
-  pTimerCtl.GreaterCMP1 = HRTIM_TIMERGTCMP1_GREATER;
+  pTimerCtl.GreaterCMP1 = HRTIM_TIMERGTCMP1_EQUAL;
   pTimerCtl.DualChannelDacEnable = HRTIM_TIMER_DCDE_DISABLED;
   if (HAL_HRTIM_WaveformTimerControl(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, &pTimerCtl) != HAL_OK)
   {
@@ -1262,10 +1259,10 @@ static void MX_HRTIM1_Init(void)
   pTimerCfg.StartOnSync = HRTIM_SYNCSTART_DISABLED;
   pTimerCfg.ResetOnSync = HRTIM_SYNCRESET_DISABLED;
   pTimerCfg.DACSynchro = HRTIM_DACSYNC_NONE;
-  pTimerCfg.PreloadEnable = HRTIM_PRELOAD_DISABLED;
+  pTimerCfg.PreloadEnable = HRTIM_PRELOAD_ENABLED;
   pTimerCfg.UpdateGating = HRTIM_UPDATEGATING_INDEPENDENT;
   pTimerCfg.BurstMode = HRTIM_TIMERBURSTMODE_MAINTAINCLOCK;
-  pTimerCfg.RepetitionUpdate = HRTIM_UPDATEONREPETITION_DISABLED;
+  pTimerCfg.RepetitionUpdate = HRTIM_UPDATEONREPETITION_ENABLED;
   pTimerCfg.PushPull = HRTIM_TIMPUSHPULLMODE_DISABLED;
   pTimerCfg.FaultEnable = HRTIM_TIMFAULTENABLE_NONE;
   pTimerCfg.FaultLock = HRTIM_TIMFAULTLOCK_READWRITE;
@@ -1274,7 +1271,7 @@ static void MX_HRTIM1_Init(void)
   pTimerCfg.UpdateTrigger = HRTIM_TIMUPDATETRIGGER_NONE;
   pTimerCfg.ResetTrigger = HRTIM_TIMRESETTRIGGER_NONE;
   pTimerCfg.ResetUpdate = HRTIM_TIMUPDATEONRESET_DISABLED;
-  pTimerCfg.ReSyncUpdate = HRTIM_TIMERESYNC_UPDATE_UNCONDITIONAL;
+  pTimerCfg.ReSyncUpdate = HRTIM_TIMERESYNC_UPDATE_CONDITIONAL;
   if (HAL_HRTIM_WaveformTimerConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, &pTimerCfg) != HAL_OK)
   {
     Error_Handler();

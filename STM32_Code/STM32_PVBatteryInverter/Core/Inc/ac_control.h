@@ -10,9 +10,6 @@ extern "C" {
 #include "common.h"
 #include "controller.h"
 
-
-#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
-
 //#define VGRID_AMP (325)
 //#define VGRID_AMP_MIN_100mV (VGRID_AMP_100mV*10*0.9)
 //#define VGRID_AMP_MAX_100mV (VGRID_AMP_100mV*10*1.1)
@@ -27,7 +24,7 @@ extern "C" {
 
 void measVdcFBgrid();
 errorPVBI_t checkACLimits();
-int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, int16_t v_ac_raw, uint16_t i_ac_raw);
+int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw);
 void fill_monitor_vars_ac(monitor_vars_t* mon_vars);
 
 inline int acControl_RAW_to_100mV(int v_ac_raw)

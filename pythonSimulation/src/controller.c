@@ -3,7 +3,7 @@
 #include "controller.h"
 
 #define FGRID 50
-#define L (6.166e-3)  // see calc sheet
+#define L (10.2e-3)  // see calc sheet
 #define ZL (2*M_PI*FGRID*L)
 #define T (1/20e3)
 
@@ -69,7 +69,7 @@ void pi_step(int32_t x, piController *ctrl)
 // Go(s) = 1/C * 1/s * (Kp+Ki/s) * 1/(1+Tsigma*s)
 // symmetric optimum:
 #define a 2.0  // a>1; typical value is 2;
-//#define a 3.0  // a>1; typical value is 2; choosing 3 for LCL filter: todo check
+//#define a 3.0  // a>1; typical value is 2;
 #define VR (CAPACITANCE / (Tsigma*a))
 const int Kp_Vdc = 1.0*VR * (1<<EXTEND_PI_VDC);
 #define Tn (a*a * Tsigma)
@@ -77,10 +77,110 @@ const int Ki_Vdc = 1.0*VR/Tn * (1<<EXTEND_PI_VDC);
 
 volatile int32_t debug_vdc_comp = 0;
 
+
+// damped PR controller for grid current
+
+// from flexQgrid-Hybrid-MMC/Matlab-Simulink/DQ-_vs_PR-controller/controller_design.m
+// CAUTION: Matlab array indexing starts at 1!
+// y[k] = cx(1)*x[k] + cx(2)*x[k-1] + cx(3)*x[k-2] + cy(1)*y[k-1] + cy(2)*y[k-2]
+
+#define TA T
+#define w0 2*M_PI*50
+#define wc 2*M_PI*1.0
+#define T_sigma ( 1.6e-06 + 2.0*TA )  //Tmeas_Iarm + ctrl.i.ac.TA
+#define L_pr (0.1*L)  // inductor saturation
+#define Kp (L_pr/(2*T_sigma))
+#define Ki (R/(2*T_sigma))
+
+#define EXTEND_BITS 12
+
+// V1:
+int cx[3] = { 	(1<<EXTEND_BITS)*	(Kp + (4*Ki*TA*wc)/(pow(TA*w0,2) + 4*wc*TA + 4)),
+				(1<<EXTEND_BITS)*	(2*Kp - (16*Kp + 8*Kp*TA*wc)/(pow(TA*w0,2) + 4*wc*TA + 4)),
+				(1<<EXTEND_BITS)*	(Kp - (4*Ki*TA*wc + 8*Kp*TA*wc)/(pow(TA*w0,2) + 4*wc*TA + 4))
+};
+
+int cy[2] = {	(1<<EXTEND_BITS)*  (-(2*pow(TA*w0,2) - 8)/(pow(TA*w0,2) + 4*wc*TA + 4)),
+				(1<<EXTEND_BITS)*	(1 - (2*pow(TA*w0,2) + 8)/(pow(TA*w0,2) + 4*wc*TA + 4))
+};
+
+// V2: https://imperix.com/doc/implementation/proportional-resonant-controller
+int a1 = (1<<EXTEND_BITS)* (4*Ki*TA*wc);
+int b0 = (1<<EXTEND_BITS)* (pow(TA*w0,2) + (4*TA*wc) + 4);
+int b1 = (1<<EXTEND_BITS)* (2*pow(TA*w0,2) - 8);
+int b2 = (1<<EXTEND_BITS)* (pow(TA*w0,2) - (4*TA*wc) + 4);
+
+int pr_step(int x)
+{
+	static int x_prev[2];
+	static int y_prev[2];
+
+	// V1:
+	int y = (cx[0]*x + cx[1]*x_prev[0] + cx[2]*x_prev[1] + cy[0]*y_prev[0] + cy[1]*y_prev[1])>>EXTEND_BITS;
+
+	// offset compensation
+	static int16_t v_offset_comp = 0;
+	static uint32_t cnt=0;
+	static int32_t i_sum = 0;
+	cnt++;
+	i_sum += x;
+#define CNT_MAX (20000/50)
+	if (cnt == CNT_MAX) {
+		int i_avg_offset = i_sum/CNT_MAX;
+		v_offset_comp += i_avg_offset;
+		i_sum = 0;
+		cnt = 0;
+	}
+
+
+	// V2: https://imperix.com/doc/implementation/proportional-resonant-controller
+	//int y = (a1*x - a1*x_prev[1] - b1*y_prev[0] - b2*y_prev[1])/b0;
+
+	y_prev[1] = y_prev[0];
+	x_prev[1] = x_prev[0];
+
+	y_prev[0] = y;
+	x_prev[0] = x;
+
+	return y+v_offset_comp;
+}
+
+
+static uint16_t lut_pos_i = 0;
+
+uint16_t Ztot_LUT[105] = {
+54286,54286,54286,54286,54286,54286,53867,53447,53028,52609,  // 0.0A, 0.1A, ...
+52191,51772,51354,50936,50518,50101,49684,49267,48851,48435,
+48019,47603,47188,46773,46359,45945,45531,45118,44705,44292,
+43880,43468,43057,42646,42235,41826,41416,41007,40599,40191,
+39784,39377,38971,38565,38160,37756,37352,36949,36547,36146,
+35745,35345,34946,34548,34150,33754,33358,32964,32570,32178,
+31786,31396,31007,30619,30232,29846,29462,29080,28698,28319,
+27941,27564,27189,26816,26445,26076,25709,25344,24981,24621,
+24263,24198,24133,24069,24004,23940,23876,23811,23747,23683,
+23619,23555,23492,23428,23364,23301,23238,23174,23111,23048,
+22985,22985,22985,22985,22985  // ... 10.4A
+};
+int16_t ZLphase_LUT[105] = {
+6850,6850,6850,6850,6850,6850,6840,6829,6818,6806,  // 0.0A, 0.1A, ...
+6795,6783,6772,6760,6748,6735,6723,6710,6697,6684,
+6670,6657,6643,6629,6614,6600,6585,6569,6554,6538,
+6522,6506,6489,6472,6455,6437,6419,6400,6382,6362,
+6343,6323,6303,6282,6261,6239,6217,6194,6171,6147,
+6123,6098,6073,6047,6021,5994,5966,5937,5908,5878,
+5848,5817,5784,5752,5718,5683,5648,5611,5574,5535,
+5496,5455,5413,5371,5326,5281,5235,5187,5137,5086,
+5034,5024,5015,5005,4995,4985,4975,4965,4955,4945,
+4935,4925,4915,4904,4894,4884,4873,4863,4852,4841,
+4831,4831,4831,4831,4831  // ... 10.4A
+};
+
 int16_t get_IacPhase()
 {
-	return (int16_t)( (1<<15) * atan(ZL/R) / (2*M_PI));  // calculated at compile time
+	return ZLphase_LUT[lut_pos_i];
+	//return (int16_t)( (1<<15) * atan(ZL/R) / (2*M_PI));  // calculated at compile time
 }
+
 
 int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp)  // returns amplitude at secondary side
 {
@@ -89,6 +189,24 @@ int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp)  // returns amplitude at sec
 	int32_t v_amp = (coeff*i_amp)>>14;
 	return v_amp;
 }
+
+
+uint16_t calc_v_amp_pred(uint32_t i_amp, int32_t i_ac_100mA)
+{
+	if (i_ac_100mA < 0)
+		i_ac_100mA *= -1;
+
+	// 6A max -> 6×sin(2×π×50×1÷20000) = 94mA
+	if (i_ac_100mA > lut_pos_i && lut_pos_i < sizeof(Ztot_LUT)/sizeof(Ztot_LUT[0])-2 ) {  // -2 for possible alignment issues
+		lut_pos_i++;
+	} else if (lut_pos_i>0) {
+		lut_pos_i--;
+	}
+
+	int32_t v_amp = (Ztot_LUT[lut_pos_i]*i_amp)>>14;
+	return v_amp;
+}
+
 
 // scale i_dc to i_ac_rms to i_ac_amp
 //piController piCtrl = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_RAW*(1<<EXTEND_PI_VDC), .x_prev=0,  // PV to grid

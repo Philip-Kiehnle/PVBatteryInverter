@@ -15,7 +15,10 @@
 #include <stdint.h>
 
 #define CAPACITANCE (4*390e-6)
-#define R (0.7005)   // see calc sheet
+//#define R (0.7074)   // see calc sheet; current is leading but should be lagging to compensate trafo
+// -> using phase LUT
+#define R (0.8428)  // current leading 4A(3.5A) 310us 6A(4.9A): 360us todo improve inductor LUT, include remanence
+ //old: #define R (0.882)   // phase matched
 
 //#define ADC_BITS 12
 //int32_t get_ADC_BITS();
@@ -74,7 +77,17 @@ int32_t get_VGRID_ADCR();
 int32_t get_IGRID_ADCR();
 #define ADC_BITS_IGRID 12
 //#define IAC_AMP_MAX 7  //(5 * sqrt(2))
-#define IAC_AMP_MAX_10mA 6.0*100  // 6Aamp*45V/2=135W
+//#define IAC_AMP_MAX_10mA 2.0*100  // -1.90A to 1.88A 50Hz  95%
+//#define IAC_AMP_MAX_10mA 4.0*100  // 4Aamp*45V/2=90W    -4.33A to 4.30A 50Hz  107%  -> 3.6A with inductorLUT, heat-up 4.0A 30samples clipping Vbat=48.0 Vgrid_peak=45.8V
+//#define IAC_AMP_MAX_10mA 5.0*100  // -6.00A to 6.00A 50Hz -> 6Aamp*45V/2=135W   120% inductor saturation
+//#define IAC_AMP_MAX_10mA 5.2*100   // -6.43A to 6.48A   6.46/5.2 = 124%
+#define IAC_AMP_MAX_10mA 6.0*100   // -8.14A to 8.20A    8.17/6= 136%   -> 4.9A with inductorLUT Pbat 125W
+//#define IAC_AMP_MAX_10mA 8.0*100  // -8.16 to 8.2A with inductor LUT; noise from inductors
+
+
+// old:
+//#define IAC_AMP_MAX_10mA 6.0*100  // 6Aamp*45V/2=135W -> 3.3Aamp  -> 3.66A Vdc 47.0-49.0V
+//#define IAC_AMP_MAX_10mA 8.0*100  // 8Aamp*45V/2=180W -> 5.2Aamp Vdc limited  4.59A
 //#define IAC_AMP_MAX_RAW ((1<<ADC_BITS_IGRID) * IAC_AMP_MAX/IGRID_ADCR)
 //#define I_REF_AMP_MIN 0.4
 //#define I_REF_AMP_MIN_RAW ((1<<ADC_BITS_IGRID) * I_REF_AMP_MIN/IGRID_ADCR)
@@ -92,8 +105,10 @@ typedef struct {
 
 extern piController piCtrl;
 void pi_step(int32_t x, piController *ctrl);
+int pr_step(int x);
 
 int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp);
+uint16_t calc_v_amp_pred(uint32_t i_amp, int32_t i_ac_100mA);
 int16_t get_IacPhase();
 int32_t step_predict_i(int32_t i_ref, int32_t i);
 int16_t step_pi_Vdc2IacAmp(int32_t vdc_ref, int32_t vdc);

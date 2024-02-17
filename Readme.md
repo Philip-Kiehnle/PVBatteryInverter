@@ -100,7 +100,41 @@ CIC intergrartor:
 each stage is implemented with two’s complement (non-saturating) arithmetic
 the range of a stage's number system is greater than or equal to the maximum value expected at the stage's output.
 
+# Fails
+## 17.2.2024
+4A in Trafo 45V eingespeist
+ST link in USB Buchse eingesteckt.
+Hat wohl den Controller angehalten und die PWM laufen lassen.
+Folge: Trafo brummt, Rauch steigt auf bei GaN Highside von Mid1
+1. Notaus -> bringt nichts da am Controller
+2. PV Emulation ausgesteckt -> bringt nichts, war schon aus
+3. Batterie ausgesteckt
+4. Trafo ausgesteckt
+In Netz-FB
+Mid-1 : LS = 1,18V HS = 1,32  -> Vlt kam Rauch auch von LS. Highside sieht nicht so sauber verlötet aus wie die anderen in der Grid-FB. Sieht aus, als sei Lötzinn zwischen Drain und Source.
+Beide GaN haben leichte Unebenheit auf der Oberfläche beim S von GS66508B.
+Mid-2 : LS = 1,34V HS = 1,35
+Overshoot bei Mid-1 79V und Mid-2 65V bei Vdc~54V -> bei neuen GaNs überprüfen
 
+In Boost-FB (Mids und DC+ noch angeschlossen)
+Mid-1 : LS = 1,44V HS = 1,40
+Mid-2 : LS = 1,42V HS = 1,36
+Overshoot bei Mid-1 58V
+
+Abschätzung Verlustleistung
+R_Gan = 200mOhm
+R_resistive = 0.6Ohm + 2*R_GaN = 1.0 Ohm
+Z_inductive = 2*pi*50 * 3mH = 0.94 Ohm 
+Z = 1.37 Ohm
+Ipeak = 45V/1.37Ohm = 32.8A
+GaN datasheet
+Pulse Drain Current GaN 72A
+Continuous 25°C 30A 100°C 25A
+
+Ptrafo=200W Annahme, da Ptrafo max Fuse 460W primär
+P_gan = 0.2/1.37*200W = 29.2W
+
+-> Flussmittel verdampft und leichte Erhebung bei zwei Mid-1 GaNs entstanden. GaN funktionieren noch.
 
 
 

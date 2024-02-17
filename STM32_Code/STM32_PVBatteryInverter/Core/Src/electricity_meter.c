@@ -14,7 +14,7 @@
 #define BYTES_PER_READ 16
 
 static char rx_buf[EL_METER_RX_BUF_TYP_SIZE+2*BYTES_PER_READ];
-static int pcc_power;
+static int pcc_power = 999;
 
 
 #if METER_READ_DMA == 1

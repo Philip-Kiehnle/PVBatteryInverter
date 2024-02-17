@@ -8,6 +8,7 @@
 
 
 #include "common.h"
+#include "monitoring.h"
 #include "gpio.h"
 #include "dc_control.h"
 #include "battery.h"
@@ -17,7 +18,6 @@
 // deadtime is configured to 64ns (10k resistor)
 #define MIN_PULSE 9  // min pulse duration is 106ns - 64ns deadtime = 42ns
 
-bool monitoring_binary_en = false;
 volatile bool sys_mode_needs_battery = false;
 extern volatile uint16_t v_dc_ref_100mV;
 
@@ -88,14 +88,20 @@ MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
 
 volatile enum stateDC_t stateDC = INIT_DC;
 volatile enum dcdc_mode_t dcdc_mode;
-volatile bool monitoring_request;
 
 static uint32_t cnt_rel = 0;
 
 uint16_t get_v_dc_FBboost_sincfilt_100mV()
 {
+	return v_dc_FBboost_sincfilt_100mV;
+}
+
+
+uint16_t get_v_dc_FBboost_filt50Hz_100mV()
+{
 	return v_dc_FBboost_filt50Hz_100mV;
 }
+
 
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 {
@@ -110,11 +116,6 @@ void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 
 void calc_async_dc_control()
 {
-	if (monitoring_binary_en && monitoring_request) {
-		monitoring_request = false;
-		send_monitor_vars();
-	}
-
 	if (mppt_calc_request) {
 		mppTracker.step(p_dc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
 		mppt_calc_request = false;
@@ -333,6 +334,8 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 
 
 	  //GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+	// from function enter to here
+	// with -O3 12.02us
 
 	  return dutyB1;
 }
