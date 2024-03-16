@@ -15,48 +15,53 @@
 
 //#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
 //#define E_IAC_MAX_10mA (10 * 100)  // 1625W÷230V×sqrt(2) amplitude
-#define E_IAC_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude
+#define E_I_AC_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude
+#define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
+#define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
-#define P_AC_MAX 180  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
+#define P_AC_MAX 210  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
+ // todo 200 for energy packet controller
 
 #define DEF_MPPT_DUTY_ABSMAX 4250
 
 #define DC_CTRL_FREQ 20000
 #define DC_CTRL_FREQ_MPPT 50
-#define CYCLES_CNT_50HZ (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT)
+#define CYCLES_cnt20kHz_20ms (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT)
 
 #define AC_CTRL_FREQ DC_CTRL_FREQ
 
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
 
-enum mode_t {OFF, PV2AC, PV2BAT, HYBRID_OFFLINE, HYBRID_ONLINE};
-extern volatile enum mode_t sys_mode;
+#define V_TO_100mV(x)  (10*x)
+
+
+enum mode_t {OFF, PV2AC, PV2BAT, HYBRID_PCC_SENSOR, HYBRID_REMOTE_CONTROLLED};
 
 enum stateDC_t {INIT_DC, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR_DC, MPPT};
 enum stateAC_t {INIT_AC, WAIT_AC_DC_VOLTAGE, WAIT_ZERO_CROSSING, CLOSE_CONTACTOR_AC, WAIT_CONTACTOR_AC, GRID_CONNECTING, GRID_SYNC};
 
 typedef enum
 {
-	AC_OFF = 0,
-	FFWD_ONLY = 1,
-	VDC_CONTROL = 2,
-	VDC_VARIABLE_CONTROL = 3,  // keeps DC voltage just above AC amplitude
-	PAC_CONTROL = 4
+	AC_OFF,
+	AC_PASSIVE,
+	FFWD_ONLY,
+	VDC_CONTROL,
+	VDC_VARIABLE_CONTROL,  // keeps DC voltage just above AC amplitude
+	PAC_CONTROL_PCC,  // control point of common coupling to zero
+	PAC_CONTROL_V_BAT_CONST  // keeps max battery cell below protect limit
 } ac_ctrl_mode_t;
 
 typedef struct {
 	ac_ctrl_mode_t mode;
 	uint16_t v_dc_100mV;
-	float p_ac_rms;
+	int16_t p_pcc;  // power at point of common coupling (electricity meter)
+	int16_t p_ac_rms_pccCtrl;  // power from PCC controller
+	int16_t p_ac_rms;  // power for AC control
 } control_ref_t;
 
-extern volatile enum stateDC_t stateDC;
-extern volatile enum stateAC_t stateAC;
-
-
-enum _errorcode
+typedef enum
 {
 	EC_NO_ERROR = 0,
 	EC_EMERGENCY_STOP = -1,
@@ -66,16 +71,23 @@ enum _errorcode
 	EC_V_DC_SENSOR_FB_GRID = -5,
 	EC_I_DC_MAX = -6,
 	EC_I_AC_MAX = -7,
-	EC_GRID_SYNC_LOST = -8,
-	EC_WATCHDOG_RESET = -9
-};
+	EC_I_AC_DC_OFFSET = -8,
+	EC_GRID_SYNC_LOST = -9,
+	EC_WATCHDOG_RESET = -10,
+	EC_BATTERY_COMM_FAIL = -11
+} errorPVBI_t;
 
-typedef enum _errorcode errorPVBI_t;
+
+extern volatile enum stateDC_t stateDC;
+extern volatile enum stateAC_t stateAC;
+
+extern void shutdownAll();
+extern void Error_Handler();
+
 char *strerror(int errcode);
+void set_sys_errorcode(errorPVBI_t err);
+errorPVBI_t get_sys_errorcode();
 
-extern volatile errorPVBI_t sys_errcode;
-
-void shutdown();
 void checkErrors();
 
 uint16_t lowpass4(uint16_t in, uint16_t* prev);

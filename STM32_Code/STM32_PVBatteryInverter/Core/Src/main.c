@@ -33,6 +33,7 @@
 #include "can_bus.h"
 #include "ac_control.h"
 #include "dc_control.h"
+#include "sys_mode_controller.h"
 #include "battery/bms_types.h"
 #include "electricity_meter.h"
 #include "power_controller.h"
@@ -77,6 +78,8 @@ HRTIM_HandleTypeDef hhrtim1;
 
 IWDG_HandleTypeDef hiwdg;
 
+LPTIM_HandleTypeDef hlptim1;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
@@ -94,10 +97,14 @@ uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
 
 volatile uint16_t id;
-volatile control_ref_t ctrl_ref;
+control_ref_t ctrl_ref;
 volatile bool print_request;
 
+volatile uint32_t cnt_1Hz;
+
 volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
+
+extern volatile int16_t debug_i_ac_amp_10mA;
 
 
 uint8_t ubKeyNumber = 0x0;
@@ -188,6 +195,7 @@ static void MX_TIM4_Init(void);
 static void MX_UART5_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_IWDG_Init(void);
+static void MX_LPTIM1_Init(void);
 /* USER CODE BEGIN PFP */
 static void FDCAN_Config(void);
 
@@ -208,11 +216,17 @@ void resetWatchdog()
 }
 
 
+void HAL_LPTIM_AutoReloadMatchCallback(LPTIM_HandleTypeDef *hlptim)
+{
+	cnt_1Hz++;
+}
+
+
 void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
 {
 	mon_vars->id = id;
-	mon_vars->sys_mode = sys_mode;
-	mon_vars->sys_errcode = sys_errcode;
+	mon_vars->sys_mode = get_sys_mode();
+	mon_vars->sys_errcode = get_sys_errorcode();
 
 	fill_monitor_vars_dc(mon_vars);
 	fill_monitor_vars_ac(mon_vars);
@@ -262,14 +276,13 @@ void reinitUART(UART_HandleTypeDef *huart, uint32_t BaudRate)
 }
 
 
-void shutdownALL()
+void shutdownAll()
 {
 	gatedriverAC(0);
 	gatedriverDC(0);
 	contactorAC(0);
 	contactorBattery(0);
-	shutdownDC();
-	shutdownBattery();
+	battery_state_request(BMS_OFF__BAT_OFF);
 }
 
 
@@ -290,21 +303,34 @@ void calc_and_wait(uint32_t delay)
 	if (!monitoring_binary_en) {  // smart meter polling read takes too much time
 		reinitUART(huart_rs485, 9600);
 		resetWatchdog();
-		//int el_meter_status = electricity_meter_read(huart_rs485);
-		int el_meter_status = EL_METER_OKAY;  // debug
-
+#define DUMMY_METER 0
+#if DUMMY_METER == 1
+		int el_meter_status = EL_METER_OKAY;
+#else
+		int el_meter_status = electricity_meter_read(huart_rs485);
+#endif //DUMMY_METER
 		//HAL_UART_Abort_IT(&huart1);
 		if ( el_meter_status == EL_METER_OKAY) {
-			ctrl_ref.p_ac_rms = power_controller_step(electricity_meter_get_power());
+#if DUMMY_METER == 1
+			const batteryStatus_t* battery = get_batteryStatus();
+			//ctrl_ref.p_pcc = 50+battery->power_W;  // p_bat negative is discharging AC 4sec on 4sec off
+			//ctrl_ref.p_pcc = 500;  // simulate load
+			ctrl_ref.p_pcc = -100;  // simulate PV feedin
+#else
+			ctrl_ref.p_pcc = electricity_meter_get_power();
+#endif //DUMMY_METER
+			ctrl_ref.p_ac_rms_pccCtrl = power_controller_step(ctrl_ref.p_pcc);
 		} else if (el_meter_status == EL_METER_CONN_ERR ) {
-			ctrl_ref.p_ac_rms = 0;
+			ctrl_ref.p_ac_rms_pccCtrl = 0;
 		}
 
 		if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
 			reinitUART(huart_rs485, 115200);
 			calc_async_dc_control();
-			async_battery_communication();
-			send_inverterdata();
+			if (async_battery_communication()) {
+				HAL_Delay(2);  //ms  // todo check if necessary
+				send_inverterdata();
+			}
 		}
 	} else {
 		reinitUART(huart_rs485, 115200);
@@ -312,7 +338,7 @@ void calc_and_wait(uint32_t delay)
 		calc_async_dc_control();
 		async_battery_communication();
 	}
-#endif
+#endif //COMM_READ_ELECTRICITY_METER
 	resetWatchdog();
 	async_monitor_check(&huart3);
 }
@@ -327,20 +353,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	if (blankingCnt > 240) {  // dont check sigmadelta data during startup for 240/20kHz/3ADCs = 4ms
 		errorPVBI_t limitErr = checkDCLimits();
 		if (limitErr != EC_NO_ERROR) {
-			shutdownALL();
-			sys_errcode = limitErr;
+			shutdownAll();
+			set_sys_errorcode(limitErr);
 		}
 		limitErr = checkACLimits();
 		if (limitErr != EC_NO_ERROR) {
-			shutdownALL();  // todo shutdown AC only
-			sys_errcode = limitErr;
+			shutdownAll();  // todo shutdown AC only
+			set_sys_errorcode(limitErr);
 		}
 	} else {
 		blankingCnt++;
 	}
 
 	//static volatile uint16_t vdc_sinc_mix_100mV;
-	static volatile uint16_t cnt50Hz = 0;
+	static volatile uint16_t cnt20kHz_20ms = 0;
 
 	// two channels -> called twice
     if (hadc == &hadc1) {
@@ -368,7 +394,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 			uint16_t v_dc_FBboost_sincfilt_100mV = get_v_dc_FBboost_sincfilt_100mV();
 			uint16_t v_dc_FBboost_filt50Hz_100mV = get_v_dc_FBboost_filt50Hz_100mV();
-			int16_t duty = acControlStep(cnt50Hz, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_dc_FBboost_filt50Hz_100mV, v_ac_raw, i_ac_raw);
+			int16_t duty = acControlStep(cnt20kHz_20ms, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_dc_FBboost_filt50Hz_100mV, v_ac_raw, i_ac_raw);
 
 			// debug AC fullbridge
 //			int16_t duty = 4250;
@@ -405,22 +431,22 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 #define CNT_I_DC_AVG 16  // +3bit in hardware
 		int16_t i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
 
-		cnt50Hz++;
+		cnt20kHz_20ms++;
 
-		if (cnt50Hz >= CYCLES_CNT_50HZ ) {
+		if (cnt20kHz_20ms >= CYCLES_cnt20kHz_20ms ) {
 			id++;
-			cnt50Hz = 0;
+			cnt20kHz_20ms = 0;
 
-			static uint16_t cnt_1Hz_from_50Hz = 0;
-			cnt_1Hz_from_50Hz++;
-			if (cnt_1Hz_from_50Hz >= DC_CTRL_FREQ_MPPT ) {
-				cnt_1Hz_from_50Hz = 0;
+			static uint16_t cnt50Hz_1s = 0;
+			cnt50Hz_1s++;
+			if (cnt50Hz_1s >= 50 ) {
+				cnt50Hz_1s = 0;
 				battery_update_request();
 				print_request = true;
 			}
 		}
 
-		int16_t dutyHS = dcControlStep(cnt50Hz, ctrl_ref.v_dc_100mV, i_dc_filt_10mA);
+		int16_t dutyHS = dcControlStep(cnt20kHz_20ms, ctrl_ref.v_dc_100mV, i_dc_filt_10mA);
 
 		int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
 		int16_t dutyB2 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
@@ -541,6 +567,7 @@ int main(void)
   MX_UART5_Init();
   MX_USART3_UART_Init();
   MX_IWDG_Init();
+  MX_LPTIM1_Init();
   /* USER CODE BEGIN 2 */
 
   /* Configure the FDCAN peripheral */
@@ -567,6 +594,12 @@ int main(void)
   // start PWM timer for PV boost Full-bridge
   if (  HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
   {
+    Error_Handler();
+  }
+
+  // start timer for 1Hz system timebase
+  #define LPTIM_TICKS_PER_SEC (32000/128)  // timer has 32kHz oscillator and DIV128 -> 250Hz
+  if (HAL_LPTIM_Counter_Start_IT(&hlptim1, LPTIM_TICKS_PER_SEC) != HAL_OK) {
     Error_Handler();
   }
 
@@ -615,13 +648,11 @@ int main(void)
   {
     uSend("Watchdog caused reset!");
     uSend("\n");
-    sys_errcode = EC_WATCHDOG_RESET;  // prevent ongoing inverter turnon in case of software bug
+    set_sys_errorcode(EC_WATCHDOG_RESET);  // prevent ongoing inverter turnon in case of software bug
     HAL_Delay(300);  //ms
   }
   /* Clear reset flags anyway */
   __HAL_RCC_CLEAR_RESET_FLAGS();
-
-  const batteryStatus_t* battery = get_batteryStatus();
 
   bool uart_output_text = true;
   bool uart_input_text = true;
@@ -638,92 +669,17 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	checkErrors();
-	GPIOB->BRR = (1<<1);  // enable green LED
+	if (get_sys_mode() != OFF) GPIOB->BRR = (1<<1);  // enable green LED
 	calc_and_wait(250);  //ms
 	calc_and_wait(250);  //ms
 	GPIOB->BSRR = (1<<1);  // disable green LED
 	calc_and_wait(250);  //ms
 
-	sys_mode = HYBRID_OFFLINE;
+	sys_mode_ctrl_step(&ctrl_ref);
 
-	switch (sys_mode) {
-	   case OFF:
-		ctrl_ref.mode = AC_OFF;
-		ctrl_ref.v_dc_100mV = 0;
-		sys_mode_needs_battery = false;
-		break;
-
-	  case PV2AC:
-		ctrl_ref.v_dc_100mV = VGRID_AMP*10; //48*10;
-		if (stateDC >= VOLTAGE_CONTROL) {
-		    ctrl_ref.mode = VDC_VARIABLE_CONTROL;
-		} else {
-			ctrl_ref.mode = AC_OFF;
-		    ctrl_ref.mode = VDC_CONTROL;
-		}
-		sys_mode_needs_battery = false;
-		// todo: implement switchoff if pdc_filt50Hz < 10Watt for 10sec
-		break;
-
-	  case PV2BAT:
-		ctrl_ref.v_dc_100mV = battery->voltage_100mV;
-		ctrl_ref.mode = AC_OFF;
-		if (ctrl_ref.v_dc_100mV > (15*2.8) && ctrl_ref.v_dc_100mV > (15*3.65)) {
-			sys_mode_needs_battery = true;
-		} else {
-			sys_mode_needs_battery = false;
-		}
-		break;
-
-	  case HYBRID_OFFLINE:
-		ctrl_ref.v_dc_100mV = battery->voltage_100mV;
-		if (ctrl_ref.v_dc_100mV > (15*2.8) && ctrl_ref.v_dc_100mV > (15*3.65)) {
-			sys_mode_needs_battery = true;
-			if (ctrl_ref.p_ac_rms > 50 && battery->power_W > 10) {  // todo find battery connected criterion
-				ctrl_ref.mode = PAC_CONTROL;
-			}
-		} else {
-			sys_mode_needs_battery = false;
-			ctrl_ref.mode = AC_OFF;
-		}
-		break;
-
-	  case HYBRID_ONLINE:
-		ctrl_ref.mode = PAC_CONTROL;
-		ctrl_ref.v_dc_100mV = battery->voltage_100mV;
-		sys_mode_needs_battery = true;
-		break;
-
-	  default:
-		break;
-	}
 
 	// UART
 	if (uart_output_text) {
-#if COMM_READ_ELECTRICITY_METER == 0
-		if (sys_errcode!=EC_NO_ERROR) {
-			uSend("Err ");
-			itoa(sys_errcode, Tx_Buffer, 10);
-			Tx_len=strlen(Tx_Buffer);
-			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-			uSend(" : ");
-			char * strerr = strerror(sys_errcode);
-			Tx_len=strlen(strerr);
-			HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
-			uSend("\n");
-		}
-
-		uSend("\nstateDC ");
-		itoa(stateDC, Tx_Buffer, 10);
-		Tx_len=strlen(Tx_Buffer);
-		HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-
-		uSend("\nstateAC ");
-		itoa(stateAC, Tx_Buffer, 10);
-		Tx_len=strlen(Tx_Buffer);
-		HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-		uSend("\n");
-#endif
 
 		calc_and_wait(250);  //ms
 
@@ -825,8 +781,49 @@ int main(void)
 		if (print_request && uart_output_text) {
 			print_request = false;
 
+			if (get_sys_errorcode()!=EC_NO_ERROR) {
+				uSend("E ");
+				itoa(get_sys_errorcode(), Tx_Buffer, 10);
+				Tx_len=strlen(Tx_Buffer);
+				HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+				uSend(" ");
+				char * strerr = strerror(get_sys_errorcode());
+				Tx_len=strlen(strerr);
+				HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+				uSend("\n");
+			}
+
+			uSend("\nS ");
+			itoa(get_sys_mode(), Tx_Buffer, 10);
+			Tx_len=strlen(Tx_Buffer);
+			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+
+			uSend("\nDC ");
+			itoa(stateDC, Tx_Buffer, 10);
+			Tx_len=strlen(Tx_Buffer);
+			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			uSend("; ");
+			itoa(get_stateBattery(), Tx_Buffer, 10);
+			Tx_len=strlen(Tx_Buffer);
+			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+
+			uSend("\nAC ");
+			itoa(stateAC, Tx_Buffer, 10);
+			Tx_len=strlen(Tx_Buffer);
+			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			uSend("; ");
+			itoa(ctrl_ref.mode, Tx_Buffer, 10);
+			Tx_len=strlen(Tx_Buffer);
+			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			uSend("\n");
+
 			uSend("Vbat ");
+			const batteryStatus_t* battery = get_batteryStatus();
 			uSend_100m(battery->voltage_100mV);
+			uSend("  ");
+			uSend_1m(battery->minVcell_mV);
+			uSend("  ");
+			uSend_1m(battery->maxVcell_mV);
 			uSend("\n");
 
 	//		uSend("VdcFBboost_sinc ");
@@ -845,8 +842,16 @@ int main(void)
 			uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
 			uSend("\n");
 
-			uSend("Pm ");
-			uSendInt(electricity_meter_get_power());
+			uSend("iac ");
+			uSend_10m(debug_i_ac_amp_10mA);
+			uSend("\n");
+
+			uSend("Ppcc ");
+			uSendInt(ctrl_ref.p_pcc);
+			uSend("\n");
+
+			uSend("Pac ");
+			uSendInt(get_p_ac_filt50Hz());
 			uSend("\n");
 
 			uSend("Pb ");
@@ -1331,6 +1336,40 @@ static void MX_IWDG_Init(void)
   /* USER CODE BEGIN IWDG_Init 2 */
 
   /* USER CODE END IWDG_Init 2 */
+
+}
+
+/**
+  * @brief LPTIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_LPTIM1_Init(void)
+{
+
+  /* USER CODE BEGIN LPTIM1_Init 0 */
+
+  /* USER CODE END LPTIM1_Init 0 */
+
+  /* USER CODE BEGIN LPTIM1_Init 1 */
+
+  /* USER CODE END LPTIM1_Init 1 */
+  hlptim1.Instance = LPTIM1;
+  hlptim1.Init.Clock.Source = LPTIM_CLOCKSOURCE_APBCLOCK_LPOSC;
+  hlptim1.Init.Clock.Prescaler = LPTIM_PRESCALER_DIV128;
+  hlptim1.Init.Trigger.Source = LPTIM_TRIGSOURCE_SOFTWARE;
+  hlptim1.Init.OutputPolarity = LPTIM_OUTPUTPOLARITY_HIGH;
+  hlptim1.Init.UpdateMode = LPTIM_UPDATE_IMMEDIATE;
+  hlptim1.Init.CounterSource = LPTIM_COUNTERSOURCE_INTERNAL;
+  hlptim1.Init.Input1Source = LPTIM_INPUT1SOURCE_GPIO;
+  hlptim1.Init.Input2Source = LPTIM_INPUT2SOURCE_GPIO;
+  if (HAL_LPTIM_Init(&hlptim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN LPTIM1_Init 2 */
+
+  /* USER CODE END LPTIM1_Init 2 */
 
 }
 
@@ -1887,7 +1926,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-	  shutdownALL();
+	  shutdownAll();
 	  uSend("Error_Handler\n");
   }
   /* USER CODE END Error_Handler_Debug */

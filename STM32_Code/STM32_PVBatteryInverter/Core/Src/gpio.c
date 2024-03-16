@@ -7,7 +7,7 @@
 
 void gatedriverDC(bool state)
 {
-	if ( state && sys_errcode==EC_NO_ERROR ) {
+	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<7);  // enable boost gatedriver
 	} else {
 		GPIOB->BRR = (1<<7);  // disable boost gatedriver
@@ -16,7 +16,7 @@ void gatedriverDC(bool state)
 
 void gatedriverAC(bool state)
 {
-	if ( state && sys_errcode==EC_NO_ERROR ) {
+	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<14);  // enable grid FB gatedriver
 	} else {
 		GPIOB->BRR = (1<<14);  // disable grid FB gatedriver
@@ -25,7 +25,7 @@ void gatedriverAC(bool state)
 
 void contactorAC(bool state)
 {
-	if ( state && sys_errcode==EC_NO_ERROR ) {
+	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<10);
 	} else {
 		GPIOB->BRR = (1<<10);
@@ -35,7 +35,7 @@ void contactorAC(bool state)
 void contactorBattery(bool state)
 {
 	// Bat2DCboost
-	if ( state && sys_errcode==EC_NO_ERROR ) {
+	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOC->BSRR = (1<<13);
 	} else {
 		GPIOC->BRR = (1<<13);

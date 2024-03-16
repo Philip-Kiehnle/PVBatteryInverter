@@ -21,7 +21,7 @@ typedef struct {
 } __attribute__((__packed__)) msg_t;
 
 void serial_write(int serial_fd, const char *data, int size);
-int serial_read(int serial_fd, char *data, int size, int timeout_usec);
+uint16_t serial_read(int serial_fd, char *data, int size, int timeout_usec);
 
 #ifdef __cplusplus
 }

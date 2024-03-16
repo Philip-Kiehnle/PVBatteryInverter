@@ -27,6 +27,7 @@
 volatile uint16_t v_dc_FBgrid_sincfilt_100mV;
 volatile int16_t i_ac_10mA;
 volatile int16_t p_ac_filt50Hz;
+volatile int16_t p_ac_filt1minute;
 
 volatile int16_t debug_v_ac_rms_100mV;
 volatile int16_t debug_f_ac_10mHz;
@@ -39,6 +40,19 @@ bool sampling_trig_en = false;
 static uint32_t cnt_rel = 0;
 
 static int cnt_intr = 0;  // for sigma_delta processing
+
+
+const int16_t get_p_ac_filt50Hz()
+{
+	return p_ac_filt50Hz;
+}
+
+
+const int16_t get_p_ac_filt1minute()
+{
+	return p_ac_filt1minute;
+}
+
 
 void fill_monitor_vars_ac(monitor_vars_t* mon_vars)
 {
@@ -66,7 +80,7 @@ static inline void nextState(enum stateAC_t state)
 }
 
 
-int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
+int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
 {
 //GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 	static int16_t duty = 0;
@@ -93,10 +107,30 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	static int32_t v_ac_amp_sum = 0;
 	v_ac_amp_sum += v_ac_amp_100mV;
 
-	if (cnt50Hz == 0) {
-		v_ac_amp_filt50Hz_100mV = v_ac_amp_sum/CYCLES_CNT_50HZ;
+	static int32_t i_ac_sum = 0;
+	i_ac_sum += i_ac_10mA;
+	static uint8_t cnt_dc_offset = 0;
+
+	int v_dcCtrl_mV = 0;
+	static int v_dcCtrl_I_mV;
+	static int16_t i_ac_dc_offset_mA;
+
+	if (cnt20kHz_20ms == 0) {
+		v_ac_amp_filt50Hz_100mV = v_ac_amp_sum/CYCLES_cnt20kHz_20ms;
 		//v_ac_rms_filt50Hz_100mV = ((float)v_ac_amp_filt50Hz_100mV) / M_SQRT2;
 		v_ac_amp_sum = 0;
+
+		i_ac_dc_offset_mA = (i_ac_sum*10)/CYCLES_cnt20kHz_20ms;
+
+		if ( i_ac_sum > (E_I_AC_DC_OFFSET_MAX_10mA*CYCLES_cnt20kHz_20ms) ) {
+			i_ac_sum = 0;
+			cnt_dc_offset++;
+			if (cnt_dc_offset >= E_I_AC_DC_OFFSET_CYCLES) {
+				set_sys_errorcode(EC_I_AC_DC_OFFSET);
+			}
+		} else {
+			cnt_dc_offset = 0;
+		}
 	}
 
 	// DC voltage
@@ -112,7 +146,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	//static int16_t delta_v_prev8_10mV;
 	static int16_t delta_v_10mV;
 
-	int p_ac_mW = i_ac_10mA*v_ac_100mV;
+	int p_ac_mW = -i_ac_10mA*v_ac_100mV;
 #define BATTERY_FACTOR_PERCENT 20  // define part of 100Hz ripple which is taken by battery
 
 //  fixed point capacitor ripple compensation
@@ -153,7 +187,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	  shutdownAC();
 	  acGrid_valid = false;
 	  if (stateAC == GRID_SYNC) {
-		  sys_errcode = EC_GRID_SYNC_LOST;
+		  set_sys_errorcode(EC_GRID_SYNC_LOST);
 	  }
 	  stateAC = INIT_AC;
 	  cnt_pll_locked = 0;
@@ -161,11 +195,12 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	int16_t phase = pll_singlephase_step(v_ac_raw);
 #else
 	acGrid_valid = true;
+	v_ac_amp_filt50Hz_100mV = 45*10;
 	static int16_t phase;
 	phase += SHRT_MAX/(50*8);
-#endif
+#endif //DEBUG_OUTPUT_CURRENT
 
-	if (sys_errcode != EC_NO_ERROR ) {
+	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownAC();
 		stateAC = INIT_AC;
 	} else if (ctrl_ref.mode == AC_OFF) {
@@ -178,9 +213,24 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	static int p_ac_sum_mW;  // max +-5.3kW
 	p_ac_sum_mW += p_ac_mW;
 
-	if (cnt50Hz == 0) {
-		p_ac_filt50Hz = p_ac_sum_mW/CYCLES_CNT_50HZ/1000;
+	if (cnt20kHz_20ms == 0) {
+		p_ac_filt50Hz = p_ac_sum_mW/CYCLES_cnt20kHz_20ms/1000;
 		p_ac_sum_mW = 0;
+	} else if (cnt20kHz_20ms == 1) {
+
+		static uint16_t cnt50Hz_1min;
+		cnt50Hz_1min++;
+
+		// todo thermal model for AC side -> more output power for pulse loads and cloudy days 1.2kW nom 1.6kW max
+
+		static int p_ac_sum_1minute;
+		p_ac_sum_1minute += p_ac_filt50Hz;
+
+		if (cnt50Hz_1min == 60*50) {
+			cnt50Hz_1min = 0;
+			p_ac_filt1minute = p_ac_sum_1minute/(60*50);
+			p_ac_sum_1minute = 0;
+		}
 	}
 
 	int16_t phaseshift_RL = 0;
@@ -190,7 +240,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	switch (stateAC) {
 	  case INIT_AC:
 		shutdownAC();
-		if (sys_errcode == EC_NO_ERROR ) {
+		if (get_sys_errorcode() == EC_NO_ERROR ) {
 			if (ctrl_ref.mode != AC_OFF) {
 				nextState(WAIT_AC_DC_VOLTAGE);
 			}
@@ -201,7 +251,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 		if (   acGrid_valid
 		    && v_dc_FBgrid_sincfilt_100mV > v_ac_amp_100mV  // no precharge resistors available
 		    && v_dc_FBgrid_sincfilt_100mV > v_ac_amp_filt50Hz_100mV
-		    && cnt_rel >= 4*AC_CTRL_FREQ)  // wait at least 4 sec to avoid instabilities
+		    && cnt_rel >= 2*AC_CTRL_FREQ)  // wait at least 2 sec to avoid instabilities
 		 {
 			// zero crossing of grid and converter voltage tuning:
 			//pll_set_phaseOffset((1<<15) * +10.05/20);  // i_rms 260-365mA
@@ -235,6 +285,8 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 		  // todo implement islanding detection in GRID_CONNECTING
 		piCtrl.y = 0;
 		piCtrl.x_prev = 0;
+		v_dcCtrl_I_mV = 0;
+		gatedriverAC(1);
 		nextState(GRID_SYNC);
 		break;
 
@@ -275,6 +327,11 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 		//if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
 			static int16_t i_ac_amp_10mA = 0;
 			switch (ctrl_ref.mode) {
+			  case AC_PASSIVE:  // for battery reconnect to avoid DC voltage controller fighting AC Vdc voltage controller
+				  gatedriverAC(0);
+				  nextState(WAIT_CONTACTOR_AC);  // todo gatedriver is turned on for short period
+				  break;
+
 			  case VDC_CONTROL:
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10 );
 				//i_ref_amp = step_pi_Vdc2IacAmp_volt_comp( VDC_REF_RAW, Vdc_filt, phase );
@@ -283,12 +340,22 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 			  case VDC_VARIABLE_CONTROL:
 			  {
 				// sine in modern power grid is flattened -> no extra headroom needed
-				uint32_t v_dc_ref_10mV = 10*v_ac_amp_filt50Hz_100mV + ((R*100)*i_ac_amp_10mA);
+				uint32_t v_dc_ref_10mV = 10*v_ac_amp_filt50Hz_100mV + ((R*64)*i_ac_amp_10mA)/64;
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_10mV, v_dc_sinc_mix_100mV*10 );
 				break;
 			  }
-			  case PAC_CONTROL:
+
+			  case PAC_CONTROL_V_BAT_CONST:
+			  case PAC_CONTROL_PCC:
 			  {
+				static uint16_t p_extra_100mW;
+				if (ctrl_ref.mode == PAC_CONTROL_V_BAT_CONST) {
+				  if (p_extra_100mW < 1500*10) p_extra_100mW += 1;
+				} else {
+				  if (p_extra_100mW > 0) p_extra_100mW -= 1;
+				}
+				ctrl_ref.p_ac_rms = ctrl_ref.p_ac_rms_pccCtrl + p_extra_100mW/10;
+
 				// use power reference from power controller
 				int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;
 
@@ -302,6 +369,26 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 					i_ac_amp_10mA--;
 				}
 
+#define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
+#if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1
+				// electricity meter stores energy in 100mWh
+				//-> in 1 sec, 100mWh/1sec=360W offset can be tolerated
+				// if feedin is included, 720Ws can be tolerated -> todo
+				static bool low_power_mode;
+				if (ctrl_ref.p_ac_rms <= 50 && ctrl_ref.p_pcc <= 10) {
+					gatedriverAC(0);
+					low_power_mode = true;
+				} else if (low_power_mode) {
+					if(ctrl_ref.p_ac_rms > 200) {  // 200/50 = 3sec off / 1sec on, depends on power_controller tuning, see calc sheet
+						gatedriverAC(1);
+						low_power_mode = false;
+						if (i_ac_amp_10mA > 100) {
+							i_ac_amp_10mA = 100;  // clamp to 1A for starting point
+						}
+					}
+				}
+#endif
+
 				break;
 			  }
 			  case FFWD_ONLY:
@@ -312,11 +399,36 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 			debug_i_ac_amp_10mA = i_ac_amp_10mA;
 			int i_ref_10mA = (i_ac_amp_10mA * (int32_t)cos1(phase))>>15;
 
+#define USE_AC_DC_OFFSET_CONTROLLER 0
+#if USE_AC_DC_OFFSET_CONTROLLER == 1
+			if (cnt20kHz_20ms == 0) {
+				// control DC offset in AC current
+				// assume R = 0.7 todo use exact R
+				// 2A offset needs V = 1.4V DC voltage
+
+				// zu wenig
+//				const uint8_t KP_DIV = 2;
+//				const uint8_t KI_DIV = 4;
+
+				const uint8_t KP_DIV = 1;
+				const uint8_t KI_DIV = 2;
+#define EXTRA_GAIN 4
+		#define V_AC_DC_OFFSET_MAX_mV (16*1000)
+				int16_t v_ac_dc_mV = (i_ac_dc_offset_mA*(EXTRA_GAIN*0.7*32))/32;
+
+				v_dcCtrl_I_mV += v_ac_dc_mV / KI_DIV;
+				v_dcCtrl_I_mV = std::clamp(v_dcCtrl_I_mV, (int)(-V_AC_DC_OFFSET_MAX_mV), (int)V_AC_DC_OFFSET_MAX_mV);
+				v_dcCtrl_mV = v_ac_dc_mV/KP_DIV + v_dcCtrl_I_mV;
+				v_dcCtrl_mV = std::clamp(v_dcCtrl_mV, (int)(-V_AC_DC_OFFSET_MAX_mV), (int)V_AC_DC_OFFSET_MAX_mV);
+				//v_dcCtrl_mV = -4000; // -4.0A
+				//v_dcCtrl_mV = -10000; // -3.9A depend on switch on?
+			}
+#endif
 
 			// V1: linear inductor model
 			//int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
 
-			// V2: saturating inductor model; uses LUT with nonlinear inductance
+			// V2: saturating inductor model; uses LUT with nonlinear inductance or remanence model
 			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_10mA, i_ac_10mA/10)/10;  // i_meas -> audible noise 150Hz:-10dBV 250Hz:-23dBV
 			v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_10mA, i_ref_10mA/10)/10;  // i_ref -> audible noise 150Hz:-11dBV 250Hz:-26dBV
 
@@ -343,7 +455,8 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 	int v_amp_pll_100mV = 0;
 #endif
 
-	int32_t vout = (v_amp_pll_100mV*(int32_t)cos1(phase) + v_amp_pred_100mV*(int32_t)cos1(phase+phaseshift_RL) + (v_prCtrl_10mV<<15)/10 )/v_dc_modulator_100mV;
+	int32_t vout = (v_amp_pll_100mV*(int32_t)cos1(phase) + v_amp_pred_100mV*(int32_t)cos1(phase+phaseshift_RL) + (v_prCtrl_10mV<<15)/10 + (v_dcCtrl_mV<<15)/100 ) / v_dc_modulator_100mV;
+
 	duty = AC_DUTY_HALF + ( (AC_DUTY_HALF*vout) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
 
@@ -392,7 +505,7 @@ int16_t acControlStep(uint16_t cnt50Hz, control_ref_t ctrl_ref, uint16_t v_dc_FB
 
 
 errorPVBI_t checkACLimits() {
-	if ( i_ac_10mA > E_IAC_MAX_10mA || i_ac_10mA < -E_IAC_MAX_10mA) {
+	if ( i_ac_10mA > E_I_AC_MAX_10mA || i_ac_10mA < -E_I_AC_MAX_10mA) {
 		return EC_I_AC_MAX;
 	}
 	if ( v_dc_FBgrid_sincfilt_100mV > E_VDC_MAX_FB_GRID_100mV ) {
@@ -432,7 +545,7 @@ void measVdcFBgrid()
 	TIM2->CNT = 0;
 
 	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
-		sys_errcode = EC_V_DC_SENSOR_FB_GRID;
+		set_sys_errorcode(EC_V_DC_SENSOR_FB_GRID);
 	}
 
 	uint16_t filt_in = sigma_delta_re;

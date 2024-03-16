@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "monitoring.h"
 
 
 //#define E_VDC_MAX_100mV 400*10  // 400/96 = 4.16Vcell
@@ -33,7 +34,7 @@ void calc_async_dc_control();
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars);
 void measVdcFBboost();
 errorPVBI_t checkDCLimits();
-int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA);
+int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA);
 
 
 #ifdef __cplusplus

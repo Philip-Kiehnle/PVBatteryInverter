@@ -19,7 +19,7 @@ void serial_write(int serial_fd_, const char* data, int size)
 }
 
 
-int serial_read(int serial_fd_, char* data, int size, int timeout_usec)
+uint16_t serial_read(int serial_fd_, char* data, int size, int timeout_usec)
 {
 
 // V1a: polling 1 byte is too slow without UART in FIFO mode; FIFO mode okay

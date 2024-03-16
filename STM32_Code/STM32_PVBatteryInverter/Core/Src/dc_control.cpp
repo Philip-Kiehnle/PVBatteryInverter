@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <algorithm>
+#include <climits>
 
 
 #include "common.h"
@@ -73,6 +74,18 @@ constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 30;  // 30 sec when p
 constexpr unsigned int MPPT_DUTY_ABSMAX = DEF_MPPT_DUTY_ABSMAX;
 constexpr unsigned int MPPT_DUTY_MIN_BOOTSTRAP = 0;  // High side has isolated supply and no bootstrap capacitor
 
+// shutdown parameters for PV booster stage. current is used, because power is affected by AC 100Hz ripple and phase shifted Vdc measurement
+//constexpr uint16_t PV_LOW_CURRENT_mA = 80;  // if PV netto input current into DC bus is lower, switchoff counter is increased
+//constexpr uint16_t PV_LOW_CURRENT_SEC = 1;  // switch of after low power for this amount of seconds
+//constexpr uint16_t PV_WAIT_SEC = 5*60;  // wait this amount of seconds until booster stage is started again; max 21 minutes
+//debug
+constexpr uint16_t PV_LOW_CURRENT_mA = 40;  // 40mA*50V = 2W
+constexpr uint16_t PV_LOW_CURRENT_SEC = 10;
+constexpr uint16_t PV_WAIT_SEC = 1*30;
+//constexpr uint16_t PV_LOW_POWER = 2;  todo use dc current because power is affected by AC 100Hz ripple
+//constexpr uint16_t PV_LOW_POWER_SEC = 5;
+//constexpr uint16_t PV_WAIT_SEC = 20;
+
 
 volatile uint16_t v_dc_FBboost_sincfilt_100mV;
 volatile uint16_t v_dc_FBboost_filt50Hz_100mV;
@@ -89,7 +102,7 @@ MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
 volatile enum stateDC_t stateDC = INIT_DC;
 volatile enum dcdc_mode_t dcdc_mode;
 
-static uint32_t cnt_rel = 0;
+static volatile uint32_t cnt_rel = 0;
 
 uint16_t get_v_dc_FBboost_sincfilt_100mV()
 {
@@ -137,7 +150,7 @@ static inline void nextState(enum stateDC_t state)
 	cnt_rel = 0;
 }
 
-int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA)
+int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA)
 {
 	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
@@ -146,7 +159,10 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 	bool vdc_inRange = false;
 
 	// 50Hz more robust: for critical increase from 400V to 500V in 20ms: 0.5*4*390uF*(500^2-400^2)/0.02 = 3.5kW
-	if (v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_100mV && v_dc_FBboost_filt50Hz_100mV < E_VDC_MAX_100mV) {
+	if (   v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_100mV
+		&& v_dc_FBboost_filt50Hz_100mV < E_VDC_MAX_100mV
+		&& battery_maxVcell_OK()
+	   ) {
 		if (v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_START_100mV) {
 //	if (VdcFBboost_sincfilt_100mV > VDC_BOOST_STOP_100mV && VdcFBboost_sincfilt_100mV < E_VDC_MAX_100mV) {
 //		if (VdcFBboost_sincfilt_100mV > VDC_BOOST_START_100mV) {
@@ -155,24 +171,31 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 	} else {
 		shutdownDC();
 		vdc_inRange = false;
-		stateDC = INIT_DC;
+		nextState(INIT_DC);
 	}
 
-	if (sys_errcode != EC_NO_ERROR ) {
+	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownDC();
-		shutdownBattery();
-		stateDC = INIT_DC;
+		battery_state_request(BMS_OFF__BAT_OFF);
+		nextState(INIT_DC);
 	}
 
 	cnt_rel++;
 
 	static uint32_t v_dc_sum;
+	static int32_t i_dc_sum_10mA;
+	static int16_t i_dc_filt50Hz_mA;  // +-32A max
 	static float p_dc_sum;
+	static uint16_t pv_probe_timer50Hz = (PV_WAIT_SEC-1)*50;  // speedup first start
 
 	p_dc_sum += (v_dc_FBboost_sincfilt_100mV * i_dc_filt_10mA)/1000.0;
 	v_dc_sum += v_dc_FBboost_sincfilt_100mV;
+	i_dc_sum_10mA += i_dc_filt_10mA;
 
-	if (cnt50Hz == 0) {
+	if (cnt20kHz_20ms == 0) {
+		if (pv_probe_timer50Hz < USHRT_MAX) {
+			pv_probe_timer50Hz++;
+		}
 
 		monitoring_request = true;
 
@@ -182,14 +205,18 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 			bmsPower(0);
 		}
 
+		// todo: delay of sigma delta processing caused lagging Vdc meas when 100Hz ripple occurs -> use voltage estimator or extra Vdc meas
 		v_dc_filt50Hz = (float)v_dc_FBboost_filt50Hz_100mV/10.0;
 		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
 		i_pv_filt50Hz = p_dc_filt50Hz/v_pv_filt50Hz;
 
-		p_dc_filt50Hz = p_dc_sum/CYCLES_CNT_50HZ;
+		p_dc_filt50Hz = p_dc_sum/CYCLES_cnt20kHz_20ms;
 		p_dc_sum = 0;
 
-		v_dc_FBboost_filt50Hz_100mV = v_dc_sum/CYCLES_CNT_50HZ;
+		i_dc_filt50Hz_mA = i_dc_sum_10mA/(CYCLES_cnt20kHz_20ms/10);
+		i_dc_sum_10mA = 0;
+
+		v_dc_FBboost_filt50Hz_100mV = v_dc_sum/CYCLES_cnt20kHz_20ms;
 		debug_v_dc_FBboost_sincfilt_100mV = v_dc_FBboost_filt50Hz_100mV;
 		v_dc_sum = 0;
 	}
@@ -202,7 +229,11 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 
 	  case WAIT_PV_VOLTAGE:
 	  {
-		if (vdc_inRange && cnt_rel >= 5*DC_CTRL_FREQ) {  // wait at least 5 sec to avoid instabilities
+		gatedriverDC(0);
+		if (   vdc_inRange
+			&& cnt_rel >= 5*DC_CTRL_FREQ  // wait at least 5 sec to avoid instabilities
+			&& pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
+		) {
 			dutyLS1 = 0;
 			nextState(VOLTAGE_CONTROL);
 		}
@@ -212,7 +243,7 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 	  {  // curly braces to have scope for variable initialization
 		gatedriverDC(1);
 
-		if (cnt50Hz == 0) {
+		if (cnt20kHz_20ms == 0) {
 			if ( v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV-VDC_TOLERANCE_100mV) ) {
 				dutyLS1 += 2;
 			} else if (v_dc_FBboost_sincfilt_100mV < v_dc_ref_100mV) {
@@ -231,7 +262,7 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 
 			if (sys_mode_needs_battery) {
 				contactorBattery(1);
-				battery_state_request(BATTERY_ON);
+				battery_state_request(BMS_ON__BAT_ON);
 				nextState(WAIT_CONTACTOR_DC);
 			} else {
 				mppTracker.duty_raw = dutyLS1;
@@ -243,21 +274,50 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 	  }
 	  case WAIT_CONTACTOR_DC:
 		//if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
-		if (cnt_rel == 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable
+		if (cnt_rel >= 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable  == hangs, maybe becasue bat not conneting
 			mppTracker.duty_raw = dutyLS1;
 			nextState(MPPT);
 		}
 		break;
 
 	  case MPPT:
-		if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
+		if (sys_mode_needs_battery && !battery_connected()) {
+			nextState(VOLTAGE_CONTROL);
+		} else if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
 			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
 			dutyLS1 = 0;
 			nextState(VOLTAGE_CONTROL);
 		} else {
-			if (cnt50Hz == 0) {
-				mppt_calc_request = true;
+			if (cnt20kHz_20ms == 0) {
+				// V1 : run MPP-Tracker in every cycle
+				// problem: Pbat=12W Vpv=32.5V-38.2V; estimated V_MPP 37.xV -> MPP missmatch loss
+				// problem: Pbat=4W Vpv=26.3V-35.2V; V_OC=39V -> MPP missmatch loss
+				// lower boundary can happen because MPP algorithm count the energy which is extracted form input capacitors
+				// mppt_calc_request = true;
 
+				// V2 : run MPP-Tracker in every second cycle
+				// advantage: new dutycycle can be stabilised in first cycle
+				// Pbat=4W Vpv=30.3V-36.2V;
+				static bool stabilize_MPP;
+				if (stabilize_MPP) {
+					stabilize_MPP = false;
+				} else {
+					stabilize_MPP = true;
+					mppt_calc_request = true;
+				}
+
+				// check_low_power todo check for other states also -> shift outside MPP case
+				static uint16_t cnt_pv_low_current = 0;
+				if (i_dc_filt50Hz_mA < PV_LOW_CURRENT_mA) {
+					cnt_pv_low_current++;
+					if (cnt_pv_low_current == 50*PV_LOW_CURRENT_SEC) {
+						nextState(WAIT_PV_VOLTAGE);
+						pv_probe_timer50Hz = 0;
+						cnt_pv_low_current = 0;
+					}
+				} else {
+					cnt_pv_low_current = 0;
+				}
 			}
 
 			if (mppt_calc_complete) {
@@ -265,9 +325,6 @@ int16_t dcControlStep(uint16_t cnt50Hz, uint16_t v_dc_ref_100mV, int16_t i_dc_fi
 				mppt_calc_complete = false;
 			}
 		}
-
-		// todo
-		// if no current comes from the PV part and in PV mode, turn off
 
 		break;
 
@@ -379,7 +436,7 @@ void measVdcFBboost()
 
 	// if sensor sees more than 1V, 90% high increase up to only a single zero in 128cycles, which equals 1.25V
 	if (sigma_delta_re < 35 || sigma_delta_re > 500) {
-		sys_errcode = EC_V_DC_SENSOR_FB_BOOST;
+		set_sys_errorcode(EC_V_DC_SENSOR_FB_BOOST);
 	}
 
 	uint16_t filt_in = sigma_delta_re;
