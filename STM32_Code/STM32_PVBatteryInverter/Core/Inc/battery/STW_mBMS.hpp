@@ -31,29 +31,38 @@ public:
 
     const uint32_t battery_cells = 96;
 
-    // for inverter limits
-    float Vcharge_stop() const override {
-        return battery_cells*4.0;
-    }
-    float Vmax_protect() const override {
-        return battery_cells*4.1;
-    }
-    float Vdischarge_stop() const override {
-        return battery_cells*3.3;
-    }
-    float Icharge_max() const override {
-        return 4.0;
-    }
-    float Idischarge_max() const override {
-        return 4.0;
-    }
-
     // for battery
-    uint16_t Vcell_MAX_P_REDUCE_mV() const override {
+    uint16_t V_CELL_MIN_PROTECT_mV() const override {
+        return 3300;
+    }
+    uint16_t V_CELL_MIN_POWER_REDUCE_mV() const override {
+        return 3400;
+    }
+    uint16_t V_CELL_MAX_POWER_REDUCE_mV() const override {
         return 3950;
     }
-    uint16_t Vcell_MAX_PROTECT_mV() const override {
+    uint16_t V_CELL_MAX_PROTECT_mV() const override {
         return 4050;
+    }
+
+    // for inverter limits
+    float V_CHARGE_STOP() const override {
+        return ( battery_cells * (V_CELL_MAX_POWER_REDUCE_mV()+V_CELL_MAX_PROTECT_mV())/2 ) /1000;
+    }
+    float V_MAX_PROTECT() const override {
+        return (battery_cells*V_CELL_MAX_PROTECT_mV())/1000;
+    }
+    float V_DISCHARGE_STOP() const override {
+        return ( battery_cells * (V_CELL_MIN_PROTECT_mV()+V_CELL_MIN_POWER_REDUCE_mV())/2 ) /1000;
+    }
+    float V_MIN_PROTECT() const override {
+        return (battery_cells*V_CELL_MIN_PROTECT_mV())/1000;
+    }
+    float I_CHARGE_MAX() const override {
+        return 4.0;
+    }
+    float I_DISCHARGE_MAX() const override {
+        return 4.0;
     }
 
     int balancingEnable();

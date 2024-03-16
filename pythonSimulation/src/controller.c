@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdbool.h>
 #include <math.h>
 #include "controller.h"
 
@@ -6,6 +7,13 @@
 #define L (10.2e-3)  // see calc sheet
 #define ZL (2*M_PI*FGRID*L)
 #define T (1/20e3)
+
+#define L_LINEAR 0      // linear inductor
+#define L_SATURATING 1  // nonlinear inductor
+#define L_REMANENT 2    // nonlinear inductor with remanence
+
+#define INDUCTOR L_SATURATING
+
 
 //#define EXTEND 30
 //
@@ -76,6 +84,8 @@ const int Kp_Vdc = 1.0*VR * (1<<EXTEND_PI_VDC);
 const int Ki_Vdc = 1.0*VR/Tn * (1<<EXTEND_PI_VDC);
 
 volatile int32_t debug_vdc_comp = 0;
+
+volatile bool current_increasing;
 
 
 // damped PR controller for grid current
@@ -148,6 +158,8 @@ int pr_step(int x)
 
 static uint16_t lut_pos_i = 0;
 
+#if INDUCTOR == L_SATURATING
+#define FIXP_SCALE_BITS 14
 uint16_t Ztot_LUT[105] = {
 54286,54286,54286,54286,54286,54286,53867,53447,53028,52609,  // 0.0A, 0.1A, ...
 52191,51772,51354,50936,50518,50101,49684,49267,48851,48435,
@@ -175,10 +187,77 @@ int16_t ZLphase_LUT[105] = {
 4831,4831,4831,4831,4831  // ... 10.4A
 };
 
+#elif INDUCTOR == L_REMANENT
+#define FIXP_SCALE_BITS 13
+uint16_t Ztot_iINCR_LUT[105] = {
+34876,36341,37784,39136,40326,41284,41954,42296,42287,41930,  // 0.0A, 0.1A, ...
+41249,40288,39106,37772,36356,34928,33544,32247,31067,30013,
+29085,28266,27536,26869,26240,25627,25015,24394,23761,23120,
+22477,21843,21228,20643,20094,19589,19130,18718,18350,18023,
+17733,17473,17240,17027,16831,16647,16473,16305,16143,15985,
+15829,15676,15524,15373,15223,15074,14927,14779,14633,14488,
+14343,14199,14056,13913,13772,13631,13491,13352,13214,13076,
+12940,12804,12669,12535,12401,12269,12137,12007,11877,11748,
+11620,11493,11367,11242,11118,10995,10872,10751,10631,10512,
+10393,10276,10160,10045,9931,9818,9706,9596,9486,9378,
+9271,9213,9156,9100,9044  // ... 10.4A
+};
+int16_t ZLphase_iINCR_LUT[105] = {
+7333,7368,7399,7427,7450,7467,7479,7484,7484,7478,  // 0.0A, 0.1A, ...
+7466,7449,7426,7399,7368,7334,7298,7262,7226,7192,
+7160,7130,7101,7073,7046,7018,6989,6958,6924,6889,
+6850,6811,6770,6728,6687,6647,6609,6573,6539,6508,
+6480,6453,6429,6406,6384,6364,6343,6324,6304,6284,
+6265,6245,6225,6205,6184,6163,6142,6120,6099,6076,
+6054,6031,6007,5984,5959,5935,5910,5884,5858,5832,
+5805,5778,5750,5722,5693,5664,5634,5604,5573,5541,
+5509,5477,5444,5410,5375,5340,5304,5268,5231,5193,
+5155,5115,5075,5035,4993,4951,4908,4864,4819,4773,
+4727,4701,4675,4649,4623  // ... 10.4A
+};
+uint16_t Ztot_iDECR_LUT[105] = {
+34876,33578,32396,31341,30411,29591,28860,28191,27561,26947,  // 0.0A, 0.1A, ...
+26333,25710,25075,24432,23787,23150,22533,21945,21394,20886,
+20424,20009,19639,19310,19017,18756,18520,18306,18108,17922,
+17746,17578,17414,17254,17097,16941,16788,16635,16484,16333,
+16183,16034,15886,15739,15592,15446,15301,15156,15012,14869,
+14727,14585,14444,14304,14165,14026,13888,13751,13615,13480,
+13345,13211,13078,12946,12814,12684,12554,12425,12297,12169,
+12043,11918,11793,11669,11546,11424,11303,11183,11064,10945,
+10828,10712,10596,10482,10368,10256,10144,10034,9924,9816,
+9709,9602,9497,9393,9290,9188,9087,8988,8889,8792,
+8696,8647,8599,8552,8505  // ... 10.4A
+};
+int16_t ZLphase_iDECR_LUT[105] = {
+7333,7299,7266,7235,7205,7178,7152,7127,7102,7077,  // 0.0A, 0.1A, ...
+7050,7022,6992,6960,6926,6890,6854,6817,6781,6746,
+6712,6681,6651,6624,6599,6576,6555,6535,6517,6499,
+6481,6464,6447,6430,6414,6397,6379,6362,6345,6327,
+6309,6290,6272,6253,6234,6214,6195,6175,6154,6134,
+6113,6091,6070,6048,6025,6002,5979,5956,5932,5908,
+5883,5858,5832,5806,5780,5753,5726,5698,5670,5641,
+5612,5583,5552,5522,5491,5459,5426,5393,5360,5326,
+5291,5256,5220,5183,5146,5108,5070,5030,4990,4950,
+4908,4866,4823,4780,4735,4690,4644,4597,4549,4500,
+4451,4425,4400,4374,4348  // ... 10.4A
+};
+#endif
+
 int16_t get_IacPhase()
 {
+#if INDUCTOR == L_LINEAR
+	return (int16_t)( (1<<15) * atan(ZL/R) / (2*M_PI));  // calculated at compile time
+
+#elif INDUCTOR == L_SATURATING
 	return ZLphase_LUT[lut_pos_i];
-	//return (int16_t)( (1<<15) * atan(ZL/R) / (2*M_PI));  // calculated at compile time
+
+#elif INDUCTOR == L_REMANENT
+	if (current_increasing) {
+		return ZLphase_iINCR_LUT[lut_pos_i];
+	} else {
+		return ZLphase_iDECR_LUT[lut_pos_i];
+	}
+#endif
 }
 
 
@@ -193,6 +272,8 @@ int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp)  // returns amplitude at sec
 
 uint16_t calc_v_amp_pred(uint32_t i_amp, int32_t i_ac_100mA)
 {
+	int32_t v_amp;
+#if INDUCTOR == L_SATURATING
 	if (i_ac_100mA < 0)
 		i_ac_100mA *= -1;
 
@@ -203,15 +284,47 @@ uint16_t calc_v_amp_pred(uint32_t i_amp, int32_t i_ac_100mA)
 		lut_pos_i--;
 	}
 
-	int32_t v_amp = (Ztot_LUT[lut_pos_i]*i_amp)>>14;
+	v_amp = (Ztot_LUT[lut_pos_i]*i_amp)>>FIXP_SCALE_BITS;
+
+#elif INDUCTOR == L_REMANENT
+	static int32_t i_ac_100mA_prev;
+	if (i_ac_100mA > i_ac_100mA_prev) {
+		current_increasing = true;
+	} else {
+		current_increasing = false;
+	}
+	i_ac_100mA_prev = i_ac_100mA;
+
+	if (i_ac_100mA < 0) {
+		i_ac_100mA *= -1;
+	}
+
+	// 6A max -> 6×sin(2×π×50×1÷20000) = 94mA
+	if (i_ac_100mA > lut_pos_i && lut_pos_i < sizeof(Ztot_iINCR_LUT)/sizeof(Ztot_iINCR_LUT[0])-2 ) {  // -2 for possible alignment issues
+		lut_pos_i++;
+	} else if (lut_pos_i>0) {
+		lut_pos_i--;
+	}
+
+	// todo: smooth switch if sign of decent changes, also in phase calculation.
+	//       But voltage is low in this moment, so may not be a problem.
+	if (   (current_increasing && i_ac_100mA >= 0)
+	    || (!current_increasing && i_ac_100mA < 0)
+	) {
+		v_amp = (Ztot_iINCR_LUT[lut_pos_i]*i_amp)>>FIXP_SCALE_BITS;
+	} else {
+		v_amp = (Ztot_iDECR_LUT[lut_pos_i]*i_amp)>>FIXP_SCALE_BITS;
+	}
+
+#endif
 	return v_amp;
 }
 
 
 // scale i_dc to i_ac_rms to i_ac_amp
-//piController piCtrl = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_RAW*(1<<EXTEND_PI_VDC), .x_prev=0,  // PV to grid
+piController piCtrl = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // PV to grid
 //piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_RAW*(1<<EXTEND_PI_VDC), .y_max=0, .x_prev=0,  // Grid to battery
-piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // bidi
+//piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // bidi
 								.c1=sqrt(2)*(Ki_Vdc*T/2 + Kp_Vdc),
 								.c2=sqrt(2)*(Ki_Vdc*T/2 - Kp_Vdc) };
 

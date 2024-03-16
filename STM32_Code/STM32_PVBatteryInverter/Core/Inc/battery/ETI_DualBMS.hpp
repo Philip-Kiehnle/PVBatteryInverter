@@ -18,6 +18,7 @@ public:
     virtual int resetErrors() override;
     virtual int batteryOn() override;
     virtual int batteryOff() override;
+    virtual void estimateSoC() override;
 
     int custom_string_query(std::string custom_string);
 
@@ -28,28 +29,38 @@ public:
 
     const uint32_t battery_cells = 15;
 
-    float Vcharge_stop() const override {
-        return battery_cells*3.5;  // ~99% SoC
+    uint16_t V_CELL_MIN_PROTECT_mV() const override {
+        return 2820; // BMS UV_THRESHOLD_mV 2800  // LiitoKala discharge cutoff 2.5V
     }
-    float Vmax_protect() const override {
-        return battery_cells*3.6;  // ~100% SoC
+    uint16_t V_CELL_MIN_POWER_REDUCE_mV() const override {
+        return 2850;
     }
-    float Vdischarge_stop() const override {
-        return battery_cells*2.9;  // LiitoKala discharge cutoff 2.5V
+    uint16_t V_CELL_MAX_POWER_REDUCE_mV() const override {
+        return 3520;
     }
-    float Icharge_max() const override {
+    uint16_t V_CELL_MAX_PROTECT_mV() const override {
+        return 3560; // BMS OV_THRESHOLD_mV 3600
+    }
+
+    float V_CHARGE_STOP() const override {
+        return ( battery_cells * (V_CELL_MAX_POWER_REDUCE_mV()+V_CELL_MAX_PROTECT_mV())/2 ) /1000;
+    }
+    float V_MAX_PROTECT() const override {
+        return (battery_cells*V_CELL_MAX_PROTECT_mV())/1000;
+    }
+    float V_DISCHARGE_STOP() const override {
+        return ( battery_cells * (V_CELL_MIN_PROTECT_mV()+V_CELL_MIN_POWER_REDUCE_mV())/2 ) /1000;
+    }
+    float V_MIN_PROTECT() const override {
+        return (battery_cells*V_CELL_MIN_PROTECT_mV())/1000;  // ~100% SoC
+    }
+    float I_CHARGE_MAX() const override {
         return 3.0;  // LiitoKala allows 3.0A rated charge
     }
-    float Idischarge_max() const override {
+    float I_DISCHARGE_MAX() const override {
         return 7.5;  // BMS limit 8A;  LiitoKala allows 30A continuous, 36A max
     }
 
-    uint16_t Vcell_MAX_P_REDUCE_mV() const override {
-        return 3400; // BMS OV_THRESHOLD_mV 3450mV
-    }
-    uint16_t Vcell_MAX_PROTECT_mV() const override {
-        return 3440;
-    }
 
     // const uint32_t battery_cells = 80;
     // const float Vcharge_stop = battery_cells*4.134;  // ~99% SoC

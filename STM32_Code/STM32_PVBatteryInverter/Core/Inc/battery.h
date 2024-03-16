@@ -11,14 +11,16 @@
 #include "common.h"
 #include "battery/bms_types.h"
 
-#define BATTERY_ON true
-#define BATTERY_OFF false
 
+typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON} stateBattery_t;
+
+const bool battery_connected();
+const bool battery_maxVcell_OK();
+const stateBattery_t get_stateBattery();
 const batteryStatus_t* get_batteryStatus();
-void shutdownBattery();
 void battery_update_request();
-void battery_state_request(bool state);
-void async_battery_communication();
+void battery_state_request(stateBattery_t state);
+bool async_battery_communication();
 
 
 #ifdef __cplusplus

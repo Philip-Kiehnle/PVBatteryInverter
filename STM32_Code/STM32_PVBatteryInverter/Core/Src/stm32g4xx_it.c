@@ -58,6 +58,7 @@
 extern DMA_HandleTypeDef hdma_adc1;
 extern DMA_HandleTypeDef hdma_adc2;
 extern FDCAN_HandleTypeDef hfdcan2;
+extern LPTIM_HandleTypeDef hlptim1;
 extern TIM_HandleTypeDef htim1;
 extern DMA_HandleTypeDef hdma_uart5_tx;
 extern DMA_HandleTypeDef hdma_uart5_rx;
@@ -287,6 +288,20 @@ void TIM1_TRG_COM_TIM17_IRQHandler(void)
   /* USER CODE BEGIN TIM1_TRG_COM_TIM17_IRQn 1 */
 
   /* USER CODE END TIM1_TRG_COM_TIM17_IRQn 1 */
+}
+
+/**
+  * @brief This function handles LPTIM1 global interrupt.
+  */
+void LPTIM1_IRQHandler(void)
+{
+  /* USER CODE BEGIN LPTIM1_IRQn 0 */
+
+  /* USER CODE END LPTIM1_IRQn 0 */
+  HAL_LPTIM_IRQHandler(&hlptim1);
+  /* USER CODE BEGIN LPTIM1_IRQn 1 */
+
+  /* USER CODE END LPTIM1_IRQn 1 */
 }
 
 /**

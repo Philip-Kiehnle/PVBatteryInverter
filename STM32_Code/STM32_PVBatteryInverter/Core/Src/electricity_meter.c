@@ -14,7 +14,8 @@
 #define BYTES_PER_READ 16
 
 static char rx_buf[EL_METER_RX_BUF_TYP_SIZE+2*BYTES_PER_READ];
-static int pcc_power = 999;
+static int pcc_power;
+static enum el_meter_status_t el_meter_status;
 
 
 #if METER_READ_DMA == 1
@@ -30,13 +31,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 #endif
 
 // test in linux:
-// stty raw -F /dev/ttyUSB1  # without this command, linux adds \r to \n and corrupts data!
+// stty raw -F /dev/ttyUSB1 9600  # without raw, linux adds \r to \n and corrupts data!
 // cat testmsg.bin > /dev/ttyUSB1
+// cat /dev/ttyUSB0 > /dev/ttyUSB2  # UART relay
 // cat /dev/ttyUSB0 | /data/local/nc.openbsd -l 55000  # tx command for UART WiFi bridge
 // nc 192.168.2.2 55000 > /dev/ttyUSB1  # rx command for UART WiFi bridge
 el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 {
-	enum el_meter_status_t el_meter_status = EL_METER_CONN_WARN;
+	el_meter_status = EL_METER_CONN_WARN;
 	static uint16_t smart_meter_err_cnt = 0;
 	static uint32_t smart_meter_no_comm_cnt = 0;
 
@@ -135,6 +137,12 @@ el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 
 	}
 
+	return el_meter_status;
+}
+
+
+el_meter_status_t electricity_meter_get_status()
+{
 	return el_meter_status;
 }
 

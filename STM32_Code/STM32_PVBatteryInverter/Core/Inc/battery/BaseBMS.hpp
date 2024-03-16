@@ -22,6 +22,7 @@ public:
     virtual int resetErrors() = 0;
     virtual int batteryOn() = 0;
     virtual int batteryOff() = 0;
+    virtual void estimateSoC() = 0;
     // virtual int query_data(char* target_addr, unsigned int len) = 0;
     // virtual int custom_query(unsigned int response_len) = 0;
     // virtual int custom_string_query(std::string custom_string) = 0;
@@ -35,14 +36,17 @@ public:
     // virtual float get_Idischarge_max()   const { return Idischarge_max; }
 
     //virtual constexpr unsigned int Vcharge_stop() const = 0;
-    virtual float Vcharge_stop() const = 0;
-    virtual float Vmax_protect() const = 0;
-    virtual float Vdischarge_stop() const = 0;
-    virtual float Icharge_max() const = 0;
-    virtual float Idischarge_max() const = 0;
+    virtual uint16_t V_CELL_MIN_PROTECT_mV() const = 0;
+    virtual uint16_t V_CELL_MIN_POWER_REDUCE_mV() const = 0;
+    virtual uint16_t V_CELL_MAX_POWER_REDUCE_mV() const = 0;
+    virtual uint16_t V_CELL_MAX_PROTECT_mV() const = 0;
 
-    virtual uint16_t Vcell_MAX_P_REDUCE_mV() const = 0;
-    virtual uint16_t Vcell_MAX_PROTECT_mV() const = 0;
+    virtual float V_CHARGE_STOP() const = 0;
+    virtual float V_MAX_PROTECT() const = 0;
+    virtual float V_DISCHARGE_STOP() const = 0;
+    virtual float V_MIN_PROTECT() const = 0;
+    virtual float I_CHARGE_MAX() const = 0;
+    virtual float I_DISCHARGE_MAX() const = 0;
 
 protected:
     BaseBMS(uint16_t address);

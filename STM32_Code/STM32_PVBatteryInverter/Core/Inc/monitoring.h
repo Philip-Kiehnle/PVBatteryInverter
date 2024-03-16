@@ -8,6 +8,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "stm32g4xx_hal.h"
+
 
 typedef struct {
 	uint16_t id;  // sys variables

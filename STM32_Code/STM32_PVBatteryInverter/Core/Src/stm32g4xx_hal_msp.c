@@ -345,9 +345,9 @@ void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* hfdcan)
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /* FDCAN2 interrupt Init */
-    HAL_NVIC_SetPriority(FDCAN2_IT0_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(FDCAN2_IT0_IRQn, 4, 0);
     HAL_NVIC_EnableIRQ(FDCAN2_IT0_IRQn);
-    HAL_NVIC_SetPriority(FDCAN2_IT1_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(FDCAN2_IT1_IRQn, 4, 0);
     HAL_NVIC_EnableIRQ(FDCAN2_IT1_IRQn);
   /* USER CODE BEGIN FDCAN2_MspInit 1 */
 
@@ -474,6 +474,67 @@ void HAL_HRTIM_MspDeInit(HRTIM_HandleTypeDef* hhrtim)
   /* USER CODE BEGIN HRTIM1_MspDeInit 1 */
 
   /* USER CODE END HRTIM1_MspDeInit 1 */
+  }
+
+}
+
+/**
+* @brief LPTIM MSP Initialization
+* This function configures the hardware resources used in this example
+* @param hlptim: LPTIM handle pointer
+* @retval None
+*/
+void HAL_LPTIM_MspInit(LPTIM_HandleTypeDef* hlptim)
+{
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+  if(hlptim->Instance==LPTIM1)
+  {
+  /* USER CODE BEGIN LPTIM1_MspInit 0 */
+
+  /* USER CODE END LPTIM1_MspInit 0 */
+
+  /** Initializes the peripherals clocks
+  */
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_LPTIM1;
+    PeriphClkInit.Lptim1ClockSelection = RCC_LPTIM1CLKSOURCE_LSI;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* Peripheral clock enable */
+    __HAL_RCC_LPTIM1_CLK_ENABLE();
+    /* LPTIM1 interrupt Init */
+    HAL_NVIC_SetPriority(LPTIM1_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(LPTIM1_IRQn);
+  /* USER CODE BEGIN LPTIM1_MspInit 1 */
+
+  /* USER CODE END LPTIM1_MspInit 1 */
+  }
+
+}
+
+/**
+* @brief LPTIM MSP De-Initialization
+* This function freeze the hardware resources used in this example
+* @param hlptim: LPTIM handle pointer
+* @retval None
+*/
+void HAL_LPTIM_MspDeInit(LPTIM_HandleTypeDef* hlptim)
+{
+  if(hlptim->Instance==LPTIM1)
+  {
+  /* USER CODE BEGIN LPTIM1_MspDeInit 0 */
+
+  /* USER CODE END LPTIM1_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_LPTIM1_CLK_DISABLE();
+
+    /* LPTIM1 interrupt DeInit */
+    HAL_NVIC_DisableIRQ(LPTIM1_IRQn);
+  /* USER CODE BEGIN LPTIM1_MspDeInit 1 */
+
+  /* USER CODE END LPTIM1_MspDeInit 1 */
   }
 
 }
@@ -809,7 +870,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     __HAL_LINKDMA(huart,hdmarx,hdma_uart5_rx);
 
     /* UART5 interrupt Init */
-    HAL_NVIC_SetPriority(UART5_IRQn, 2, 0);
+    HAL_NVIC_SetPriority(UART5_IRQn, 4, 0);
     HAL_NVIC_EnableIRQ(UART5_IRQn);
   /* USER CODE BEGIN UART5_MspInit 1 */
 
