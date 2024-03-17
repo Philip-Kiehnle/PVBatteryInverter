@@ -61,7 +61,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			sys_mode_needs_battery = false;
 
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
-			     && ctrl_ref->p_pcc > 50  // feedin required
+			     && ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50  // feedin required
 			   ) {
 				nextMode(SYS_MODE);
 				if (SYS_MODE == HYBRID_PCC_SENSOR) {
@@ -104,7 +104,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					|| battery->soc == 100 || battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV()  // or battery is full
 				) {
 					// todo if Ppv > Pbat_charge_max activate feedin
-					if (   ctrl_ref->p_pcc > 50  // feedin required
+					if (   ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50  // feedin required; filter 1 second spikes from freezer motor start
 						|| ctrl_ref->mode == PAC_CONTROL_PCC || ctrl_ref->mode == PAC_CONTROL_V_BAT_CONST  // or already in feedin mode
 						) {
 						if (battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV()) {
@@ -115,8 +115,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					}
 					// check if battery should be disconnected (variable Vdc -> higher efficiency)
 					if (   (ctrl_ref->p_pcc < -50 || electricity_meter_get_status() == EL_METER_CONN_ERR)  // other PV inverters produce enough for household or PCC sensor fail
-							   && (battery->power_W > 10)  // minimum charging power to compensate switching loss for AC bridge
-							   && (battery->soc == 100 || battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV())) {
+						&& (battery->power_W > 10)  // minimum charging power to compensate switching loss for AC bridge
+						&& (battery->soc == 100 || battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV())
+						) {
 						nextMode(PV2AC);
 						contactorBattery(0);
 						bmsPower(0);

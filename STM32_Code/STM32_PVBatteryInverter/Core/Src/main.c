@@ -311,6 +311,7 @@ void calc_and_wait(uint32_t delay)
 #endif //DUMMY_METER
 		//HAL_UART_Abort_IT(&huart1);
 		if ( el_meter_status == EL_METER_OKAY) {
+			ctrl_ref.p_pcc_prev = ctrl_ref.p_pcc;
 #if DUMMY_METER == 1
 			const batteryStatus_t* battery = get_batteryStatus();
 			//ctrl_ref.p_pcc = 50+battery->power_W;  // p_bat negative is discharging AC 4sec on 4sec off

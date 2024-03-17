@@ -96,8 +96,11 @@ bool async_battery_communication()
 		state_change_request = false;
 	}
 
-	if (   stateBattery == BMS_ON__BAT_ON
-		&& (abs(bms.batteryStatus.power_W) > 2  || bms.batteryStatus.voltage_100mV == get_v_dc_FBboost_filt50Hz_100mV())
+	if ( stateBattery == BMS_ON__BAT_ON
+	     && (abs(bms.batteryStatus.power_W) > 2
+		 || (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
+		     && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5)
+		)
 	) {
 		bat_connected = true;
 	}

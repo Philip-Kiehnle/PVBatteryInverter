@@ -57,6 +57,7 @@ typedef struct {
 	ac_ctrl_mode_t mode;
 	uint16_t v_dc_100mV;
 	int16_t p_pcc;  // power at point of common coupling (electricity meter)
+	int16_t p_pcc_prev;
 	int16_t p_ac_rms_pccCtrl;  // power from PCC controller
 	int16_t p_ac_rms;  // power for AC control
 } control_ref_t;
