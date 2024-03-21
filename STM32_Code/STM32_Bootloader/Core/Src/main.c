@@ -93,12 +93,47 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
 
-  //MX_UART5_Init();  // enable RS485 DE
   MX_GPIO_Init();
   OpenBootloader_Init();
 
-  GPIOB->BRR = (1<<1);  // enable green LED
+  /*******************/
+  /* enable RS485 DE */
+  /*******************/
+
+  // V1:  -> does not work
+  //MX_UART5_Init();
+
+  // V2:
+  huart5.Instance = UART5;
+  huart5.Init.BaudRate = 115200;
+  huart5.Init.WordLength = UART_WORDLENGTH_9B;
+  huart5.Init.StopBits = UART_STOPBITS_1;
+  huart5.Init.Parity = UART_PARITY_EVEN;
+  huart5.Init.Mode = UART_MODE_TX_RX;
+  huart5.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart5.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart5.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart5.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart5.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_RS485Ex_Init(&huart5, UART_DE_POLARITY_HIGH, 0, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  // both LEDs turn on in bootloader automatically
+  //GPIOB->BRR = (1<<1);  // enable green LED
   //GPIOB->BSRR = (1<<1);  // disable green LED
+
+  // check emergency button:
+  // released means pin high -> boot application
+  // pressed means pin low -> stay in bootloader
+  if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
+	// prevent noise
+    if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
+	// start application
+	OPENBL_FLASH_JumpToAddress(0x8000000+0x00008000U);
+    }
+  }
 
   /* Infinite loop */
   while (1)
@@ -106,7 +141,7 @@ int main(void)
     OpenBootloader_ProtocolDetection();
   }
 
-  // todo remove code below. Fix RS485 DE
+  // todo remove code below. It is not executed.
 
   /* USER CODE END SysInit */
 
@@ -222,9 +257,9 @@ static void MX_UART5_Init(void)
   /* USER CODE END UART5_Init 1 */
   huart5.Instance = UART5;
   huart5.Init.BaudRate = 115200;
-  huart5.Init.WordLength = UART_WORDLENGTH_8B;
+  huart5.Init.WordLength = UART_WORDLENGTH_9B;
   huart5.Init.StopBits = UART_STOPBITS_1;
-  huart5.Init.Parity = UART_PARITY_NONE;
+  huart5.Init.Parity = UART_PARITY_EVEN;
   huart5.Init.Mode = UART_MODE_TX_RX;
   huart5.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart5.Init.OverSampling = UART_OVERSAMPLING_16;
@@ -363,6 +398,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
