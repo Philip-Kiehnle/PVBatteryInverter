@@ -328,7 +328,8 @@ void calc_and_wait(uint32_t delay)
 		if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
 			reinitUART(huart_rs485, 115200);
 			calc_async_dc_control();
-			if (async_battery_communication()) {
+			// todo if smart meter and battery update interval is 1sec, possible collision occurs, when smart meter data arrives during battery comm
+			if (async_battery_communication()) {  // todo check why update comes too often (every 2ms) sometimes
 				HAL_Delay(2);  //ms  // todo check if necessary
 				send_inverterdata();
 			}

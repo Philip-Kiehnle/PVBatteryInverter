@@ -63,6 +63,7 @@ void battery_state_request(stateBattery_t state)
 // returns true if there was an update request
 bool async_battery_communication()
 {
+	bool return_code = false;
 
 #if SYSTEM_HAS_BATTERY == 1
 	if (state_change_request || (stateBattery_next != stateBattery)) {
@@ -105,8 +106,6 @@ bool async_battery_communication()
 		bat_connected = true;
 	}
 
-	bool return_code = false;
-
 	if (update_request) {
 		update_request = false;
 		if (stateBattery != BMS_OFF__BAT_OFF) {
@@ -120,8 +119,8 @@ bool async_battery_communication()
 					bat_comm_fail_cnt++;
 				}
 			}
-			return_code = true;
 		}
+		return_code = true;
 	}
 
 
