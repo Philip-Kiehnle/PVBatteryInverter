@@ -20,6 +20,7 @@
 #include "main.h"
 #include "app_openbootloader.h"
 #include "usart_interface.h"
+#include "rs485_interface.h"
 #include "flash_interface.h"
 #include "ram_interface.h"
 #include "optionbytes_interface.h"
@@ -36,6 +37,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 static OPENBL_HandleTypeDef USART_Handle;
+static OPENBL_HandleTypeDef RS485_Handle;
 static OPENBL_HandleTypeDef IWDG_Handle;
 
 static OPENBL_OpsTypeDef USART_Ops =
@@ -45,6 +47,15 @@ static OPENBL_OpsTypeDef USART_Ops =
   OPENBL_USART_ProtocolDetection,
   OPENBL_USART_GetCommandOpcode,
   OPENBL_USART_SendByte
+};
+
+static OPENBL_OpsTypeDef RS485_Ops =
+{
+  OPENBL_RS485_Configuration,
+  NULL,
+  OPENBL_RS485_ProtocolDetection,
+  OPENBL_RS485_GetCommandOpcode,
+  OPENBL_RS485_SendByte
 };
 
 static OPENBL_OpsTypeDef IWDG_Ops =
@@ -80,6 +91,12 @@ void OpenBootloader_Init(void)
   USART_Handle.p_Cmd = OPENBL_USART_GetCommandsList();
 
   OPENBL_RegisterInterface(&USART_Handle);
+
+  /* Register UART_RS485 interfaces */
+  RS485_Handle.p_Ops = &RS485_Ops;
+  RS485_Handle.p_Cmd = OPENBL_RS485_GetCommandsList();
+
+  OPENBL_RegisterInterface(&RS485_Handle);
 
   /* Register IWDG interfaces */
   IWDG_Handle.p_Ops = &IWDG_Ops;
