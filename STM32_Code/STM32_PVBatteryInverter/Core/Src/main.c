@@ -231,10 +231,13 @@ void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
 	fill_monitor_vars_dc(mon_vars);
 	fill_monitor_vars_ac(mon_vars);
 
-	const batteryStatus_t* battery = get_batteryStatus();
 	mon_vars->p_ac_ref = ctrl_ref.p_ac_rms;
+
+#if SYSTEM_HAS_BATTERY == 1
+	const batteryStatus_t* battery = get_batteryStatus();
 	mon_vars->bat_p = battery->power_W;
 	mon_vars->bat_soc = battery->soc;
+#endif //SYSTEM_HAS_BATTERY
 }
 
 
@@ -804,10 +807,12 @@ int main(void)
 			itoa(stateDC, Tx_Buffer, 10);
 			Tx_len=strlen(Tx_Buffer);
 			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+#if SYSTEM_HAS_BATTERY == 1
 			uSend("; ");
 			itoa(get_stateBattery(), Tx_Buffer, 10);
 			Tx_len=strlen(Tx_Buffer);
 			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+#endif //SYSTEM_HAS_BATTERY
 
 			uSend("\nAC ");
 			itoa(stateAC, Tx_Buffer, 10);
@@ -819,6 +824,7 @@ int main(void)
 			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
 			uSend("\n");
 
+#if SYSTEM_HAS_BATTERY == 1
 			uSend("Vbat ");
 			const batteryStatus_t* battery = get_batteryStatus();
 			uSend_100m(battery->voltage_100mV);
@@ -827,6 +833,7 @@ int main(void)
 			uSend("  ");
 			uSend_1m(battery->maxVcell_mV);
 			uSend("\n");
+#endif //SYSTEM_HAS_BATTERY
 
 	//		uSend("VdcFBboost_sinc ");
 	//		uSend_100m(VdcFBboost_sincfilt_100mV);
@@ -856,6 +863,7 @@ int main(void)
 			uSendInt(get_p_ac_filt50Hz());
 			uSend("\n");
 
+#if SYSTEM_HAS_BATTERY == 1
 			uSend("Pb ");
 			uSendInt(battery->power_W);
 			uSend("\n");
@@ -863,7 +871,8 @@ int main(void)
 			uSend("SoC ");
 			uSendInt(battery->soc);
 			uSend("\n");
-		//
+#endif //SYSTEM_HAS_BATTERY
+
 		//	uSend("iac ");
 		//	uSend_10m(iac_10mA);
 		//	uSend("\n");

@@ -69,8 +69,9 @@ void pi_step(int32_t x, piController *ctrl)
 // PI voltage controller for DC-link capacitor
 //
 // model predictive current controller as PT1 element
-//#define Tsigma (3*T)
-#define Tsigma (3*T + 0.005)  // instead of 100Hz filter, increase Tsigma
+//#define Tsigma (3*T)  // use with 100Hz compensator, still INSTABLE in simulation
+#define Tsigma (3*T + 0.0025)
+//#define Tsigma (3*T + 0.005)  // instead of 100Hz filter, increase Tsigma used until 24.3.2024
 //#define Tsigma (3*T + 0.01)  // instead of 100Hz filter, increase Tsigma 43ms rise with a=3  76ms rise with a=6
 #define EXTEND_PI_VDC 16
 
@@ -332,6 +333,21 @@ piController piCtrl = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VD
 int16_t step_pi_Vdc2IacAmp(int32_t vdc_ref, int32_t vdc)
 {
 	pi_step((vdc-vdc_ref), &piCtrl);  // no ripple comp
+
+	return (piCtrl.y>>EXTEND_PI_VDC);
+}
+
+int16_t step_pi_Vdc2IacAmp_volt_comp(int32_t vdc_ref, int32_t vdc, int16_t phase, int16_t v_ac_amp)
+{
+	// V2: simple 100 Hz capacitor ripple compensation in steady state
+#define EXTEND_FXP_V2 5
+	int32_t i_ref_amp = (piCtrl.y>>EXTEND_PI_VDC);
+    const uint16_t coef = CAPACITANCE*4*2*M_PI*FGRID * pow(2,EXTEND_FXP_V2);  // 15.58
+	int32_t vc_ac = ((v_ac_amp*i_ref_amp)<<EXTEND_FXP_V2)/(vdc_ref*coef) * sin1((int16_t)(2*phase));
+
+	int32_t vdc_comp = vdc + (vc_ac>>(EXTEND_FXP_V2+15));
+
+	pi_step((vdc_comp-vdc_ref), &piCtrl);  // 100Hz ripple comp
 
 	return (piCtrl.y>>EXTEND_PI_VDC);
 }

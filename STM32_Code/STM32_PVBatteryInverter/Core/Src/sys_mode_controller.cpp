@@ -12,7 +12,7 @@
 //#include "battery/STW_mBMS.hpp"
 #include "battery/ETI_DualBMS.hpp"
 
-#define SYS_MODE HYBRID_PCC_SENSOR
+
 enum mode_t sys_mode = SYS_MODE;
 static uint32_t cnt_rel_1Hz;
 extern volatile uint32_t cnt_1Hz;
@@ -36,7 +36,9 @@ static inline void nextMode(enum mode_t mode)
 
 void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 {
+#if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
+#endif //SYSTEM_HAS_BATTERY
 
 	switch (sys_mode) {
 		   case OFF:
@@ -44,8 +46,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			ctrl_ref->v_dc_100mV = 0;
 			sys_mode_needs_battery = false;
 
-			// stay in OFF mode for 4 minutes to discharge DC bus
-			if ( cnt_1Hz > (cnt_rel_1Hz+(4*60)) ) {
+			// stay in OFF mode for 5 minutes to discharge DC bus
+			if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) ) {
 				nextMode(SYS_MODE);
 			}
 			break;
@@ -61,6 +63,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			sys_mode_needs_battery = false;
 
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
+			     && (SYS_MODE != PV2AC)  // without battery, the only other mode is OFF
 			     && ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50  // feedin required
 			   ) {
 				nextMode(SYS_MODE);
@@ -74,6 +77,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			}
 			break;
 
+#if SYSTEM_HAS_BATTERY == 1
 		  case PV2BAT:
 			ctrl_ref->v_dc_100mV = battery->voltage_100mV;
 			ctrl_ref->mode = AC_OFF;
@@ -104,7 +108,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					|| battery->soc == 100 || battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV()  // or battery is full
 				) {
 					// todo if Ppv > Pbat_charge_max activate feedin
-					if (   ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50  // feedin required; filter 1 second spikes from freezer motor start
+					if (   (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required; filter 1 second spikes from freezer motor start
 						|| ctrl_ref->mode == PAC_CONTROL_PCC || ctrl_ref->mode == PAC_CONTROL_V_BAT_CONST  // or already in feedin mode
 						) {
 						if (battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV()) {
@@ -152,6 +156,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			ctrl_ref->v_dc_100mV = battery->voltage_100mV;
 			sys_mode_needs_battery = true;
 			break;
+#endif //SYSTEM_HAS_BATTERY
 
 		  default:
 			break;

@@ -114,7 +114,7 @@ uint16_t calc_v_amp_pred(uint32_t i_amp, int32_t i_ac_100mA);
 int16_t get_IacPhase();
 int32_t step_predict_i(int32_t i_ref, int32_t i);
 int16_t step_pi_Vdc2IacAmp(int32_t vdc_ref, int32_t vdc);
-int16_t step_pi_Vdc2IacAmp_volt_comp(int32_t vdc_ref, int32_t vdc, int16_t phase);
+int16_t step_pi_Vdc2IacAmp_volt_comp(int32_t vdc_ref, int32_t vdc, int16_t phase, int16_t v_ac_amp);
 int16_t step_pi_Vdc2IacAmp_charge_comp(int32_t vdc_ref, int32_t vdc, int32_t vac_sec_VDCscale, int32_t i_ref_VDCscale);
 
 int16_t sin1(int16_t angle);

@@ -20,7 +20,7 @@ static stateBattery_t stateBattery;
 static uint16_t bat_comm_fail_cnt;
 static bool bat_connected;
 
-
+#if SYSTEM_HAS_BATTERY == 1
 const batteryStatus_t* get_batteryStatus()
 {
 	 return &bms.batteryStatus;
@@ -45,6 +45,7 @@ const bool battery_connected()
 {
 	return bat_connected;
 }
+#endif //SYSTEM_HAS_BATTERY
 
 
 void battery_update_request()
@@ -122,8 +123,11 @@ bool async_battery_communication()
 		}
 		return_code = true;
 	}
-
-
-#endif
+#else
+	if (update_request) {
+		update_request = false;
+		return_code = true;
+	}
+#endif //SYSTEM_HAS_BATTERY
 	return return_code;
 }
