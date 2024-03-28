@@ -14,9 +14,13 @@ extern "C" {
 //#define VDC_BOOST_START_100mV 240*10  // 8*30V minimum voltage of DC bus to start DC booster stage
 //#define VDC_BOOST_STOP_100mV 200*10  // 8*25V  minimum voltage of DC bus to keep booster stage running
 
+// for debugging
+//#define VDC_BOOST_START_100mV 32*10
+//#define VDC_BOOST_STOP_100mV 25*10
 
-#define VDC_BOOST_START_100mV 32*10
-#define VDC_BOOST_STOP_100mV 25*10
+// for autonomous operation
+#define VDC_BOOST_START_100mV 35.8*10  // PV-Panel: Voc(STC)=46.30V Voc(NOCT)=43.70V; morning Voc=35.7V
+#define VDC_BOOST_STOP_100mV 26*10
 
 #define VDC_TOLERANCE_100mV 2*10  // 2V tolerance for connecting battery
 

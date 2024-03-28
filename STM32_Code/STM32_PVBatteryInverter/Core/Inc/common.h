@@ -8,6 +8,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+//#define SYS_MODE HYBRID_PCC_SENSOR
+#define SYS_MODE PV2AC
+
+#define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
+#define SYSTEM_HAS_BATTERY 0
+
 #define E_VDC_MAX_100mV 58*10   // worst case for battery if BMS fails: 58V / 15cells = 3.87V
 #define E_VDC_MAX_MPPT_100mV 54*10  // 54V / 15cells = 3.6V
 //#define E_VDC_MAX_FB_GRID_100mV 4000  // 400/96 = 4.16Vcell
@@ -30,9 +36,6 @@
 #define CYCLES_cnt20kHz_20ms (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT)
 
 #define AC_CTRL_FREQ DC_CTRL_FREQ
-
-#define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
-#define SYSTEM_HAS_BATTERY 1
 
 #define V_TO_100mV(x)  (10*x)
 

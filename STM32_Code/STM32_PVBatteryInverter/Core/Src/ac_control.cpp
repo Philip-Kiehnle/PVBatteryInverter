@@ -112,15 +112,15 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	static uint8_t cnt_dc_offset = 0;
 
 	int v_dcCtrl_mV = 0;
-	static int v_dcCtrl_I_mV;
-	static int16_t i_ac_dc_offset_mA;
+	//static int v_dcCtrl_I_mV;
+	//static int16_t i_ac_dc_offset_mA;
 
 	if (cnt20kHz_20ms == 0) {
 		v_ac_amp_filt50Hz_100mV = v_ac_amp_sum/CYCLES_cnt20kHz_20ms;
 		//v_ac_rms_filt50Hz_100mV = ((float)v_ac_amp_filt50Hz_100mV) / M_SQRT2;
 		v_ac_amp_sum = 0;
 
-		i_ac_dc_offset_mA = (i_ac_sum*10)/CYCLES_cnt20kHz_20ms;
+		//i_ac_dc_offset_mA = (i_ac_sum*10)/CYCLES_cnt20kHz_20ms;
 
 		if ( i_ac_sum > (E_I_AC_DC_OFFSET_MAX_10mA*CYCLES_cnt20kHz_20ms) ) {
 			i_ac_sum = 0;
@@ -144,7 +144,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	// sinc filter adds average delay of 16/20kHz = 0.8ms. New sample 0.4ms up to 1.2ms
 	static uint16_t v_dc_modulator_100mV;
 	//static int16_t delta_v_prev8_10mV;
-	static int16_t delta_v_10mV;
+	//static int16_t delta_v_10mV;
 
 	int p_ac_mW = -i_ac_10mA*v_ac_100mV;
 #define BATTERY_FACTOR_PERCENT 20  // define part of 100Hz ripple which is taken by battery
@@ -285,7 +285,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 		  // todo implement islanding detection in GRID_CONNECTING
 		piCtrl.y = 0;
 		piCtrl.x_prev = 0;
-		v_dcCtrl_I_mV = 0;
+		//v_dcCtrl_I_mV = 0;
 		gatedriverAC(1);
 		nextState(GRID_SYNC);
 		break;
@@ -334,7 +334,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 			  case VDC_CONTROL:
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10 );
-				//i_ref_amp = step_pi_Vdc2IacAmp_volt_comp( VDC_REF_RAW, Vdc_filt, phase );
+				//i_ac_amp_10mA = step_pi_Vdc2IacAmp_volt_comp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10, phase, 10*v_ac_amp_filt50Hz_100mV);
 				break;
 
 			  case VDC_VARIABLE_CONTROL:
@@ -342,6 +342,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 				// sine in modern power grid is flattened -> no extra headroom needed
 				uint32_t v_dc_ref_10mV = 10*v_ac_amp_filt50Hz_100mV + ((R*64)*i_ac_amp_10mA)/64;
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_10mV, v_dc_sinc_mix_100mV*10 );
+				//i_ac_amp_10mA = step_pi_Vdc2IacAmp_volt_comp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10, phase, 10*v_ac_amp_filt50Hz_100mV);
 				break;
 			  }
 

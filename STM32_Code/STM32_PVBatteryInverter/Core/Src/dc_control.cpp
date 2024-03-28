@@ -161,7 +161,9 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	// 50Hz more robust: for critical increase from 400V to 500V in 20ms: 0.5*4*390uF*(500^2-400^2)/0.02 = 3.5kW
 	if (   v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_100mV
 		&& v_dc_FBboost_filt50Hz_100mV < E_VDC_MAX_100mV
+#if SYSTEM_HAS_BATTERY == 1
 		&& battery_maxVcell_OK()
+#endif //SYSTEM_HAS_BATTERY
 	   ) {
 		if (v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_START_100mV) {
 //	if (VdcFBboost_sincfilt_100mV > VDC_BOOST_STOP_100mV && VdcFBboost_sincfilt_100mV < E_VDC_MAX_100mV) {
@@ -254,10 +256,11 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			dutyLS1 = std::clamp(dutyLS1, (int16_t)0, (int16_t)MPPT_DUTY_ABSMAX);
 		}
 
-		if (   v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
-		    && v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
-		    && v_dc_filt50Hz*10            > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
-		    && v_dc_filt50Hz*10            < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
+		if (   (  v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
+		       && v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
+		       && v_dc_filt50Hz*10            > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
+		       && v_dc_filt50Hz*10            < (v_dc_ref_100mV+VDC_TOLERANCE_100mV))
+		    || (SYS_MODE==PV2AC && stateAC == GRID_SYNC)
 			){
 
 			if (sys_mode_needs_battery) {
@@ -281,9 +284,14 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		break;
 
 	  case MPPT:
+#if SYSTEM_HAS_BATTERY == 1
 		if (sys_mode_needs_battery && !battery_connected()) {
 			nextState(VOLTAGE_CONTROL);
-		} else if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
+			break;
+		}
+#endif //SYSTEM_HAS_BATTERY
+
+		if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
 			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
 			dutyLS1 = 0;
 			nextState(VOLTAGE_CONTROL);
