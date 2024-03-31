@@ -14,9 +14,8 @@ extern ETI_DualBMS bms;
 
 
 static volatile bool update_request;
-static volatile bool state_change_request;
-static volatile stateBattery_t stateBattery_next;
-static stateBattery_t stateBattery;
+static volatile stateBattery_t stateBattery_next = BMS_ON__BAT_OFF;
+static stateBattery_t stateBattery = BMS_ON__BAT_OFF;
 static uint16_t bat_comm_fail_cnt;
 static bool bat_connected;
 
@@ -45,6 +44,11 @@ const bool battery_connected()
 {
 	return bat_connected;
 }
+
+const bool battery_full()
+{
+	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV());
+}
 #endif //SYSTEM_HAS_BATTERY
 
 
@@ -57,7 +61,6 @@ void battery_update_request()
 void battery_state_request(stateBattery_t state)
 {
 	stateBattery_next = state;
-	state_change_request = true;
 }
 
 
@@ -65,9 +68,11 @@ void battery_state_request(stateBattery_t state)
 bool async_battery_communication()
 {
 	bool return_code = false;
+	static bool rate_limit = false;
 
 #if SYSTEM_HAS_BATTERY == 1
-	if (state_change_request || (stateBattery_next != stateBattery)) {
+	if ( (stateBattery_next != stateBattery) && !rate_limit) {
+		rate_limit = true;
 		switch (stateBattery_next) {
 		  case BMS_OFF__BAT_OFF:
 			  if (bms.batteryOff() == 0) {
@@ -94,20 +99,19 @@ bool async_battery_communication()
 			  }
 			  break;
 		}
-
-		state_change_request = false;
 	}
 
 	if ( stateBattery == BMS_ON__BAT_ON
 	     && (abs(bms.batteryStatus.power_W) > 2
-		 || (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
-		     && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5)
+			 || (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
+				 && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5)
 		)
 	) {
 		bat_connected = true;
 	}
 
 	if (update_request) {
+		rate_limit = false;
 		update_request = false;
 		if (stateBattery != BMS_OFF__BAT_OFF) {
 			if (bms.get_summary() == 0) {

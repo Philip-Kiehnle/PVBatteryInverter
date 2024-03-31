@@ -15,6 +15,15 @@ ETI_DualBMS::ETI_DualBMS(uint16_t address) : BaseBMS(address)
 }
 
 
+/******************/
+/* config section */
+/******************/
+
+//#define DUAL_BATTERY  // if two battery packs are used
+
+#define R_CELL_MILLIOHM (8+1) // internal resistance of cell and cell connector in mOhm
+#define PARALLEL_CELLS 1
+
 // LiitoKala 32700 7000mAh LiFePO4 battery: 35A cont. discharge, 55A max
 // curve was not available -> using Liitokala 32700 5.5Ah data from
 // https://www.kirich.blog/obzory/akkumulyatory/862-liitokala-32700-lifepo4-i-sravnenie-ih-s-analogichnymi-akkumulyatorami-varicore.html
@@ -52,14 +61,12 @@ void ETI_DualBMS::estimateSoC()
 
 	uint16_t avgVcell_mV = batteryStatus.voltage_100mV*100/battery_cells;  // 100mV resolution causes 5% SoC step at 69%
 
-#define R_CELL_MILLIOHM (8+1) // internal resistance of cell and cell connector in mOhm
-#define PARALLEL_CELLS 1
-        avgVcell_mV -= (R_CELL_MILLIOHM * (int32_t)current_mA)/PARALLEL_CELLS/1000;  // current compensation: I>0 means charging
-        for (int soc=1; soc<=100; soc++) {
-            if (avgVcell_mV >= (SoC_lookup_table[soc-1]+charge_comp_mV)) {
-                batteryStatus.soc = soc;  // todo max soc change 1
-            }
-        }
+	avgVcell_mV -= (R_CELL_MILLIOHM * (int32_t)current_mA)/PARALLEL_CELLS/1000;  // current compensation: I>0 means charging
+	for (int soc=1; soc<=100; soc++) {
+		if (avgVcell_mV >= (SoC_lookup_table[soc-1]+charge_comp_mV)) {
+			batteryStatus.soc = soc;  // todo max soc change 1
+		}
+	}
 }
 
 
@@ -96,9 +103,10 @@ int ETI_DualBMS::get_summary()
         }
 
         if (crc != dual_bms_tmp->crc) {
-            //std::cout << "[ETI_DualBMS::get_summary] crc=" << crc << "!=" << dual_bms.crc << "dual_bms.crc" << std::endl;
-            return -1;
+            //std::cout << "[ETI_DualBMS::get_summary] crc=" << crc << " != " << dual_bms_tmp->crc << "=dual_bms_tmp->crc" << std::endl;
+            return -2;
         } else {
+            //std::cout << "[ETI_DualBMS::get_summary] crc=" << crc << " == " << dual_bms_tmp->crc << "=dual_bms_tmp->crc" << std::endl;
             // copy if checksum of received struct is okay
             for (unsigned int i=0; i<sizeof(dual_bms); i++) {
                 ((char*)&dual_bms)[i] = rx_msg.data[i];
@@ -117,6 +125,7 @@ int ETI_DualBMS::get_summary()
         batteryStatus.maxVcell_mV = std::max(dual_bms.battery[0].vCell_max_mV, dual_bms.battery[1].vCell_max_mV);
 
         int8_t temperature_bat0 = dual_bms.battery[0].temperatureBattery;
+#ifdef DUAL_BATTERY
         int8_t temperature_bat1 = dual_bms.battery[1].temperatureBattery;
 
         // if only one sensor is connected
@@ -127,7 +136,11 @@ int ETI_DualBMS::get_summary()
 
         batteryStatus.minTemp = std::min(temperature_bat0, temperature_bat1);
         batteryStatus.maxTemp = std::max(temperature_bat0, temperature_bat1);
-        
+#else
+        batteryStatus.minTemp = temperature_bat0;
+        batteryStatus.maxTemp = temperature_bat0;
+#endif //DUAL_BATTERY
+
         return 0;
     }
 
@@ -297,6 +310,25 @@ int ETI_DualBMS::batteryOff()
         return -1;
     }
     return 0;
+}
+
+
+bool ETI_DualBMS::tempLowWarn()
+{
+	return false;  // TODO
+	//return (batteryStatus.minTemp <= T_CELL_MIN_WARN());
+}
+
+bool ETI_DualBMS::tempHighWarn()
+{
+	return false; //TODO
+	//return (batteryStatus.maxTemp >= T_CELL_MAX_WARN());
+}
+
+bool ETI_DualBMS::tempWarn()
+{
+	return false;//TODO
+	//return (tempLowWarn() || tempHighWarn());
 }
 
 

@@ -288,6 +288,7 @@ void shutdownAll()
 	battery_state_request(BMS_OFF__BAT_OFF);
 }
 
+int el_meter_status;
 
 void calc_and_wait(uint32_t delay)
 {
@@ -310,7 +311,7 @@ void calc_and_wait(uint32_t delay)
 #if DUMMY_METER == 1
 		int el_meter_status = EL_METER_OKAY;
 #else
-		int el_meter_status = electricity_meter_read(huart_rs485);
+		el_meter_status = electricity_meter_read(huart_rs485);
 #endif //DUMMY_METER
 		//HAL_UART_Abort_IT(&huart1);
 		if ( el_meter_status == EL_METER_OKAY) {
@@ -808,7 +809,7 @@ int main(void)
 			Tx_len=strlen(Tx_Buffer);
 			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
 #if SYSTEM_HAS_BATTERY == 1
-			uSend("; ");
+			uSend(" Bat ");
 			itoa(get_stateBattery(), Tx_Buffer, 10);
 			Tx_len=strlen(Tx_Buffer);
 			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
@@ -857,6 +858,9 @@ int main(void)
 
 			uSend("Ppcc ");
 			uSendInt(ctrl_ref.p_pcc);
+			if ( el_meter_status == EL_METER_CONN_ERR ) {
+				uSend(" connErr");
+			}
 			uSend("\n");
 
 			uSend("Pac ");
