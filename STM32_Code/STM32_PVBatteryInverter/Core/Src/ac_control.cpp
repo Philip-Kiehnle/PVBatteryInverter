@@ -346,11 +346,11 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 				break;
 			  }
 
-			  case PAC_CONTROL_V_BAT_CONST:
+			  case PAC_CONTROL_V_P_BAT_CONST:
 			  case PAC_CONTROL_PCC:
 			  {
 				static uint16_t p_extra_100mW;
-				if (ctrl_ref.mode == PAC_CONTROL_V_BAT_CONST) {
+				if (ctrl_ref.mode == PAC_CONTROL_V_P_BAT_CONST) {
 				  if (p_extra_100mW < 1500*10) p_extra_100mW += 1;
 				} else {
 				  if (p_extra_100mW > 0) p_extra_100mW -= 1;

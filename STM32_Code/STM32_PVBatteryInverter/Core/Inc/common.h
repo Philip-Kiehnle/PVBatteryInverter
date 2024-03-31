@@ -8,11 +8,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-//#define SYS_MODE HYBRID_PCC_SENSOR
-#define SYS_MODE PV2AC
+#define SYS_MODE HYBRID_PCC_SENSOR
+//#define SYS_MODE PV2AC
 
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
-#define SYSTEM_HAS_BATTERY 0
+#define SYSTEM_HAS_BATTERY 1
 
 #define E_VDC_MAX_100mV 58*10   // worst case for battery if BMS fails: 58V / 15cells = 3.87V
 #define E_VDC_MAX_MPPT_100mV 54*10  // 54V / 15cells = 3.6V
@@ -26,8 +26,8 @@
 #define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
-#define P_AC_MAX 210  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
- // todo 200 for energy packet controller
+#define P_AC_MAX 210  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA; todo 200 for energy packet controller
+#define P_BAT_MAX 70  // C=0.25 for maximum battery life
 
 #define DEF_MPPT_DUTY_ABSMAX 4250
 
@@ -41,6 +41,7 @@
 
 
 enum mode_t {OFF, PV2AC, PV2BAT, HYBRID_PCC_SENSOR, HYBRID_REMOTE_CONTROLLED};
+enum stateHYBRID_AC_t {HYB_AC_OFF, HYB_AC_ALLOWED, HYB_AC_ON};
 
 enum stateDC_t {INIT_DC, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR_DC, MPPT};
 enum stateAC_t {INIT_AC, WAIT_AC_DC_VOLTAGE, WAIT_ZERO_CROSSING, CLOSE_CONTACTOR_AC, WAIT_CONTACTOR_AC, GRID_CONNECTING, GRID_SYNC};
@@ -53,7 +54,7 @@ typedef enum
 	VDC_CONTROL,
 	VDC_VARIABLE_CONTROL,  // keeps DC voltage just above AC amplitude
 	PAC_CONTROL_PCC,  // control point of common coupling to zero
-	PAC_CONTROL_V_BAT_CONST  // keeps max battery cell below protect limit
+	PAC_CONTROL_V_P_BAT_CONST  // keeps max battery charge power or Vcell below protect limit
 } ac_ctrl_mode_t;
 
 typedef struct {

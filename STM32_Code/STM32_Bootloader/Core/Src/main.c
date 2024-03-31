@@ -94,6 +94,23 @@ int main(void)
   /* USER CODE BEGIN SysInit */
 
   MX_GPIO_Init();
+
+  // both LEDs turn on in bootloader automatically
+  //GPIOB->BRR = (1<<1);  // enable green LED
+  //GPIOB->BSRR = (1<<1);  // disable green LED
+
+  // check emergency button:
+  HAL_Delay(1000);  // 1sec; 10ms should be enough
+  // released means pin high -> boot application
+  // pressed means pin low -> stay in bootloader
+  if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
+	// prevent noise
+    if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
+	// start application
+	OPENBL_FLASH_JumpToAddress(0x8000000+0x00008000U);
+    }
+  }
+
   OpenBootloader_Init();
 
   /*******************/
@@ -118,21 +135,6 @@ int main(void)
   if (HAL_RS485Ex_Init(&huart5, UART_DE_POLARITY_HIGH, 0, 0) != HAL_OK)
   {
     Error_Handler();
-  }
-
-  // both LEDs turn on in bootloader automatically
-  //GPIOB->BRR = (1<<1);  // enable green LED
-  //GPIOB->BSRR = (1<<1);  // disable green LED
-
-  // check emergency button:
-  // released means pin high -> boot application
-  // pressed means pin low -> stay in bootloader
-  if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
-	// prevent noise
-    if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
-	// start application
-	OPENBL_FLASH_JumpToAddress(0x8000000+0x00008000U);
-    }
   }
 
   /* Infinite loop */

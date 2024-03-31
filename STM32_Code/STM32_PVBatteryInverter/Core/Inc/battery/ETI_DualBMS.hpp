@@ -20,6 +20,10 @@ public:
     virtual int batteryOff() override;
     virtual void estimateSoC() override;
 
+    virtual bool tempLowWarn() override;
+    virtual bool tempHighWarn() override;
+    virtual bool tempWarn() override;
+
     int custom_string_query(std::string custom_string);
 
     DualBMS dual_bms;
@@ -40,6 +44,19 @@ public:
     }
     uint16_t V_CELL_MAX_PROTECT_mV() const override {
         return 3560; // BMS OV_THRESHOLD_mV 3600
+    }
+
+    int8_t T_CELL_MIN_ERR() const override {
+    	return 1;  // BMS limit 0°C
+    }
+    int8_t T_CELL_MIN_WARN() const override {
+    	return 2;
+    }
+    int8_t T_CELL_MAX_WARN() const override {
+    	return 43;
+    }
+    int8_t T_CELL_MAX_ERR() const override {
+    	return 44;  // BMS limit 45°C
     }
 
     float V_CHARGE_STOP() const override {

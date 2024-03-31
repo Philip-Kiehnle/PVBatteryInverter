@@ -23,6 +23,11 @@ public:
     virtual int batteryOn() = 0;
     virtual int batteryOff() = 0;
     virtual void estimateSoC() = 0;
+
+    virtual bool tempLowWarn() = 0;
+    virtual bool tempHighWarn() = 0;
+    virtual bool tempWarn() = 0;
+
     // virtual int query_data(char* target_addr, unsigned int len) = 0;
     // virtual int custom_query(unsigned int response_len) = 0;
     // virtual int custom_string_query(std::string custom_string) = 0;
@@ -40,6 +45,10 @@ public:
     virtual uint16_t V_CELL_MIN_POWER_REDUCE_mV() const = 0;
     virtual uint16_t V_CELL_MAX_POWER_REDUCE_mV() const = 0;
     virtual uint16_t V_CELL_MAX_PROTECT_mV() const = 0;
+    virtual int8_t T_CELL_MIN_ERR() const = 0;
+    virtual int8_t T_CELL_MIN_WARN() const = 0;
+    virtual int8_t T_CELL_MAX_WARN() const = 0;
+    virtual int8_t T_CELL_MAX_ERR() const = 0;
 
     virtual float V_CHARGE_STOP() const = 0;
     virtual float V_MAX_PROTECT() const = 0;

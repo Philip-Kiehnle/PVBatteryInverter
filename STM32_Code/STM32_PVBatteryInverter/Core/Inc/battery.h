@@ -15,6 +15,7 @@
 typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON} stateBattery_t;
 
 const bool battery_connected();
+const bool battery_full();
 const bool battery_maxVcell_OK();
 const stateBattery_t get_stateBattery();
 const batteryStatus_t* get_batteryStatus();

@@ -42,7 +42,10 @@ uint16_t serial_read(int serial_fd_, char* data, int size, int timeout_usec)
 
 // V1b: use HAL function
 	uint16_t rx_len = 0;
-	HAL_UARTEx_ReceiveToIdle(&huart5, (uint8_t *)data, size, &rx_len, timeout_usec/1000);
+	HAL_StatusTypeDef status = HAL_UARTEx_ReceiveToIdle(&huart5, (uint8_t *)data, size, &rx_len, timeout_usec/1000);
+	if (status != HAL_OK) {
+		//todo
+	}
 	return rx_len;
 
 
