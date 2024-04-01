@@ -349,13 +349,15 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 			  case PAC_CONTROL_V_P_BAT_CONST:
 			  case PAC_CONTROL_PCC:
 			  {
-				static uint16_t p_extra_100mW;
+				static int32_t p_extra_1mW;
+#define BATTERY_LIMIT_STEP 1  // for 400W PV panel  // 20kHz×1sec÷1000mW * 1/sec = 20Watt/sec
+//#define BATTERY_LIMIT_STEP 8  // for 3kW PV plant  // 20kHz×1sec÷1000mW * 8/sec = 160Watt/sec
 				if (ctrl_ref.mode == PAC_CONTROL_V_P_BAT_CONST) {
-				  if (p_extra_100mW < 1500*10) p_extra_100mW += 1;
+				  if (p_extra_1mW < (1500*1000)) p_extra_1mW += BATTERY_LIMIT_STEP;
 				} else {
-				  if (p_extra_100mW > 0) p_extra_100mW -= 1;
+				  if (p_extra_1mW > 0) p_extra_1mW -= BATTERY_LIMIT_STEP;
 				}
-				ctrl_ref.p_ac_rms = ctrl_ref.p_ac_rms_pccCtrl + p_extra_100mW/10;
+				ctrl_ref.p_ac_rms = ctrl_ref.p_ac_rms_pccCtrl + (p_extra_1mW/1000);
 
 				// use power reference from power controller
 				int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;

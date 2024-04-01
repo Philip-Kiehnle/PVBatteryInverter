@@ -117,12 +117,6 @@ int ETI_DualBMS::get_summary()
         batteryStatus.soc = (dual_bms.battery[0].soc + dual_bms.battery[1].soc) / 2;
         batteryStatus.power_W = (float)dual_bms.battery[0].voltage_mV /1000 * ((float)dual_bms.battery[0].current_mA) /1000
                                 +(float)dual_bms.battery[1].voltage_mV /1000 * ((float)dual_bms.battery[1].current_mA) /1000;
-        if (dual_bms.battery[1].vCell_min_mV == 0) {  // todo find better solution for single pack
-        	batteryStatus.minVcell_mV = dual_bms.battery[0].vCell_min_mV;
-        } else {
-            batteryStatus.minVcell_mV = std::min(dual_bms.battery[0].vCell_min_mV, dual_bms.battery[1].vCell_min_mV);
-        }
-        batteryStatus.maxVcell_mV = std::max(dual_bms.battery[0].vCell_max_mV, dual_bms.battery[1].vCell_max_mV);
 
         int8_t temperature_bat0 = dual_bms.battery[0].temperatureBattery;
 #ifdef DUAL_BATTERY
@@ -136,9 +130,14 @@ int ETI_DualBMS::get_summary()
 
         batteryStatus.minTemp = std::min(temperature_bat0, temperature_bat1);
         batteryStatus.maxTemp = std::max(temperature_bat0, temperature_bat1);
+
+        batteryStatus.minVcell_mV = std::min(dual_bms.battery[0].vCell_min_mV, dual_bms.battery[1].vCell_min_mV);
+        batteryStatus.maxVcell_mV = std::max(dual_bms.battery[0].vCell_max_mV, dual_bms.battery[1].vCell_max_mV);
 #else
         batteryStatus.minTemp = temperature_bat0;
         batteryStatus.maxTemp = temperature_bat0;
+        batteryStatus.minVcell_mV = dual_bms.battery[0].vCell_min_mV;
+        batteryStatus.maxVcell_mV = dual_bms.battery[0].vCell_max_mV;
 #endif //DUAL_BATTERY
 
         return 0;
@@ -160,6 +159,7 @@ int ETI_DualBMS::query_data(char* target_addr, unsigned int len)
 
     return -1;
 }
+
 
 int ETI_DualBMS::get_cellStack(uint8_t pack)
 {
@@ -315,20 +315,17 @@ int ETI_DualBMS::batteryOff()
 
 bool ETI_DualBMS::tempLowWarn()
 {
-	return false;  // TODO
-	//return (batteryStatus.minTemp <= T_CELL_MIN_WARN());
+	return (batteryStatus.minTemp <= T_CELL_MIN_WARN());
 }
 
 bool ETI_DualBMS::tempHighWarn()
 {
-	return false; //TODO
-	//return (batteryStatus.maxTemp >= T_CELL_MAX_WARN());
+	return (batteryStatus.maxTemp >= T_CELL_MAX_WARN());
 }
 
 bool ETI_DualBMS::tempWarn()
 {
-	return false;//TODO
-	//return (tempLowWarn() || tempHighWarn());
+	return (tempLowWarn() || tempHighWarn());
 }
 
 
