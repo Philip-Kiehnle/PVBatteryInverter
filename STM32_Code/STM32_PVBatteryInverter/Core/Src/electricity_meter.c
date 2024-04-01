@@ -80,7 +80,8 @@ el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 	HAL_UARTEx_ReceiveToIdle(huart, (uint8_t *)&rx_buf[n_msg], BYTES_PER_READ, &rx_len, 2);  // 2ms timeout
 
 	if (rx_len == 0) {
-		if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*200) {  // 1sec/2ms = 500 but takes longer -> 200
+		//if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*200) {  // 1sec/2ms = 500 but takes longer -> 200
+		if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*500) {
 			smart_meter_no_comm_cnt++;
 		} else {
 			el_meter_status = EL_METER_CONN_ERR;
@@ -124,7 +125,7 @@ el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 				smart_meter_no_comm_cnt = 0;
 				el_meter_status = EL_METER_OKAY;
 			} else {
-				if (smart_meter_err_cnt > 20) {  // 20 sec without successful read triggers error
+				if (smart_meter_err_cnt > COMM_ERR_TIMEOUT_SEC) {  // 20 sec without successful read triggers error
 					el_meter_status = EL_METER_CONN_ERR;
 				} else {
 					smart_meter_err_cnt++;

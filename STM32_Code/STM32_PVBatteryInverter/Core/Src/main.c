@@ -293,14 +293,17 @@ int el_meter_status;
 void calc_and_wait(uint32_t delay)
 {
 	resetWatchdog();
+	calc_async_dc_control();
+
+#if COMM_READ_ELECTRICITY_METER == 0
 	for (uint32_t i=0; i<delay; i++) {
 		calc_async_dc_control();
-#if COMM_READ_ELECTRICITY_METER == 0
 		if (!monitoring_binary_en) {
 			HAL_Delay(1);  //ms
 		}
-#endif
 	}
+#endif
+
 
 #if COMM_READ_ELECTRICITY_METER == 1
 	UART_HandleTypeDef* huart_rs485 = &huart5;
@@ -660,7 +663,7 @@ int main(void)
   /* Clear reset flags anyway */
   __HAL_RCC_CLEAR_RESET_FLAGS();
 
-  bool uart_output_text = true;
+  bool uart_output_text = false;
   bool uart_input_text = true;
 
 
@@ -858,8 +861,10 @@ int main(void)
 
 			uSend("Ppcc ");
 			uSendInt(ctrl_ref.p_pcc);
-			if ( el_meter_status == EL_METER_CONN_ERR ) {
+			if (el_meter_status == EL_METER_CONN_ERR) {
 				uSend(" connErr");
+			} else if (el_meter_status == EL_METER_CONN_WARN) {
+				uSend(" connWarn");
 			}
 			uSend("\n");
 
@@ -916,7 +921,13 @@ int main(void)
 	HAL_UART_Receive(&huart3, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
 
 	if (uart_input_text) {
-		if (rx_buf == 'm') {
+		if (rx_buf == 'p') {
+			uSend("Print ENABLE\n");
+			uart_output_text = true;
+		} else if (rx_buf == 'd') {
+			uSend("Print DISABLE\n");
+			uart_output_text = false;
+		} else if (rx_buf == 'm') {
 			uSend("Monitoring ENABLE\n");
 			monitoring_binary_en = true;
 			uart_output_text = false;
