@@ -134,10 +134,13 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						break;
 
 					case HYB_AC_ON:
+					{
+						int p_bat_50Hz = get_p_dc_filt50Hz() - get_p_ac_filt50Hz();
+
 						if (!battery_connected()) {  // AC already on but battery reconnect because previous mode was PV2AC
 							// wait until battery is connected
 						} else if (   battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV()  // Ppcc + extra power for constant battery voltage
-								   || battery->power_W >= P_BAT_MAX  // Ppcc + extra power for constant battery power
+								   || p_bat_50Hz >= P_BAT_MAX  // Ppcc + extra power for constant battery power
 							) {
 							ctrl_ref->mode = PAC_CONTROL_V_P_BAT_CONST;
 						} else {
@@ -165,16 +168,21 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 									    || bms.tempHighWarn()
 									   )
 						   ) {
-							ctrl_ref->mode = AC_OFF;
-							sys_mode_needs_battery = false;
-							contactorBattery(0);
-							bmsPower(0);
-							//battery_state_request(BMS_OFF__BAT_OFF);
-							battery_state_request(BMS_ON__BAT_OFF);
-							nextMode(OFF);
-							stateHYBRID_AC = HYB_AC_OFF;
+							if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {  // prevent system shutdown during sunrise
+								ctrl_ref->mode = AC_PASSIVE;
+							} else {
+								ctrl_ref->mode = AC_OFF;
+								sys_mode_needs_battery = false;
+								contactorBattery(0);
+								bmsPower(0);
+								//battery_state_request(BMS_OFF__BAT_OFF);
+								battery_state_request(BMS_ON__BAT_OFF);
+								nextMode(OFF);
+								stateHYBRID_AC = HYB_AC_OFF;
+							}
 						}
 						break;
+					}
 					default:
 						stateHYBRID_AC = HYB_AC_OFF;
 						break;
