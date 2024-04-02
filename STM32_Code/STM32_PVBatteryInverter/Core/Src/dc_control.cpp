@@ -22,7 +22,7 @@
 volatile bool sys_mode_needs_battery = false;
 extern volatile uint16_t v_dc_ref_100mV;
 
-volatile uint16_t debug_duty;
+volatile uint16_t debug_dutyHS;
 
 // configure PV system and PWM dutycycle parameters of microcontroller here:
 
@@ -57,10 +57,10 @@ constexpr pvModule_t PVMODULE = pvModule_t{
 constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
 //	.vin_min = 0.33*31,  // 1/3 module * 31V
 	.vin_min = 0.2*31,  // 20% * Vmodule
-	.vin_max = 2*53,  // 2 modules * 53V
-	.vout_min = 40,
+	.vin_max = 1*53,  // 1 module * 53V
+	.vout_min = 38,
 	.vout_max = 58,
-	.nr_pv_modules = 2,
+	.nr_pv_modules = 1,
 	.nr_substring_search_per_interval = 1
 };
 
@@ -116,11 +116,16 @@ uint16_t get_v_dc_FBboost_filt50Hz_100mV()
 }
 
 
+float get_p_dc_filt50Hz()
+{
+	return p_dc_filt50Hz;
+}
+
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 {
 	mon_vars->stateDC = stateDC;
 	mon_vars->dcdc_mode = dcdc_mode;
-	mon_vars->dutyDC_HS = debug_duty;
+	mon_vars->dutyDC_HS = debug_dutyHS;
 	mon_vars->p_dc_filt50Hz = p_dc_filt50Hz;
 	mon_vars->v_dc_filt50Hz = v_dc_filt50Hz;
 
@@ -388,7 +393,6 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  	  }
 	  }
 
-	  debug_duty = dutyLS1;
 	  int16_t dutyB1 = MPPT_DUTY_ABSMAX - dutyLS1;
 
 	  if (dutyB1 > ((int)MPPT_DUTY_ABSMAX-MIN_PULSE)) {
@@ -396,6 +400,8 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  } else if (dutyB1 < MIN_PULSE){
 		  dutyB1 = 0;
 	  }
+
+	  debug_dutyHS = dutyB1;
 
 
 	  //GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4

@@ -28,6 +28,7 @@
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
 #define P_AC_MAX 210  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA; todo 200 for energy packet controller
 #define P_BAT_MAX 70  // C=0.25 for maximum battery life
+#define P_BAT_MIN_CHARGE 2
 
 #define DEF_MPPT_DUTY_ABSMAX 4250
 
