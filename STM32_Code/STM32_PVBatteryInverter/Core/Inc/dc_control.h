@@ -19,7 +19,7 @@ extern "C" {
 //#define VDC_BOOST_STOP_100mV 25*10
 
 // for autonomous operation
-#define VDC_BOOST_START_100mV 35.8*10  // PV-Panel: Voc(STC)=46.30V Voc(NOCT)=43.70V; morning Voc=35.7V
+#define VDC_BOOST_START_100mV 35.4*10  // PV-Panel: Voc(STC)=46.30V Voc(NOCT)=43.70V; morning Voc_dcbus=35.7V; 28°C cloudy Voc_dcbus=35.5V Ppv=22W
 #define VDC_BOOST_STOP_100mV 26*10
 
 #define VDC_TOLERANCE_100mV 2*10  // 2V tolerance for connecting battery
