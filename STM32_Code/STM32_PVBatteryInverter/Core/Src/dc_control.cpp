@@ -12,8 +12,14 @@
 #include "monitoring.h"
 #include "gpio.h"
 #include "dc_control.h"
+#include "ac_control.h"
 #include "battery.h"
 #include "mpptracker.hpp"
+#include "PICtrl.hpp"
+
+#include "battery/ETI_DualBMS.hpp"
+extern ETI_DualBMS bms;
+
 
 // single PWM step has 1/170MHz = 5.88ns -> center aligned PWM -> 11.8ns
 // deadtime is configured to 64ns (10k resistor)
@@ -65,11 +71,11 @@ constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
 };
 
 
-constexpr unsigned int MPPT_FREQ = DC_CTRL_FREQ_MPPT;
-//constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 10*60;  // 10 minutes
-//constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 2*60;  // 2 minutes when power drops
-constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 60;  // 1 minute
-constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 30;  // 30 sec when power drops
+constexpr unsigned int MPPT_FREQ = DC_CTRL_FREQ_MPPT/2;  // one cycle stabilisation, one cycle MPPT calculation
+constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 10*60;  // 10 minutes
+constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 2*60;  // 2 minutes when power drops
+//constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 60;  // 1 minute
+//constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 30;  // 30 sec when power drops
 
 constexpr unsigned int MPPT_DUTY_ABSMAX = DEF_MPPT_DUTY_ABSMAX;
 constexpr unsigned int MPPT_DUTY_MIN_BOOTSTRAP = 0;  // High side has isolated supply and no bootstrap capacitor
@@ -96,6 +102,7 @@ volatile float v_dc_filt50Hz;
 volatile float i_pv_filt50Hz;
 volatile bool mppt_calc_request;
 volatile bool mppt_calc_complete;
+volatile bool bat_protect_calc_request;
 
 MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
 
@@ -103,6 +110,19 @@ volatile enum stateDC_t stateDC = INIT_DC;
 volatile enum dcdc_mode_t dcdc_mode;
 
 static volatile uint32_t cnt_rel = 0;
+
+static uint16_t p_ac_bat_chg_reduction = 0;  // if PV power is to high for battery, feed into AC grid
+
+uint16_t get_p_ac_bat_chg_reduction()
+{
+	return p_ac_bat_chg_reduction;
+}
+
+uint16_t get_p_ac_max_dc_lim()
+{
+	return (bms.batteryStatus.p_discharge_max+p_dc_filt50Hz);
+}
+
 
 uint16_t get_v_dc_FBboost_sincfilt_100mV()
 {
@@ -121,6 +141,7 @@ float get_p_dc_filt50Hz()
 	return p_dc_filt50Hz;
 }
 
+
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 {
 	mon_vars->stateDC = stateDC;
@@ -132,12 +153,65 @@ void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 	mon_vars->v_dc_FBboost_sincfilt_100mV = v_dc_FBboost_sincfilt_100mV;
 }
 
+
 void calc_async_dc_control()
 {
 	if (mppt_calc_request) {
 		mppTracker.step(p_dc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
 		mppt_calc_request = false;
 		mppt_calc_complete = true;
+	}
+
+	if (bat_protect_calc_request) {
+
+		bat_protect_calc_request = false;
+
+		constexpr float TC = 0.02;  // 20ms execution interval
+
+		/**********************************************/
+		/* Battery power limit -> AC power controller */
+		/**********************************************/
+		constexpr float T_Pbat_sensor_delay = 0.02;  // 20ms battery power estimation meas delay modelled as PT1-delay
+		constexpr float T_sigma_Pbat = T_Pbat_sensor_delay + TC;
+
+		// magnitude optimum method (Betragsoptimum) // ToDo: check if valid
+		constexpr float kp_Pbat = 0.5;  // no gain in plant -> 0.5
+		constexpr float ki_Pbat = 0.5 * 1/T_sigma_Pbat;
+		static PICtrl piCtrl_Pac_Pbat(TC, kp_Pbat, ki_Pbat);
+
+		int p_bat_50Hz = p_dc_filt50Hz - get_p_ac_filt50Hz();
+
+//		uint16_t p_limit;
+
+//		if (bms.batteryStatus.power_W > 0) {
+//			p_limit = bms.p_charge_max();
+//		} else {
+//			p_limit = bms.p_discharge_max();
+//		}
+
+		piCtrl_Pac_Pbat.step( (p_bat_50Hz - bms.batteryStatus.p_charge_max), 0, P_AC_MAX);
+
+#if 0  // use if linear Vcell power limit in BMS code causes ringing
+	    /**********************************************/
+	    /* Battery Vcell limit -> AC power controller */
+	    /**********************************************/
+	    constexpr float T_Vcell_sensor_delay = 1.0;  // 1.0 sec battery cell voltage meas delay modelled as PT1-delay
+	    constexpr float T_sigma_Vcell = T_Vcell_sensor_delay + TC;
+
+	    // magnitude optimum method (Betragsoptimum) // ToDo: check if valid
+	    constexpr float kp_Vcell = 0.5;  // no gain in plant -> 0.5
+	    constexpr float ki_Vcell = 0.5 * 1/T_sigma_Vcell;
+	    static PICtrl piCtrl_Pac_Vcell(TC, kp_Vcell, ki_Vcell);
+
+	    // to reduce cell voltage by 1mV, Pbat has to be reduced Vbat*Ibat=Vbat*(Vcell/Rcell)
+	    // e.g. 360Vbat 8mOhmCell 1mV reduction -> 360V*(1mV/8mOhm) = 45W
+	    constexpr float PBAT_REDUCE_PER_MV = ((float)V_BAT_NOM) / bms.R_CELL_mOHM();
+
+	    const batteryStatus_t* battery = get_batteryStatus();
+		piCtrl_Pac_Vcell.step( PBAT_REDUCE_PER_MV*(battery->maxVcell_mV - bms.V_CELL_MAX_POWER_REDUCE_mV()), 0, P_AC_MAX);
+#endif
+
+		p_ac_bat_chg_reduction = piCtrl_Pac_Pbat.y;
 	}
 }
 
@@ -154,6 +228,7 @@ static inline void nextState(enum stateDC_t state)
 	stateDC = state;
 	cnt_rel = 0;
 }
+
 
 int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA)
 {
@@ -183,7 +258,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownDC();
-		battery_state_request(BMS_OFF__BAT_OFF);
+		battery_state_request(BAT_OFF);
 		nextState(INIT_DC);
 	}
 
@@ -226,6 +301,8 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		v_dc_FBboost_filt50Hz_100mV = v_dc_sum/CYCLES_cnt20kHz_20ms;
 		debug_v_dc_FBboost_sincfilt_100mV = v_dc_FBboost_filt50Hz_100mV;
 		v_dc_sum = 0;
+	} else if (cnt20kHz_20ms == 1) {  // at 0 MPPT is calculated
+		bat_protect_calc_request = true;
 	}
 
 	switch (stateDC) {
@@ -276,7 +353,6 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 				mppTracker.duty_raw = dutyLS1;
 				nextState(MPPT);
 			}
-
 		}
 		break;
 	  }

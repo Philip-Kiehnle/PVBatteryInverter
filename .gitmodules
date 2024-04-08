@@ -1,0 +1,3 @@
+[submodule "submodules/ControllerLib"]
+	path = submodules/ControllerLib
+	url = git@github.com:Philip-Kiehnle/ControllerLib.git

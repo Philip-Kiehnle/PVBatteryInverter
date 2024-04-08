@@ -12,12 +12,13 @@
 #include "battery/bms_types.h"
 
 
-typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON} stateBattery_t;
+typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON, BAT_OFF} stateBattery_t;
 
 const bool battery_connected();
 const bool battery_full();
 const bool battery_maxVcell_OK();
 const stateBattery_t get_stateBattery();
+const uint16_t get_p_bat_discharge_max();
 const batteryStatus_t* get_batteryStatus();
 void battery_update_request();
 void battery_state_request(stateBattery_t state);

@@ -21,9 +21,6 @@ ETI_DualBMS::ETI_DualBMS(uint16_t address) : BaseBMS(address)
 
 //#define DUAL_BATTERY  // if two battery packs are used
 
-#define R_CELL_MILLIOHM (8+1) // internal resistance of cell and cell connector in mOhm
-#define PARALLEL_CELLS 1
-
 // LiitoKala 32700 7000mAh LiFePO4 battery: 35A cont. discharge, 55A max
 // curve was not available -> using Liitokala 32700 5.5Ah data from
 // https://www.kirich.blog/obzory/akkumulyatory/862-liitokala-32700-lifepo4-i-sravnenie-ih-s-analogichnymi-akkumulyatorami-varicore.html
@@ -140,6 +137,8 @@ int ETI_DualBMS::get_summary()
         batteryStatus.maxVcell_mV = dual_bms.battery[0].vCell_max_mV;
 #endif //DUAL_BATTERY
 
+        batteryStatus.p_charge_max = calc_p_charge_max();
+        batteryStatus.p_discharge_max = calc_p_discharge_max();
         return 0;
     }
 
@@ -313,19 +312,51 @@ int ETI_DualBMS::batteryOff()
 }
 
 
-bool ETI_DualBMS::tempLowWarn()
+uint16_t ETI_DualBMS::calc_p_discharge_max()
 {
-	return (batteryStatus.minTemp <= T_CELL_MIN_WARN());
+	uint16_t p_discharge_max_temperature = (V_BAT_NOM_100mV() * I_DISCHARGE_MAX())/10;
+
+	// todo implement hyteresis
+	if (batteryStatus.maxTemp >= 50 || batteryStatus.minTemp <= -10) {
+		p_discharge_max_temperature = 0;
+	} else if (batteryStatus.maxTemp >= 45 || batteryStatus.minTemp <= -5) {
+		p_discharge_max_temperature /= 2;
+	}
+
+	float p_discharge_max_Vcell = p_discharge_max_temperature;
+	if (batteryStatus.minVcell_mV < V_CELL_MIN_POWER_REDUCE_mV()) {
+		float reduction_factor = (static_cast<float>(V_CELL_MIN_POWER_REDUCE_mV())-batteryStatus.minVcell_mV) / (V_CELL_MIN_POWER_REDUCE_mV()-V_CELL_MIN_PROTECT_mV());
+		p_discharge_max_Vcell *= (1.0-reduction_factor);
+		if (p_discharge_max_Vcell < 0) {
+			p_discharge_max_Vcell = 0;
+		}
+	}
+	return std::min(p_discharge_max_temperature, (uint16_t)p_discharge_max_Vcell);
 }
 
-bool ETI_DualBMS::tempHighWarn()
+
+uint16_t ETI_DualBMS::calc_p_charge_max()
 {
-	return (batteryStatus.maxTemp >= T_CELL_MAX_WARN());
+	uint16_t p_charge_max_temperature = (V_BAT_NOM_100mV() * I_CHARGE_MAX()/2)/10;  // I_CHARGE_MAX typical C=0.5 -> C=0.25 for maximum battery life
+
+	// todo implement hyteresis
+	if (batteryStatus.maxTemp >= 50 || batteryStatus.minTemp <= 0) {
+		p_charge_max_temperature = 0;
+	} else if (batteryStatus.maxTemp >= 45 || batteryStatus.minTemp <= 2) {
+		p_charge_max_temperature /= 2;
+	}
+
+	float p_charge_max_Vcell = p_charge_max_temperature;
+	if (batteryStatus.maxVcell_mV > V_CELL_MAX_POWER_REDUCE_mV()) {
+		float reduction_factor = (static_cast<float>(batteryStatus.maxVcell_mV)-V_CELL_MAX_POWER_REDUCE_mV()) / (V_CELL_MAX_PROTECT_mV()-V_CELL_MAX_POWER_REDUCE_mV());
+		p_charge_max_Vcell *= (1.0-reduction_factor);
+		if (p_charge_max_Vcell < 0) {
+			p_charge_max_Vcell = 0;
+		}
+	}
+	// other idea:
+	// to reduce cell voltage by 1mV, Pbat has to be reduced Vbat*Ibat=Vbat*(Vcell/Rcell)
+	// e.g. 360Vbat 8mOhmCell 1mV reduction -> 360V*(1mV/8mOhm) = 45W
+
+	return std::min(p_charge_max_temperature, (uint16_t)p_charge_max_Vcell);
 }
-
-bool ETI_DualBMS::tempWarn()
-{
-	return (tempLowWarn() || tempHighWarn());
-}
-
-

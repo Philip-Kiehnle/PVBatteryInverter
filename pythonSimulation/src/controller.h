@@ -80,8 +80,8 @@ int32_t get_IGRID_ADCR();
 //#define IAC_AMP_MAX 7  //(5 * sqrt(2))
 //#define IAC_AMP_MAX_10mA 2.0*100  // -1.90A to 1.88A 50Hz  95%
 //#define IAC_AMP_MAX_10mA 3.0*100  // to much PV power turnoff at 50Watt ELV Meter
-#define IAC_AMP_MAX_10mA 4.0*100  // 4Aamp*45V/2=90W    -4.33A to 4.30A 50Hz  107%  -> 3.6A with inductorLUT, heat-up 4.0A 30samples clipping Vbat=48.0 Vgrid_peak=45.8V
-//#define IAC_AMP_MAX_10mA 5.0*100  // -6.00A to 6.00A 50Hz -> 6Aamp*45V/2=135W   120% inductor saturation
+//#define IAC_AMP_MAX_10mA 4.0*100  // 4Aamp*45V/2=90W    -4.33A to 4.30A 50Hz  107%  -> 3.6A with inductorLUT, heat-up 4.0A 30samples clipping Vbat=48.0 Vgrid_peak=45.8V
+#define IAC_AMP_MAX_10mA 5.0*100  // -6.00A to 6.00A 50Hz -> 6Aamp*45V/2=135W   120% inductor saturation
 //#define IAC_AMP_MAX_10mA 5.2*100   // -6.43A to 6.48A   6.46/5.2 = 124%
 //#define IAC_AMP_MAX_10mA 6.0*100   // -8.14A to 8.20A    8.17/6= 136%   -> 4.9A with inductorLUT Pbat 125W
 //#define IAC_AMP_MAX_10mA 8.0*100  // -8.16 to 8.2A with inductor LUT; noise from inductors

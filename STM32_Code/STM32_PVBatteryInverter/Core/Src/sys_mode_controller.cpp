@@ -65,12 +65,13 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			sys_mode_needs_battery = false;
 
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
-			     && (SYS_MODE != PV2AC)  // without battery, the only other mode is OFF
-			     && ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50  // feedin required
+			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
+			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required
 #if SYSTEM_HAS_BATTERY == 1
-				 && !bms.tempWarn()
+					 || battery->soc < 50)  // battery recharge required todo battery soc control curve, goal: >90% at sunset
+				 && !bms.tempWarn(
 #endif //SYSTEM_HAS_BATTERY
-			   ) {
+			   )) {
 				nextMode(SYS_MODE);
 				if (SYS_MODE == HYBRID_PCC_SENSOR) {
 					ctrl_ref->mode = AC_PASSIVE;  // todo: check if switch to PAC_CONTROL_PCC is fast enough to prevent overvoltage
@@ -98,7 +99,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			if (battery->voltage_100mV == 0) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
-					battery_state_request(BMS_ON__BAT_OFF);
+					battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
 				}
 		    } else {
 				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
@@ -108,15 +109,16 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				// battery charging
 				sys_mode_needs_battery = true;
 
-				// todo battery power controller for battery temperature
+				// todo intervall charging at low bat temp to maximise resistive power loss and generate heat
+				int p_bat_50Hz = get_p_dc_filt50Hz() - get_p_ac_filt50Hz();
 
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
 							&& (   battery->soc > 20  // enough energy for feedin
 							    || battery_full()     // or battery is full
-								|| bms.tempWarn()     // hot or cold battery -> PV2AC
-							    || battery->power_W >= P_BAT_MAX)  // or battery charge power is large
+							    || bms.tempWarn()     // hot or cold battery -> PV2AC
+							    || p_bat_50Hz >= battery->p_charge_max)  // or battery charge power is large
 							) {
 								stateHYBRID_AC = HYB_AC_ALLOWED;
 						}
@@ -127,22 +129,16 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						if (   (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required; filter 1 second spikes from freezer motor start
 							|| battery_full()  // or battery is full
 							|| bms.tempWarn()  // hot or cold battery -> PV2AC
-							|| battery->power_W > P_BAT_MAX  // or battery charge power is large
+							|| p_bat_50Hz > battery->p_charge_max  // or battery charge power is large
 							) {
 							stateHYBRID_AC = HYB_AC_ON;
 						}
 						break;
 
 					case HYB_AC_ON:
-					{
-						int p_bat_50Hz = get_p_dc_filt50Hz() - get_p_ac_filt50Hz();
 
 						if (!battery_connected()) {  // AC already on but battery reconnect because previous mode was PV2AC
 							// wait until battery is connected
-						} else if (   battery->maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV()  // Ppcc + extra power for constant battery voltage
-								   || p_bat_50Hz >= P_BAT_MAX  // Ppcc + extra power for constant battery power
-							) {
-							ctrl_ref->mode = PAC_CONTROL_V_P_BAT_CONST;
 						} else {
 							ctrl_ref->mode = PAC_CONTROL_PCC;
 						}
@@ -158,14 +154,15 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							contactorBattery(0);
 							bmsPower(0);
 							sys_mode_needs_battery = false;
-							battery_state_request(BMS_ON__BAT_OFF);
+							battery_state_request(BAT_OFF);
 
 						// AC turnoff in case of empty battery.
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required
 						} else if ( battery_connected()
 									&& (  battery->soc < 10
-									    || battery->minVcell_mV < bms.V_CELL_MIN_POWER_REDUCE_mV()
+									    || battery->minVcell_mV < bms.V_CELL_MIN_PROTECT_mV()
 									    || bms.tempHighWarn()
+									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
 									   )
 						   ) {
 							if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {  // prevent system shutdown during sunrise
@@ -175,14 +172,13 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 								sys_mode_needs_battery = false;
 								contactorBattery(0);
 								bmsPower(0);
-								//battery_state_request(BMS_OFF__BAT_OFF);
-								battery_state_request(BMS_ON__BAT_OFF);
+								battery_state_request(BAT_OFF);
 								nextMode(OFF);
 								stateHYBRID_AC = HYB_AC_OFF;
 							}
 						}
 						break;
-					}
+
 					default:
 						stateHYBRID_AC = HYB_AC_OFF;
 						break;

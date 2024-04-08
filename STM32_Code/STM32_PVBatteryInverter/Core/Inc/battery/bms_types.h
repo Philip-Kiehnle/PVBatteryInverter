@@ -43,6 +43,8 @@ typedef struct {
 	uint16_t voltage_100mV;
 	uint8_t soc;
 	int16_t power_W;
+	uint16_t p_charge_max;
+	uint16_t p_discharge_max;
 	uint16_t minVcell_mV;
 	uint16_t maxVcell_mV;
 	int8_t minTemp;

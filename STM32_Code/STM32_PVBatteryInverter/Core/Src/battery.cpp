@@ -60,6 +60,16 @@ void battery_update_request()
 
 void battery_state_request(stateBattery_t state)
 {
+	// in case of empty battery, use ship mode and turnoff BMS
+	if (state == BAT_OFF) {
+		if (bms.batteryStatus.soc > 30) {
+			state = BMS_ON__BAT_OFF;
+		} else {
+			state = BMS_OFF__BAT_OFF;
+		}
+	}
+
+
 	stateBattery_next = state;
 }
 

@@ -12,6 +12,7 @@
 #include "common.h"
 #include "monitoring.h"
 #include "ac_control.h"
+#include "dc_control.h"
 
 #include "controller.h"
 #include "sogi_pllFXP.h"
@@ -346,19 +347,9 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 				break;
 			  }
 
-			  case PAC_CONTROL_V_P_BAT_CONST:
 			  case PAC_CONTROL_PCC:
 			  {
-				static int32_t p_extra_100uW;
-#define BATTERY_LIMIT_STEP 40  // for 400W PV panel  // 20kHz×1sec÷10000mW * 40/sec = 80Watt/sec
-//#define BATTERY_LIMIT_STEP 320  // for 3kW PV plant  // 20kHz×1sec÷10000mW * 320/sec = 640Watt/sec
-				if (ctrl_ref.mode == PAC_CONTROL_V_P_BAT_CONST) {
-				  if (p_extra_100uW < (1500*10000)) p_extra_100uW += BATTERY_LIMIT_STEP;
-				} else {
-					p_extra_100uW -= BATTERY_LIMIT_STEP;
-					p_extra_100uW = std::max(p_extra_100uW, (int32_t)0);
-				}
-				ctrl_ref.p_ac_rms = ctrl_ref.p_ac_rms_pccCtrl + (p_extra_100uW/10000);
+				ctrl_ref.p_ac_rms = ctrl_ref.p_ac_rms_pccCtrl + get_p_ac_bat_chg_reduction();
 
 				// use power reference from power controller
 				int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;
@@ -375,17 +366,21 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 #define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
 #if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1
+constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 200;
 				// electricity meter stores energy in 100mWh
 				//-> in 1 sec, 100mWh/1sec=360W offset can be tolerated
 				// if feedin is included, 720Ws can be tolerated -> todo
-				static bool low_power_mode;
-				if (ctrl_ref.p_ac_rms <= 50 && ctrl_ref.p_pcc <= 10) {
+				static uint32_t low_power_mode_cnt = 0;
+
+				if (ctrl_ref.p_ac_rms <= 50 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)) {
 					gatedriverAC(0);
-					low_power_mode = true;
-				} else if (low_power_mode) {
-					if(ctrl_ref.p_ac_rms > 200) {  // 200/50 = 3sec off / 1sec on, depends on power_controller tuning, see calc sheet
+					low_power_mode_cnt++;
+				} else if (low_power_mode_cnt) {
+					if(    ctrl_ref.p_ac_rms > P_LOW_POWER_CTRL_REENABLE  // 200/50 = 3sec off / 1sec on, depends on power_controller tuning, see calc sheet
+						|| ( low_power_mode_cnt > (AC_CTRL_FREQ*3) && (get_p_ac_max_dc_lim() < P_LOW_POWER_CTRL_REENABLE) )  // en if power controller is limited by reduced battery power
+					) {
 						gatedriverAC(1);
-						low_power_mode = false;
+						low_power_mode_cnt = 0;
 						if (i_ac_amp_10mA > 100) {
 							i_ac_amp_10mA = 100;  // clamp to 1A for starting point
 						}

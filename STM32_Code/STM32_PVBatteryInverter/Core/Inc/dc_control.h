@@ -31,6 +31,8 @@ extern volatile enum dcdc_mode_t dcdc_mode;
 extern volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 extern volatile bool sys_mode_needs_battery;
 
+uint16_t get_p_ac_bat_chg_reduction();
+uint16_t get_p_ac_max_dc_lim();
 uint16_t get_v_dc_FBboost_sincfilt_100mV();
 uint16_t get_v_dc_FBboost_filt50Hz_100mV();
 float get_p_dc_filt50Hz();

@@ -15,3 +15,18 @@ void BaseBMS::set_serial_fd(int serial_fd)
 {
     serial_fd_ = serial_fd;
 }
+
+bool BaseBMS::tempLowWarn() const
+{
+	return (batteryStatus.minTemp <= T_CELL_MIN_WARN());
+}
+
+bool BaseBMS::tempHighWarn() const
+{
+	return (batteryStatus.maxTemp >= T_CELL_MAX_WARN());
+}
+
+bool BaseBMS::tempWarn() const
+{
+	return (tempLowWarn() || tempHighWarn());
+}

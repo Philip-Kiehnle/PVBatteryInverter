@@ -285,7 +285,7 @@ void shutdownAll()
 	gatedriverDC(0);
 	contactorAC(0);
 	contactorBattery(0);
-	battery_state_request(BMS_OFF__BAT_OFF);
+	battery_state_request(BAT_OFF);
 }
 
 int el_meter_status;
@@ -327,7 +327,9 @@ void calc_and_wait(uint32_t delay)
 #else
 			ctrl_ref.p_pcc = electricity_meter_get_power();
 #endif //DUMMY_METER
-			ctrl_ref.p_ac_rms_pccCtrl = power_controller_step(ctrl_ref.p_pcc);
+			uint16_t p_ac_max = get_p_ac_max_dc_lim();
+			if (p_ac_max > P_AC_MAX) p_ac_max = P_AC_MAX;
+			ctrl_ref.p_ac_rms_pccCtrl = power_controller_step(ctrl_ref.p_pcc, p_ac_max);
 		} else if (el_meter_status == EL_METER_CONN_ERR ) {
 			ctrl_ref.p_ac_rms_pccCtrl = 0;
 		}
