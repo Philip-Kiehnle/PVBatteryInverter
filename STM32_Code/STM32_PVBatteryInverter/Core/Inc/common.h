@@ -26,8 +26,8 @@
 #define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
-#define P_AC_MAX 210  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA; todo 200 for energy packet controller
-#define P_BAT_MAX 70  // C=0.25 for maximum battery life
+//#define P_AC_MAX ((5*32)/1.41) //113W  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
+#define P_AC_MAX (210)  // 210W minimum for energy packet controller
 #define P_BAT_MIN_CHARGE 2
 
 #define DEF_MPPT_DUTY_ABSMAX 4250

@@ -9,9 +9,13 @@
 *.mxproject
 *.cfg
 *.launch
+*.log
 
 # C objects
 *.so
+
+# python monitor data
+pythonMonitorTool/*.bin
 
 # others
 __pycache__

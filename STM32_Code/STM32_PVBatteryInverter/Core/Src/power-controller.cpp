@@ -7,7 +7,7 @@
 #include "common.h"
 
 
-int power_controller_step(int powerPCC)
+int power_controller_step(int powerPCC, uint16_t p_ac_max)
 {
 
     // control schematic
@@ -36,7 +36,7 @@ int power_controller_step(int powerPCC)
     constexpr float ki = 0.5 * 1/T_sigma;
     static PICtrl piCtrl(TE, kp, ki);
 
-	piCtrl.step(-(0-powerPCC), P_AC_MIN, P_AC_MAX);
+	piCtrl.step(-(0-powerPCC), P_AC_MIN, p_ac_max);
 
 	int p_ref = piCtrl.y;
 

@@ -6,6 +6,9 @@
 
 #include "BaseBMS.hpp"
 
+#define R_CELL_MILLIOHM (8+1) // internal resistance of cell and cell connector in mOhm
+#define PARALLEL_CELLS 1
+
 class ETI_DualBMS : public BaseBMS
 {
 public:
@@ -20,9 +23,9 @@ public:
     virtual int batteryOff() override;
     virtual void estimateSoC() override;
 
-    virtual bool tempLowWarn() override;
-    virtual bool tempHighWarn() override;
-    virtual bool tempWarn() override;
+//    virtual bool tempLowWarn() const override;
+//    virtual bool tempHighWarn() const override;
+//    virtual bool tempWarn() const override;
 
     int custom_string_query(std::string custom_string);
 
@@ -33,11 +36,23 @@ public:
 
     const uint32_t battery_cells = 15;
 
+    uint16_t R_CELL_mOHM() const override {
+    	return R_CELL_MILLIOHM/PARALLEL_CELLS;
+    }
+
+    uint16_t V_CELL_NOM_mV() const override {
+    	return 3200;
+    }
+
+    uint16_t V_BAT_NOM_100mV() const override {
+    	return (battery_cells*V_CELL_NOM_mV())/100;
+    }
+
     uint16_t V_CELL_MIN_PROTECT_mV() const override {
         return 2820; // BMS UV_THRESHOLD_mV 2800  // LiitoKala discharge cutoff 2.5V
     }
     uint16_t V_CELL_MIN_POWER_REDUCE_mV() const override {
-        return 2850;
+        return 2900;
     }
     uint16_t V_CELL_MAX_POWER_REDUCE_mV() const override {
         return 3520;
@@ -92,6 +107,10 @@ public:
     // float Vdischarge_stop = battery_cells*3.3;
     // float Icharge_max = 5.0;
     // float Idischarge_max = 7.0;
+
+protected:
+    virtual uint16_t calc_p_charge_max() override;
+    virtual uint16_t calc_p_discharge_max() override;
 
 private:
     int query_data(char* target_addr, unsigned int len);

@@ -24,9 +24,9 @@ public:
     virtual int batteryOff() = 0;
     virtual void estimateSoC() = 0;
 
-    virtual bool tempLowWarn() = 0;
-    virtual bool tempHighWarn() = 0;
-    virtual bool tempWarn() = 0;
+    bool tempLowWarn() const;
+    bool tempHighWarn() const;
+    bool tempWarn() const;
 
     // virtual int query_data(char* target_addr, unsigned int len) = 0;
     // virtual int custom_query(unsigned int response_len) = 0;
@@ -39,6 +39,10 @@ public:
     // virtual float get_Vdischarge_stop()  const { return Vdischarge_stop; }
     // virtual float get_Icharge_max()      const { return Icharge_max; }
     // virtual float get_Idischarge_max()   const { return Idischarge_max; }
+
+    virtual uint16_t R_CELL_mOHM() const = 0;
+    virtual uint16_t V_CELL_NOM_mV() const = 0;
+    virtual uint16_t V_BAT_NOM_100mV() const = 0;
 
     //virtual constexpr unsigned int Vcharge_stop() const = 0;
     virtual uint16_t V_CELL_MIN_PROTECT_mV() const = 0;
@@ -59,6 +63,9 @@ public:
 
 protected:
     BaseBMS(uint16_t address);
+
+    virtual uint16_t calc_p_charge_max() = 0;  // e.g. C=0.25 for maximum battery life; too hot or cold,...
+    virtual uint16_t calc_p_discharge_max() = 0;
 
     uint16_t address;
     int serial_fd_;
