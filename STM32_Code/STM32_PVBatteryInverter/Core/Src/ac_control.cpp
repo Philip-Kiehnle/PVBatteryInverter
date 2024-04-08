@@ -329,17 +329,19 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 			static int16_t i_ac_amp_10mA = 0;
 			switch (ctrl_ref.mode) {
 			  case AC_PASSIVE:  // for battery reconnect to avoid DC voltage controller fighting AC Vdc voltage controller
-				  gatedriverAC(0);
-				  nextState(WAIT_CONTACTOR_AC);  // todo gatedriver is turned on for short period
-				  break;
+				gatedriverAC(0);
+				nextState(WAIT_CONTACTOR_AC);  // todo gatedriver is turned on for short period
+				break;
 
 			  case VDC_CONTROL:
+				gatedriverAC(1);
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10 );
 				//i_ac_amp_10mA = step_pi_Vdc2IacAmp_volt_comp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10, phase, 10*v_ac_amp_filt50Hz_100mV);
 				break;
 
 			  case VDC_VARIABLE_CONTROL:
 			  {
+				gatedriverAC(1);
 				// sine in modern power grid is flattened -> no extra headroom needed
 				uint32_t v_dc_ref_10mV = 10*v_ac_amp_filt50Hz_100mV + ((R*64)*i_ac_amp_10mA)/64;
 				i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_10mV, v_dc_sinc_mix_100mV*10 );
@@ -372,7 +374,8 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 200;
 				// if feedin is included, 720Ws can be tolerated -> todo
 				static uint32_t low_power_mode_cnt = 0;
 
-				if (ctrl_ref.p_ac_rms <= 50 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)) {
+				if (    ((ctrl_ref.p_ac_rms <= 50 && get_p_dc_filt50Hz() < 40) || ctrl_ref.p_ac_rms <= 20) // reduce number of switching events during PV production
+					 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)) {
 					gatedriverAC(0);
 					low_power_mode_cnt++;
 				} else if (low_power_mode_cnt) {
