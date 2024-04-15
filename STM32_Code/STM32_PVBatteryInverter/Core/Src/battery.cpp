@@ -45,9 +45,25 @@ const bool battery_connected()
 	return bat_connected;
 }
 
-const bool battery_full()
+
+const bool battery_empty()
+{
+	return (bms.batteryStatus.soc <= 1 || bms.batteryStatus.minVcell_mV <= bms.V_CELL_MIN_PROTECT_mV());
+}
+
+const bool battery_almost_empty()
+{
+	return (bms.batteryStatus.soc <= 8 || bms.batteryStatus.minVcell_mV <= bms.V_CELL_MIN_PROTECT_mV());
+}
+
+const bool battery_almost_full()
 {
 	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= bms.V_CELL_MAX_POWER_REDUCE_mV());
+}
+
+const bool battery_full()
+{
+	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= bms.V_CELL_MAX_PROTECT_mV());
 }
 #endif //SYSTEM_HAS_BATTERY
 
@@ -112,7 +128,7 @@ bool async_battery_communication()
 	}
 
 	if ( stateBattery == BMS_ON__BAT_ON
-	     && (abs(bms.batteryStatus.power_W) > 2
+	     && (abs(bms.batteryStatus.power_W) > 5
 			 || (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
 				 && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5)
 		)

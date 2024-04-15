@@ -287,7 +287,7 @@ int ETI_DualBMS::custom_string_query(std::string custom_string)
 
 int ETI_DualBMS::batteryOn()
 {
-    std::string cmd("e\r");  // (enable FETs)
+    std::string cmd("ena\r");  // (enable FETs)
     cmd.copy((char*)&tx_msg.data, cmd.length());
     tx_msg.dLen = cmd.length();
 
@@ -300,7 +300,7 @@ int ETI_DualBMS::batteryOn()
 
 int ETI_DualBMS::batteryOff()
 {
-    std::string cmd("d\r");  // (disable FETs)
+    std::string cmd("dis\r");  // (disable FETs)
     cmd.copy((char*)&tx_msg.data, cmd.length());
     tx_msg.dLen = cmd.length();
 
@@ -316,7 +316,7 @@ uint16_t ETI_DualBMS::calc_p_discharge_max()
 {
 	uint16_t p_discharge_max_temperature = (V_BAT_NOM_100mV() * I_DISCHARGE_MAX())/10;
 
-	// todo implement hyteresis
+	// todo implement hysteresis
 	if (batteryStatus.maxTemp >= 50 || batteryStatus.minTemp <= -10) {
 		p_discharge_max_temperature = 0;
 	} else if (batteryStatus.maxTemp >= 45 || batteryStatus.minTemp <= -5) {
@@ -339,7 +339,7 @@ uint16_t ETI_DualBMS::calc_p_charge_max()
 {
 	uint16_t p_charge_max_temperature = (V_BAT_NOM_100mV() * I_CHARGE_MAX()/2)/10;  // I_CHARGE_MAX typical C=0.5 -> C=0.25 for maximum battery life
 
-	// todo implement hyteresis
+	// todo implement hysteresis
 	if (batteryStatus.maxTemp >= 50 || batteryStatus.minTemp <= 0) {
 		p_charge_max_temperature = 0;
 	} else if (batteryStatus.maxTemp >= 45 || batteryStatus.minTemp <= 2) {

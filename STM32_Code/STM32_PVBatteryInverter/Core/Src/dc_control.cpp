@@ -61,13 +61,14 @@ constexpr pvModule_t PVMODULE = pvModule_t{
 // 30%*Imp = 0.3*11.1 = 3.33A
 
 constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
+	.debug = false,
 //	.vin_min = 0.33*31,  // 1/3 module * 31V
 	.vin_min = 0.2*31,  // 20% * Vmodule
 	.vin_max = 1*53,  // 1 module * 53V
 	.vout_min = 38,
 	.vout_max = 58,
 	.nr_pv_modules = 1,
-	.nr_substring_search_per_interval = 1
+	.nr_bypassDiodes_search_per_interval = 1
 };
 
 
