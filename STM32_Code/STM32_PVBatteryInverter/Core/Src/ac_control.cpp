@@ -81,6 +81,15 @@ static inline void nextState(enum stateAC_t state)
 }
 
 
+static inline bool check_zero_crossing(int16_t phase)
+{
+	if ( phase > (0.25*INT16_MAX) && phase < (0.27*INT16_MAX) ) {
+		return true;
+	}
+	return false;
+}
+
+
 int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
 {
 //GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
@@ -265,7 +274,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 		break;
 
 	  case WAIT_ZERO_CROSSING:  // for LCL charge without overshoot
-		if ( phase > (0.25*INT16_MAX) && phase < (0.27*INT16_MAX) ) {
+		if ( check_zero_crossing(phase) ) {
 			nextState(CLOSE_CONTACTOR_AC);
 		}
 		break;
@@ -375,7 +384,9 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 200;
 				static uint32_t low_power_mode_cnt = 0;
 
 				if (    ((ctrl_ref.p_ac_rms <= 50 && get_p_dc_filt50Hz() < 40) || ctrl_ref.p_ac_rms <= 20) // reduce number of switching events during PV production
-					 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)) {
+					 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)
+					 && check_zero_crossing(phase)  // turnoff during zero crossing reduces "click" noise in inductor
+				) {
 					gatedriverAC(0);
 					low_power_mode_cnt++;
 				} else if (low_power_mode_cnt) {

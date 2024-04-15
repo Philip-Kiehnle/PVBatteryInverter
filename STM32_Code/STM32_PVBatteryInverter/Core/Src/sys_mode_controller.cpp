@@ -72,14 +72,18 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				 && !bms.tempWarn(
 #endif //SYSTEM_HAS_BATTERY
 			   )) {
+				//ctrl_ref->mode = AC_PASSIVE;  // todo: check if switch to PAC_CONTROL_PCC is fast enough to prevent overvoltage
 				nextMode(SYS_MODE);
-				if (SYS_MODE == HYBRID_PCC_SENSOR) {
-					ctrl_ref->mode = AC_PASSIVE;  // todo: check if switch to PAC_CONTROL_PCC is fast enough to prevent overvoltage
-				}
 			} else if (    cnt_1Hz > (cnt_rel_1Hz+120)  // stay in PV2AC mode for min 120 seconds before possible turnoff AC
 					    && get_p_ac_filt1minute() < 5 && get_p_ac_filt50Hz() < 5
 			          ) {
-				nextMode(OFF);
+				if (SYS_MODE == PV2AC) {
+					nextMode(OFF);
+				} else {
+					// prevent short turnoff in the evening when battery is full
+					ctrl_ref->mode = AC_PASSIVE;
+					nextMode(SYS_MODE);
+				}
 			}
 			break;
 
@@ -115,9 +119,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
-							&& (   battery->soc > 20  // enough energy for feedin
-							    || battery_full()     // or battery is full
-							    || bms.tempWarn()     // hot or cold battery -> PV2AC
+							&& (   battery->soc > 20      // enough energy for feedin
+							    || battery_almost_full()  // or battery charge has to be reduced
+							    || bms.tempWarn()         // hot or cold battery -> PV2AC
 							    || p_bat_50Hz >= battery->p_charge_max)  // or battery charge power is large
 							) {
 								stateHYBRID_AC = HYB_AC_ALLOWED;
@@ -127,8 +131,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					case HYB_AC_ALLOWED:
 						// AC turnon if
 						if (   (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required; filter 1 second spikes from freezer motor start
-							|| battery_full()  // or battery is full
-							|| bms.tempWarn()  // hot or cold battery -> PV2AC
+							|| battery_almost_full()               // or battery charge has to be reduced
+							|| bms.tempWarn()                      // hot or cold battery -> PV2AC
 							|| p_bat_50Hz > battery->p_charge_max  // or battery charge power is large
 							) {
 							stateHYBRID_AC = HYB_AC_ON;
@@ -159,8 +163,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						// AC turnoff in case of empty battery.
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required
 						} else if ( battery_connected()
-									&& (  battery->soc < 10
-									    || battery->minVcell_mV < bms.V_CELL_MIN_PROTECT_mV()
+									&& (  battery_almost_empty()
 									    || bms.tempHighWarn()
 									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
 									   )
