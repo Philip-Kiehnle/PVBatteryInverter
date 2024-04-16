@@ -17,7 +17,7 @@
 #include "mpptracker.hpp"
 #include "PICtrl.hpp"
 
-#include "battery/ETI_DualBMS.hpp"
+#include "BatteryManagement/ETI_DualBMS.hpp"
 extern ETI_DualBMS bms;
 
 

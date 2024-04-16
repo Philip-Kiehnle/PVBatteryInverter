@@ -34,7 +34,7 @@
 #include "ac_control.h"
 #include "dc_control.h"
 #include "sys_mode_controller.h"
-#include "battery/bms_types.h"
+#include "BatteryManagement/bms_types.h"
 #include "electricity_meter.h"
 #include "power_controller.h"
 #include "battery.h"

@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include "battery/bms_types.h"
+#include "BatteryManagement/bms_types.h"
 
 void can_bus_read();
 
