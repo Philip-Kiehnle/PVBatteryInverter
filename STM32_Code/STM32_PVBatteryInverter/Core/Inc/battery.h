@@ -9,7 +9,7 @@
 #include <stdbool.h>
 
 #include "common.h"
-#include "battery/bms_types.h"
+#include "BatteryManagement/bms_types.h"
 
 
 typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON, BAT_OFF} stateBattery_t;

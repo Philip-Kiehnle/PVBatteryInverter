@@ -8,9 +8,9 @@
 #include "electricity_meter.h"
 
 #include "battery.h"
-#include "battery/bms_types.h"
-//#include "battery/STW_mBMS.hpp"
-#include "battery/ETI_DualBMS.hpp"
+#include "BatteryManagement/bms_types.h"
+//#include "BatteryManagement/STW_mBMS.hpp"
+#include "BatteryManagement/ETI_DualBMS.hpp"
 
 
 enum mode_t sys_mode = SYS_MODE;

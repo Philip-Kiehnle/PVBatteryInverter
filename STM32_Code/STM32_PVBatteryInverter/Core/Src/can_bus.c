@@ -2,7 +2,7 @@
 
 #include <string.h>
 #include "can_bus.h"
-#include "battery/bms_types.h"
+#include "BatteryManagement/bms_types.h"
 
 struct CellStack cellStack;
 

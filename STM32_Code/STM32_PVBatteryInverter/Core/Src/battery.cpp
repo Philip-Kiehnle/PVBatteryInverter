@@ -4,7 +4,7 @@
 #include "dc_control.h"
 #include "battery.h"
 
-#include "battery/ETI_DualBMS.hpp"
+#include "BatteryManagement/ETI_DualBMS.hpp"
 extern ETI_DualBMS bms;
 
 // does not compile with BaseBMS
@@ -101,25 +101,25 @@ bool async_battery_communication()
 		rate_limit = true;
 		switch (stateBattery_next) {
 		  case BMS_OFF__BAT_OFF:
-			  if (bms.batteryOff() == 0) {
+			  if (bms.batteryOff() == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_OFF;
 				  bat_connected = false;
 			  }
-			  if (bms.shipmode(0b00111111) == 0) {
+			  if (bms.shipmode(0b00111111) == BMS_OK) {
 				  stateBattery = BMS_OFF__BAT_OFF;
 				  bat_connected = false;
 			  }
 			  break;
 
 		  case BMS_ON__BAT_ON:
-			  if (bms.batteryOn() == 0) {
+			  if (bms.batteryOn() == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_ON;
 			  }
 			  break;
 
 		  case BMS_ON__BAT_OFF:
 		  default:
-			  if (bms.batteryOff() == 0) {
+			  if (bms.batteryOff() == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_OFF;
 				  bat_connected = false;
 			  }
@@ -140,7 +140,7 @@ bool async_battery_communication()
 		rate_limit = false;
 		update_request = false;
 		if (stateBattery != BMS_OFF__BAT_OFF) {
-			if (bms.get_summary() == 0) {
+			if (bms.get_summary() == BMS_OK) {
 				bms.estimateSoC();
 				bat_comm_fail_cnt = 0;
 			} else {
