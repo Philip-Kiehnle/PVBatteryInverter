@@ -24,7 +24,7 @@ extern volatile uint32_t cntErr_1Hz;
 
 #if SYSTEM_HAS_BATTERY == 1
 //static STW_mBMS bms(2);  // BMS address
-ETI_DualBMS bms(15);  // BMS address
+ETI_DualBMS bms(15, 1.0);  // BMS address
 #endif
 
 
@@ -40,9 +40,15 @@ enum mode_t get_sys_mode()
 }
 
 
-static inline void nextMode(enum mode_t mode)
+static inline void nextMode(enum mode_t next_mode)
 {
-	sys_mode = mode;
+	if (next_mode == PV2AC || next_mode == OFF) {
+		contactorBattery(0);
+		bmsPower(0);
+		sys_mode_needs_battery = false;
+		battery_state_request(BAT_OFF);
+	}
+	sys_mode = next_mode;
 	cnt_rel_1Hz = cnt_1Hz;
 }
 
@@ -119,22 +125,24 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
-			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required
+			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+200))  // more feedin required and battery not empty
 #if SYSTEM_HAS_BATTERY == 1
-					 || battery->soc < 50)  // battery recharge required todo battery soc control curve, goal: >90% at sunset
+					 || (ctrl_ref->p_pcc < -50 && battery->soc < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
 				 && !bms.tempWarn(
 #endif //SYSTEM_HAS_BATTERY
 			   )) {
-				//ctrl_ref->mode = AC_PASSIVE;  // todo: check if switch to PAC_CONTROL_PCC is fast enough to prevent overvoltage
+				ctrl_ref->mode = VDC_CONTROL;
+				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
 				nextMode(SYS_MODE);
-			} else if (    cnt_1Hz > (cnt_rel_1Hz+120)  // stay in PV2AC mode for min 120 seconds before possible turnoff AC
-					    && get_p_ac_filt1minute() < 5 && get_p_ac_filt50Hz() < 5
+			} else if (    cnt_1Hz > (cnt_rel_1Hz+(3*60))  // stay in PV2AC mode for min 3 minutes in case of low PV power
+					    && get_p_ac_filt1minute() < 5 && get_p_ac_filt50Hz() < 5  // todo: AC power seems larger than measured
 			          ) {
 				if (SYS_MODE == PV2AC) {
 					nextMode(OFF);
-				} else {
+				} else if (cnt_1Hz > (cnt_rel_1Hz+(10*60))) {  // limit toggling rate between battery charging and PV2AC
 					// prevent short turnoff in the evening when battery is full
-					ctrl_ref->mode = AC_PASSIVE;
+					ctrl_ref->mode = VDC_CONTROL;
+					ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
 					nextMode(SYS_MODE);
 				}
 			}
@@ -153,7 +161,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 		  case HYBRID_PCC_SENSOR:
 			// preload DC bus if battery is in deepsleep to test PV power
-			if (battery->voltage_100mV == 0) {
+			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
 					battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
@@ -172,8 +180,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
-							&& (   battery->soc > 20      // enough energy for feedin
-							    || battery->minVcell_mV > 3150 // todo: implement Kalman for SoC and make this line compatible with CHEM-NMC
+							&& (   (battery->soc > 20      // enough energy for feedin
+							        && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+150)) // todo: implement Kalman filter (in BMS) for accurate SoC
 							    || battery_almost_full()  // or battery charge has to be reduced
 							    || bms.tempWarn()         // hot or cold battery -> PV2AC
 							    || p_bat_50Hz >= p_bat_chg_max)  // or battery charge power is large and has to be reduced
@@ -204,15 +212,11 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						// check if battery should be disconnected (variable Vdc -> higher efficiency)
 						if ( (bms.tempWarn())
 							 || ( (ctrl_ref->p_pcc < -50 || electricity_meter_get_status() == EL_METER_CONN_ERR)  // other PV inverters produce enough for household or PCC sensor fail
-							      && (battery->power_W > 10)  // minimum charging power to compensate switching loss for AC bridge
+							      && (battery->power_W > P_MIN_PV2AC)  // minimum charging power to compensate switching loss for AC bridge
 							      && battery_full()
 							  	  )
 							) {
 							nextMode(PV2AC);
-							contactorBattery(0);
-							bmsPower(0);
-							sys_mode_needs_battery = false;
-							battery_state_request(BAT_OFF);
 
 						// AC turnoff in case of empty battery.
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required
@@ -222,14 +226,14 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
 									   )
 						   ) {
-							if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {  // prevent system shutdown during sunrise
+							// prevent system shutdown during sunrise
+							//if(time > time_sunrise && time < time_sundown)  // todo PLL-like time estimation for day and night
+							if (get_p_dc_filt50Hz() >= P_MIN_PV2AC) {
+								nextMode(PV2AC);
+							} else if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {
 								ctrl_ref->mode = AC_PASSIVE;
 							} else {
 								ctrl_ref->mode = AC_OFF;
-								sys_mode_needs_battery = false;
-								contactorBattery(0);
-								bmsPower(0);
-								battery_state_request(BAT_OFF);
 								nextMode(OFF);
 								stateHYBRID_AC = HYB_AC_OFF;
 							}

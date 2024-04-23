@@ -32,6 +32,7 @@
 //#define P_AC_MAX ((5*32)/1.41) //113W  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
 #define P_AC_MAX (210)  // 210W minimum for energy packet controller
 #define P_BAT_MIN_CHARGE 2
+#define P_MIN_PV2AC 10
 
 #define DEF_MPPT_DUTY_ABSMAX 4250
 
