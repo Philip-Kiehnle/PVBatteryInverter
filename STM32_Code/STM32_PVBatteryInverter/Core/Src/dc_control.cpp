@@ -361,7 +361,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  }
 	  case WAIT_CONTACTOR_DC:
 		//if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
-		if (cnt_rel >= 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable  == hangs, maybe becasue bat not conneting
+		if (cnt_rel >= 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable. Hangs, if battery not connecting
 			mppTracker.duty_raw = dutyLS1;
 			nextState(MPPT);
 		}
