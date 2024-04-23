@@ -92,6 +92,9 @@ DMA_HandleTypeDef hdma_uart5_rx;
 DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
+char tx_buf[64];
+uint8_t tx_len;
+
 uint16_t ADC1ConvertedData[2];
 uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
@@ -101,6 +104,7 @@ control_ref_t ctrl_ref;
 volatile bool print_request;
 
 volatile uint32_t cnt_1Hz;
+volatile uint32_t cntErr_1Hz;
 
 volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 
@@ -205,6 +209,50 @@ static void FDCAN_Config(void);
 /* USER CODE BEGIN 0 */
 
 
+void uartSend(char* ptr, int len)
+{
+    HAL_UART_Transmit(&huart3, (uint8_t *)ptr,len, 10);
+
+}
+
+void uSendInt(int value)
+{
+	itoa(value, tx_buf, 10);
+	tx_len=strlen(tx_buf);
+	HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+}
+
+void uSend_1m(int int_value)
+{
+	float value = int_value/1000.0;
+	tx_len = snprintf(NULL, 0, "%.03f", value);
+	char *str = (char *)malloc(tx_len + 1);
+	snprintf(str, tx_len + 1, "%f.03", value);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str, tx_len, 10);
+	free(str);
+}
+
+void uSend_10m(int int_value)
+{
+	float value = int_value/100.0;
+	tx_len = snprintf(NULL, 0, "%.02f", value);
+	char *str = (char *)malloc(tx_len + 1);
+	snprintf(str, tx_len + 1, "%f.02", value);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str, tx_len, 10);
+	free(str);
+}
+
+void uSend_100m(int int_value)
+{
+	float value = int_value/10.0;
+	tx_len = snprintf(NULL, 0, "%.01f", value);
+	char *str = (char *)malloc(tx_len + 1);
+	snprintf(str, tx_len + 1, "%f.01", value);
+	HAL_UART_Transmit(&huart3, (uint8_t *)str, tx_len, 10);
+	free(str);
+}
+
+
 void resetWatchdog()
 {
 	// Watchdog runs at 32/8=4kHz -> ~1sec for 4095
@@ -219,6 +267,9 @@ void resetWatchdog()
 void HAL_LPTIM_AutoReloadMatchCallback(LPTIM_HandleTypeDef *hlptim)
 {
 	cnt_1Hz++;
+	if (get_sys_errorcode() != EC_NO_ERROR) {
+		cntErr_1Hz++;
+	}
 }
 
 
@@ -337,10 +388,16 @@ void calc_and_wait(uint32_t delay)
 		if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
 			reinitUART(huart_rs485, 115200);
 			calc_async_dc_control();
-			// todo if smart meter and battery update interval is 1sec, possible collision occurs, when smart meter data arrives during battery comm
-			if (async_battery_communication()) {  // todo check why update comes too often (every 2ms) sometimes
-				HAL_Delay(2);  //ms  // todo check if necessary
+
+			if (async_battery_communication()) {
 				send_inverterdata();
+
+				// receive commands from external energy management system
+#define RX_MAX_CMD_LEN (sizeof("p_bat_chg_max65535\n")+5)
+				uint8_t rx_buf[RX_MAX_CMD_LEN];
+				uint16_t rx_len;
+				HAL_UARTEx_ReceiveToIdle(huart_rs485, rx_buf, RX_MAX_CMD_LEN, &rx_len, 100);  // 100ms rx window
+				parse_cmd((char *)rx_buf, rx_len);
 			}
 		}
 	} else {
@@ -488,53 +545,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
 #endif
 }
-
-void uartSend(char* ptr, int len)
-{
-    HAL_UART_Transmit(&huart3,(uint8_t *)ptr,len, 10);
-
-}
-
-char Tx_Buffer[64];
-uint8_t Tx_len;
-
-void uSendInt(int value)
-{
-	itoa(value, Tx_Buffer, 10);
-	Tx_len=strlen(Tx_Buffer);
-	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
-}
-
-void uSend_1m(int int_value)
-{
-	float value = int_value/1000.0;
-	uint8_t Tx_len = snprintf(NULL, 0, "%.03f", value);
-	char *str = (char *)malloc(Tx_len + 1);
-	snprintf(str, Tx_len + 1, "%f.03", value);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str, Tx_len, 10);
-	free(str);
-}
-
-void uSend_10m(int int_value)
-{
-	float value = int_value/100.0;
-	uint8_t Tx_len = snprintf(NULL, 0, "%.02f", value);
-	char *str = (char *)malloc(Tx_len + 1);
-	snprintf(str, Tx_len + 1, "%f.02", value);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str, Tx_len, 10);
-	free(str);
-}
-
-void uSend_100m(int int_value)
-{
-	float value = int_value/10.0;
-	uint8_t Tx_len = snprintf(NULL, 0, "%.01f", value);
-	char *str = (char *)malloc(Tx_len + 1);
-	snprintf(str, Tx_len + 1, "%f.01", value);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str, Tx_len, 10);
-	free(str);
-}
-
 
 /* USER CODE END 0 */
 
@@ -779,8 +789,8 @@ int main(void)
 				for (uint8_t bit=0; bit<64; bit++) {
 					if ( (1<<bit) & cellStack.csc_err[csc]) {
 						const char * strerr = csc_err_str[bit];
-						Tx_len=strlen(strerr);
-						HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+						tx_len=strlen(strerr);
+						HAL_UART_Transmit(&huart3, (uint8_t *)strerr, tx_len, 10);
 						uSend("\n");
 					}
 				}
@@ -794,40 +804,40 @@ int main(void)
 
 			if (get_sys_errorcode()!=EC_NO_ERROR) {
 				uSend("E ");
-				itoa(get_sys_errorcode(), Tx_Buffer, 10);
-				Tx_len=strlen(Tx_Buffer);
-				HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+				itoa(get_sys_errorcode(), tx_buf, 10);
+				tx_len=strlen(tx_buf);
+				HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
 				uSend(" ");
 				char * strerr = strerror(get_sys_errorcode());
-				Tx_len=strlen(strerr);
-				HAL_UART_Transmit(&huart3, (uint8_t *)strerr, Tx_len, 10);
+				tx_len=strlen(strerr);
+				HAL_UART_Transmit(&huart3, (uint8_t *)strerr, tx_len, 10);
 				uSend("\n");
 			}
 
 			uSend("\nS ");
-			itoa(get_sys_mode(), Tx_Buffer, 10);
-			Tx_len=strlen(Tx_Buffer);
-			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			itoa(get_sys_mode(), tx_buf, 10);
+			tx_len=strlen(tx_buf);
+			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
 
 			uSend("\nDC ");
-			itoa(stateDC, Tx_Buffer, 10);
-			Tx_len=strlen(Tx_Buffer);
-			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			itoa(stateDC, tx_buf, 10);
+			tx_len=strlen(tx_buf);
+			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
 #if SYSTEM_HAS_BATTERY == 1
 			uSend(" Bat ");
-			itoa(get_stateBattery(), Tx_Buffer, 10);
-			Tx_len=strlen(Tx_Buffer);
-			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			itoa(get_stateBattery(), tx_buf, 10);
+			tx_len=strlen(tx_buf);
+			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
 #endif //SYSTEM_HAS_BATTERY
 
 			uSend("\nAC ");
-			itoa(stateAC, Tx_Buffer, 10);
-			Tx_len=strlen(Tx_Buffer);
-			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			itoa(stateAC, tx_buf, 10);
+			tx_len=strlen(tx_buf);
+			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
 			uSend("; ");
-			itoa(ctrl_ref.mode, Tx_Buffer, 10);
-			Tx_len=strlen(Tx_Buffer);
-			HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+			itoa(ctrl_ref.mode, tx_buf, 10);
+			tx_len=strlen(tx_buf);
+			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
 			uSend("\n");
 
 #if SYSTEM_HAS_BATTERY == 1

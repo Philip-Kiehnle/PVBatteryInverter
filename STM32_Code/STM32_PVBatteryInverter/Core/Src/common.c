@@ -89,7 +89,7 @@ void checkErrors()
 
 	checkEmergencyStop();
 
-	if (sys_errcode != 0 ) {
+	if (sys_errcode != EC_NO_ERROR) {
 		shutdownAll();
 		GPIOB->BRR = (1<<0);  // enable red LED
 	}

@@ -518,12 +518,23 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 
 
 errorPVBI_t checkACLimits() {
-	if ( i_ac_10mA > E_I_AC_MAX_10mA || i_ac_10mA < -E_I_AC_MAX_10mA) {
-		return EC_I_AC_MAX;
-	}
 	if ( v_dc_FBgrid_sincfilt_100mV > E_VDC_MAX_FB_GRID_100mV ) {
 		return EC_V_DC_MAX_FB_GRID;
 	}
+
+	static uint8_t cnt_i_ac_softlimit;
+	if ( i_ac_10mA > E_I_AC_MAX_10mA || i_ac_10mA < -E_I_AC_MAX_10mA) {
+		return EC_I_AC_MAX;
+	} else if ( i_ac_10mA > E_I_AC_SOFTMAX_10mA || i_ac_10mA < -E_I_AC_SOFTMAX_10mA) {
+		if (cnt_i_ac_softlimit < 5) {
+			cnt_i_ac_softlimit++;
+		} else {
+			return EC_I_AC_MAX;
+		}
+	} else {
+		if (cnt_i_ac_softlimit > 0) cnt_i_ac_softlimit--;
+	}
+
 	return EC_NO_ERROR;
 }
 

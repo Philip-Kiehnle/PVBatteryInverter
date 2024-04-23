@@ -16,6 +16,7 @@
 #include "battery.h"
 #include "mpptracker.hpp"
 #include "PICtrl.hpp"
+#include "sys_mode_controller.h"
 
 #include "BatteryManagement/ETI_DualBMS.hpp"
 extern ETI_DualBMS bms;
@@ -190,7 +191,7 @@ void calc_async_dc_control()
 //			p_limit = bms.p_discharge_max();
 //		}
 
-		piCtrl_Pac_Pbat.step( (p_bat_50Hz - bms.batteryStatus.p_charge_max), 0, P_AC_MAX);
+		piCtrl_Pac_Pbat.step( (p_bat_50Hz - get_p_bat_chg_max()), 0, P_AC_MAX);
 
 #if 0  // use if linear Vcell power limit in BMS code causes ringing
 	    /**********************************************/
@@ -336,7 +337,8 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			} else if ( v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV+VDC_TOLERANCE_100mV/4) ) {
 				dutyLS1 -= 2;
 			}
-			dutyLS1 = std::clamp(dutyLS1, (int16_t)0, (int16_t)MPPT_DUTY_ABSMAX);
+			constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAMS.vin_min/MPPTPARAMS.vout_max);
+			dutyLS1 = std::clamp(dutyLS1, (int16_t)0, (int16_t)(MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY));  // prevent short circuit of PV plant
 		}
 
 		if (   (  v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
@@ -483,7 +485,10 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	  //GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
 	// from function enter to here
-	// with -O3 12.02us
+	// 21.04.2024: with debug:-g3  -O3     <12.75us for 2min
+	// 21.04.2024: with debug:none -Ofast  < 8.83us for 2min
+	// 21.04.2024: with debug:-g   -Ofast  < 8.84us for 2min (minimal different main loop)
+	// 21.04.2024: with debug:-g3  -Ofast  < 8.55us for 2min (minimal different main loop)
 
 	  return dutyB1;
 }

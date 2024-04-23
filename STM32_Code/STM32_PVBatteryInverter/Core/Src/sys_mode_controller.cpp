@@ -14,8 +14,12 @@
 
 
 enum mode_t sys_mode = SYS_MODE;
+bool locked = false;
+static uint16_t p_bat_chg_max;
+static uint16_t p_bat_chg_externalmax = UINT16_MAX;
 static uint32_t cnt_rel_1Hz;
 extern volatile uint32_t cnt_1Hz;
+extern volatile uint32_t cntErr_1Hz;
 
 
 #if SYSTEM_HAS_BATTERY == 1
@@ -23,10 +27,18 @@ extern volatile uint32_t cnt_1Hz;
 ETI_DualBMS bms(15);  // BMS address
 #endif
 
+
+uint16_t get_p_bat_chg_max()
+{
+	return p_bat_chg_max;
+}
+
+
 enum mode_t get_sys_mode()
 {
 	return sys_mode;
 }
+
 
 static inline void nextMode(enum mode_t mode)
 {
@@ -34,10 +46,51 @@ static inline void nextMode(enum mode_t mode)
 	cnt_rel_1Hz = cnt_1Hz;
 }
 
+
+void parse_cmd(char* rx_buf, uint16_t rx_len)
+{
+	bool found_newline = false;
+	uint8_t i = 0;
+	std::string cmdString;
+	while(i < rx_len){
+	    if (rx_buf[i] == '\n') {
+	    	found_newline = true;
+	    	break;  // no valid command
+	    }
+	    cmdString.push_back(rx_buf[i]);
+	    i++;
+	}
+
+	if (!found_newline) return;
+
+	if (cmdString == "reset") {
+		GPIOB->BRR = (1<<0);  // enable red LED
+		if (get_sys_errorcode() != EC_NO_ERROR) {
+			if (cntErr_1Hz >= 120) {  // reset possible after 120 seconds in case of error
+				NVIC_SystemReset();
+			}
+		} else {
+			shutdownAll();  // todo: battery off sends to late
+			NVIC_SystemReset();
+		}
+	} else if (cmdString == "shutdown") {
+		locked = true;
+		shutdownAll();
+		nextMode(OFF);
+
+	// commands with arguments:
+	} else if (cmdString.rfind("p_bat_chg_max", 0) == 0) {
+		p_bat_chg_externalmax = atoi(&rx_buf[sizeof("p_bat_chg_max")]);
+	}
+
+}
+
+
 void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 {
 #if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
+	p_bat_chg_max = std::min(battery->p_charge_max, p_bat_chg_externalmax);
 #endif //SYSTEM_HAS_BATTERY
 
 	static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
@@ -49,7 +102,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			sys_mode_needs_battery = false;
 
 			// stay in OFF mode for 5 minutes to discharge DC bus
-			if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) ) {
+			if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) && !locked) {
 				nextMode(SYS_MODE);
 			}
 			break;
@@ -120,9 +173,10 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					case HYB_AC_OFF:
 						if (   battery_connected()
 							&& (   battery->soc > 20      // enough energy for feedin
+							    || battery->minVcell_mV > 3150 // todo: implement Kalman for SoC and make this line compatible with CHEM-NMC
 							    || battery_almost_full()  // or battery charge has to be reduced
 							    || bms.tempWarn()         // hot or cold battery -> PV2AC
-							    || p_bat_50Hz >= battery->p_charge_max)  // or battery charge power is large
+							    || p_bat_50Hz >= p_bat_chg_max)  // or battery charge power is large and has to be reduced
 							) {
 								stateHYBRID_AC = HYB_AC_ALLOWED;
 						}
@@ -131,9 +185,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					case HYB_AC_ALLOWED:
 						// AC turnon if
 						if (   (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required; filter 1 second spikes from freezer motor start
-							|| battery_almost_full()               // or battery charge has to be reduced
 							|| bms.tempWarn()                      // hot or cold battery -> PV2AC
-							|| p_bat_50Hz > battery->p_charge_max  // or battery charge power is large
+							|| battery_almost_full()               // or battery charge power has to be reduced
+							|| p_bat_50Hz > p_bat_chg_max          // or battery charge power is large and has to be reduced
 							) {
 							stateHYBRID_AC = HYB_AC_ON;
 						}

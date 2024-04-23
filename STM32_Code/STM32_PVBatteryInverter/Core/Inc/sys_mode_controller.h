@@ -10,7 +10,9 @@
 #include "common.h"
 
 enum mode_t get_sys_mode();
+uint16_t get_p_bat_chg_max();
 void sys_mode_ctrl_step(control_ref_t* ctrl_ref);
+void parse_cmd(char* rx_buf, uint16_t rx_len);
 
 
 #ifdef __cplusplus
