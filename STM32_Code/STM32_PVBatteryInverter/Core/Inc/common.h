@@ -22,8 +22,8 @@
 //#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
 //#define E_IAC_MAX_10mA (10 * 100)  // 1625W÷230V×sqrt(2) amplitude
 
-#define E_I_AC_SOFTMAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for 5 samples
-#define E_I_AC_MAX_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
+#define E_I_AC_RMS_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for 5 samples
+#define E_I_AC_PULSE_MAX_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
 
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
 #define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
@@ -73,18 +73,27 @@ typedef struct {
 
 typedef enum
 {
-	EC_NO_ERROR = 0,
-	EC_EMERGENCY_STOP = -1,
-	EC_V_DC_MAX_FB_BOOST = -2,
-	EC_V_DC_MAX_FB_GRID = -3,
-	EC_V_DC_SENSOR_FB_BOOST = -4,
-	EC_V_DC_SENSOR_FB_GRID = -5,
-	EC_I_DC_MAX = -6,
-	EC_I_AC_MAX = -7,
-	EC_I_AC_DC_OFFSET = -8,
-	EC_GRID_SYNC_LOST = -9,
-	EC_WATCHDOG_RESET = -10,
-	EC_BATTERY_COMM_FAIL = -11
+	EC_NO_ERROR                  = 0,
+	EC_EMERGENCY_STOP            = -1,
+	EC_V_DC_MAX_FB_BOOST         = -2,
+	EC_V_DC_MAX_FB_GRID          = -3,
+	EC_V_DC_SENSOR_FB_BOOST      = -4,
+	EC_V_DC_SENSOR_FB_GRID       = -5,
+	EC_I_DC_MAX                  = -6,
+	EC_I_AC_PULSE_MAX            = -7,
+	EC_I_AC_RMS_MAX              = -8,
+	EC_I_AC_DC_OFFSET            = -9,
+	EC_GRID_SYNC_LOST            = -10,
+	EC_WATCHDOG_RESET            = -11,
+	EC_BATTERY_COMM_FAIL         = -12,
+	EC_BATTERY_V_CELL_MIN        = -13,
+	EC_BATTERY_V_CELL_MAX        = -14,
+	EC_BATTERY_V_CELL_IMBALANCE  = -15,
+	EC_BATTERY_I_CHARGE_MAX      = -16,
+	EC_BATTERY_I_DISCHARGE_MAX   = -17,
+	EC_BATTERY_TEMPERATURE_MIN   = -18,
+	EC_BATTERY_TEMPERATURE_MAX   = -19,
+	EC_BATTERY_OTHER             = -20
 } errorPVBI_t;
 
 

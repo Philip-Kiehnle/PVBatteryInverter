@@ -32,6 +32,10 @@ constexpr batteryParameter_t BATTERY = {
 	.T_CELL_MAX_ERR  = 44,  // BMS limit 45°C
 };
 
+constexpr uint16_t V_CELL_IMBALANCE_INFO_mV = 250;
+constexpr uint16_t V_CELL_IMBALANCE_WARN_mV = 270;
+//constexpr uint16_t V_CELL_IMBALANCE_ERR_mV = 300;  // BMS value
+
 // LiitoKala 32700 7000mAh LiFePO4 battery: 35A cont. discharge, 55A max
 // curve was not available -> using Liitokala 32700 5.5Ah data from
 // https://www.kirich.blog/obzory/akkumulyatory/862-liitokala-32700-lifepo4-i-sravnenie-ih-s-analogichnymi-akkumulyatorami-varicore.html
@@ -87,22 +91,30 @@ const bool battery_connected()
 
 const bool battery_empty()
 {
-	return (bms.batteryStatus.soc <= 1 || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV);
+	bool cell_imbalance_flag =    (bms.batteryStatus.minVcell_mV < BATTERY.V_CELL_NOM_mV)
+			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_WARN_mV);
+	return (bms.batteryStatus.soc <= 1 || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV || cell_imbalance_flag);
 }
 
 const bool battery_almost_empty()
 {
-	return (bms.batteryStatus.soc <= 8 || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV);
+	bool cell_imbalance_flag =    (bms.batteryStatus.minVcell_mV < BATTERY.V_CELL_NOM_mV)
+			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_INFO_mV);
+	return (bms.batteryStatus.soc <= 8 || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV || cell_imbalance_flag);
 }
 
 const bool battery_almost_full()
 {
-	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_POWER_REDUCE_mV);
+	bool cell_imbalance_flag =    (bms.batteryStatus.maxVcell_mV > BATTERY.V_CELL_NOM_mV)
+			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_INFO_mV);
+	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_POWER_REDUCE_mV || cell_imbalance_flag);
 }
 
 const bool battery_full()
 {
-	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_PROTECT_mV);
+	bool cell_imbalance_flag =    (bms.batteryStatus.maxVcell_mV > BATTERY.V_CELL_NOM_mV)
+			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_WARN_mV);
+	return (bms.batteryStatus.soc == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_PROTECT_mV || cell_imbalance_flag);
 }
 #endif //SYSTEM_HAS_BATTERY
 
@@ -110,6 +122,34 @@ const bool battery_full()
 void battery_update_request()
 {
 	update_request = true;
+}
+
+static void check_bat_error()
+{
+	if (bms.fault_v_cell_min()) {
+		set_sys_errorcode(EC_BATTERY_V_CELL_MIN);
+
+	} else if (bms.fault_v_cell_max()) {
+		set_sys_errorcode(EC_BATTERY_V_CELL_MAX);
+
+	} else if (bms.fault_v_cell_imbalance()) {
+		set_sys_errorcode(EC_BATTERY_V_CELL_IMBALANCE);
+
+	} else if (bms.fault_i_charge_max()) {
+		set_sys_errorcode(EC_BATTERY_I_CHARGE_MAX);
+
+	} else if (bms.fault_i_discharge_max()) {
+		set_sys_errorcode(EC_BATTERY_I_DISCHARGE_MAX);
+
+	} else if (bms.fault_temperature_min()) {
+		set_sys_errorcode(EC_BATTERY_TEMPERATURE_MIN);
+
+	} else if (bms.fault_temperature_max()) {
+		set_sys_errorcode(EC_BATTERY_TEMPERATURE_MAX);
+
+	} else if (bms.fault_other()) {
+		set_sys_errorcode(EC_BATTERY_OTHER);
+	}
 }
 
 
@@ -186,6 +226,7 @@ bool async_battery_communication()
 		if (stateBattery != BMS_OFF__BAT_OFF) {
 			if (bms.get_summary() == BMS_OK) {
 				bms.estimateSoC();
+				check_bat_error();
 				bat_comm_fail_cnt = 0;
 			} else {
 				if (bat_comm_fail_cnt == 60) {

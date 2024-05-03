@@ -26,19 +26,27 @@ struct _sys_errordesc {
     int  errcode;
     char *message;
 } sys_errordesc[] = {
-    { EC_NO_ERROR, "EC_NO_ERROR : No error" },
-    { EC_EMERGENCY_STOP, "EC_EMERGENCY_STOP : Emergency button pressed" },
-    { EC_V_DC_MAX_FB_BOOST, "EC_V_DC_MAX_FB_BOOST : DC voltage too high (Full-bridge PV boost)" },
-	{ EC_V_DC_MAX_FB_GRID, "EC_V_DC_MAX_FB_GRID : DC voltage too high (Full-bridge AC-grid)" },
-	{ EC_V_DC_SENSOR_FB_BOOST, "EC_V_DC_SENSOR_FB_BOOST : Vdc sigma delta pulse count invalid (Full-bridge PV boost)"},
-	{ EC_V_DC_SENSOR_FB_GRID, "EC_V_DC_SENSOR_FB_GRID : Vdc sigma delta pulse count invalid (Full-bridge AC-grid)"},
-	{ EC_I_DC_MAX, "EC_I_DC_MAX : DC current too high" },
-	{ EC_I_AC_MAX, "EC_I_AC_MAX : AC current too high" },
-	{ EC_I_AC_DC_OFFSET, "EC_I_AC_DC_OFFSET : DC offset in AC current too high" },
-	{ EC_GRID_SYNC_LOST, "EC_GRID_SYNC_LOST : grid parameters out of range while connected to grid"},
-	{ EC_WATCHDOG_RESET, "EC_WATCHDOG_RESET : watchdog counter caused reset" },
-	{ EC_BATTERY_COMM_FAIL, "EC_BATTERY_COMM_FAIL : no battery communication for 60 sec" },
-
+	{ EC_NO_ERROR,                  "EC_NO_ERROR : No error" },
+	{ EC_EMERGENCY_STOP,            "EC_EMERGENCY_STOP : Emergency button pressed" },
+	{ EC_V_DC_MAX_FB_BOOST,         "EC_V_DC_MAX_FB_BOOST : DC voltage too high (Full-bridge PV boost)" },
+	{ EC_V_DC_MAX_FB_GRID,          "EC_V_DC_MAX_FB_GRID : DC voltage too high (Full-bridge AC-grid)" },
+	{ EC_V_DC_SENSOR_FB_BOOST,      "EC_V_DC_SENSOR_FB_BOOST : Vdc sigma delta pulse count invalid (Full-bridge PV boost)"},
+	{ EC_V_DC_SENSOR_FB_GRID,       "EC_V_DC_SENSOR_FB_GRID : Vdc sigma delta pulse count invalid (Full-bridge AC-grid)"},
+	{ EC_I_DC_MAX,                  "EC_I_DC_MAX : DC current too high" },
+	{ EC_I_AC_PULSE_MAX,            "EC_I_AC_PULSE_MAX : AC current exceeded pulse max in one control period" },
+	{ EC_I_AC_RMS_MAX,              "EC_I_AC_RMS_MAX : AC current exceeded rms max in multiple control periods" },
+	{ EC_I_AC_DC_OFFSET,            "EC_I_AC_DC_OFFSET : DC offset in AC current too high" },
+	{ EC_GRID_SYNC_LOST,            "EC_GRID_SYNC_LOST : grid parameters out of range while connected to grid"},
+	{ EC_WATCHDOG_RESET,            "EC_WATCHDOG_RESET : watchdog counter caused reset" },
+	{ EC_BATTERY_COMM_FAIL,         "EC_BATTERY_COMM_FAIL : no battery communication for 60 sec" },
+	{ EC_BATTERY_V_CELL_MIN,        "EC_BATTERY_V_CELL_MIN : battery cell voltage below min voltage" },
+	{ EC_BATTERY_V_CELL_MAX,        "EC_BATTERY_V_CELL_MAX : battery cell voltage above max voltage" },
+	{ EC_BATTERY_V_CELL_IMBALANCE,  "EC_BATTERY_V_CELL_IMBALANCE : min and max battery cell voltage difference too high" },
+	{ EC_BATTERY_I_CHARGE_MAX,      "EC_BATTERY_I_CHARGE_MAX : max charge current exceeded" },
+	{ EC_BATTERY_I_DISCHARGE_MAX,   "EC_BATTERY_I_DISCHARGE_MAX : max discharge current exceeded" },
+	{ EC_BATTERY_TEMPERATURE_MIN,   "EC_BATTERY_TEMPERATURE_MIN : battery temperature below minimum" },
+	{ EC_BATTERY_TEMPERATURE_MAX,   "EC_BATTERY_TEMPERATURE_MAX : battery temperature above maximum" },
+	{ EC_BATTERY_OTHER,             "EC_BATTERY_OTHER : other bms error, see BMS registers" }
 };
 
 

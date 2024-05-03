@@ -34,7 +34,10 @@ int parse_sml(const char* data, int size, meterdata_t* meterdata)
             sml_start_idx = i;
         }
 
-        if ( *((uint64_t*)(data+i)) == 0x65FF000801000107) {  // 1.8.1 Wirkarbeit Bezug (in 0.1 Wh) //0x07010001 0800FF65 -> bigend
+        uint64_t magic_number;
+        memcpy(&magic_number, data+i, 8);  // direct access causes hard fault error in STM32
+
+        if ( magic_number == 0x65FF000801000107) {  // 1.8.1 Wirkarbeit Bezug (in 0.1 Wh) //0x07010001 0800FF65 -> bigend
 
             if ( *(uint8_t*) (data+i+17) == 0x65) {  // 0x65 -> datatype is uint32
                 meterdata->e_consumed =  (uint32_t) __bswap_constant_32( *(uint32_t*) (data+i+18) );
@@ -43,7 +46,7 @@ int parse_sml(const char* data, int size, meterdata_t* meterdata)
             }
         }
 
-        if ( *((uint64_t*)(data+i)) == 0x01FF000802000107) {  // 2.8.1 Wirkarbeit Lieferung (in 0.1 Wh) //0x07010002 0800FF01 -> bigend
+        if ( magic_number == 0x01FF000802000107) {  // 2.8.1 Wirkarbeit Lieferung (in 0.1 Wh) //0x07010002 0800FF01 -> bigend
 
             if ( *(uint8_t*) (data+i+13) == 0x65) {  // 0x65 -> datatype is uint32
                 meterdata->e_produced =  (uint32_t) __bswap_constant_32( *(uint32_t*) (data+i+14) );
@@ -52,7 +55,7 @@ int parse_sml(const char* data, int size, meterdata_t* meterdata)
             }
         }
 
-        if ( *((uint64_t*)(data+i)) == 0x01FF000710000107) {  // 16.7.0 Wirkleistung (Momentanwert in kW) //0x07010010 0700FF01 -> bigend
+        if ( magic_number == 0x01FF000710000107) {  // 16.7.0 Wirkleistung (Momentanwert in kW) //0x07010010 0700FF01 -> bigend
 
             if ( *(uint8_t*) (data+i+13) == 0x52) {  // 0x52 -> datatype is int8
                 meterdata->power =  *(int8_t*) (data+i+14);
