@@ -522,17 +522,17 @@ errorPVBI_t checkACLimits() {
 		return EC_V_DC_MAX_FB_GRID;
 	}
 
-	static uint8_t cnt_i_ac_softlimit;
-	if ( i_ac_10mA > E_I_AC_MAX_10mA || i_ac_10mA < -E_I_AC_MAX_10mA) {
-		return EC_I_AC_MAX;
-	} else if ( i_ac_10mA > E_I_AC_SOFTMAX_10mA || i_ac_10mA < -E_I_AC_SOFTMAX_10mA) {
-		if (cnt_i_ac_softlimit < 5) {
-			cnt_i_ac_softlimit++;
+	static uint8_t cnt_i_ac_rmslimit;  // todo: calculate rms limit based on actual chip temperature
+	if ( i_ac_10mA > E_I_AC_PULSE_MAX_10mA || i_ac_10mA < -E_I_AC_PULSE_MAX_10mA) {
+		return EC_I_AC_PULSE_MAX;
+	} else if ( i_ac_10mA > E_I_AC_RMS_MAX_10mA || i_ac_10mA < -E_I_AC_RMS_MAX_10mA) {
+		if (cnt_i_ac_rmslimit < 5) {
+			cnt_i_ac_rmslimit++;
 		} else {
-			return EC_I_AC_MAX;
+			return EC_I_AC_RMS_MAX;
 		}
 	} else {
-		if (cnt_i_ac_softlimit > 0) cnt_i_ac_softlimit--;
+		if (cnt_i_ac_rmslimit > 0) cnt_i_ac_rmslimit--;
 	}
 
 	return EC_NO_ERROR;
