@@ -21,7 +21,7 @@ constexpr batteryParameter_t BATTERY = {
 	.R_PCELL_mOHM = (8+1), // internal resistance of parallel cells and cell connector in mOhm
 	.V_CELL_NOM_mV              = 3200,
 	.V_CELL_MIN_PROTECT_mV      = 2820,  // BMS UV_THRESHOLD_mV 2800  // LiitoKala discharge cutoff 2.5V
-	.V_CELL_MIN_POWER_REDUCE_mV = 2900,
+	.V_CELL_MIN_POWER_REDUCE_mV = 3000,
 	.V_CELL_MAX_POWER_REDUCE_mV = 3520,
 	.V_CELL_MAX_PROTECT_mV      = 3560,  // BMS OV_THRESHOLD_mV 3600
 	.I_CHARGE_MAX    = 3.0,  // LiitoKala allows 3.0A rated charge
@@ -60,6 +60,7 @@ static volatile bool update_request;
 static volatile stateBattery_t stateBattery_next = BMS_ON__BAT_OFF;
 static stateBattery_t stateBattery = BMS_ON__BAT_OFF;
 static uint16_t bat_comm_fail_cnt;
+static uint16_t bat_state_fail_cnt;  // for battery disconnects
 static bool bat_connected;
 
 #if SYSTEM_HAS_BATTERY == 1
@@ -169,6 +170,16 @@ void battery_state_request(stateBattery_t state)
 }
 
 
+static bool voltage_in_range()
+{
+	if (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
+	    && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5) {
+		return true;
+	}
+	return false;
+}
+
+
 // returns true if there was an update request
 bool async_battery_communication()
 {
@@ -213,8 +224,7 @@ bool async_battery_communication()
 
 	if ( stateBattery == BMS_ON__BAT_ON
 	     && (abs(bms.batteryStatus.power_W) > 5
-			 || (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
-				 && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5)
+			 || voltage_in_range()
 		)
 	) {
 		bat_connected = true;
@@ -237,6 +247,23 @@ bool async_battery_communication()
 			}
 		}
 		return_code = true;
+
+		if ( stateBattery == BMS_ON__BAT_ON) {
+			// check for battery disconnect
+			if (bms.batteryStatus.power_W == 0) {
+				if (bat_state_fail_cnt == 180) {  // 3 minutes
+					if (!voltage_in_range()) {
+						bat_state_fail_cnt = 0;
+						stateBattery = BMS_ON__BAT_OFF;
+						NVIC_SystemReset();
+					}
+				} else {
+					bat_state_fail_cnt++;
+				}
+			} else {
+				bat_state_fail_cnt = 0;
+			}
+		}
 	}
 #else
 	if (update_request) {

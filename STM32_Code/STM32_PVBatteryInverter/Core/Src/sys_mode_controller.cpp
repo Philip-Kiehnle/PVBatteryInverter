@@ -125,7 +125,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
-			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+200))  // more feedin required and battery not empty
+			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100))  // more feedin required and battery not empty
 #if SYSTEM_HAS_BATTERY == 1
 					 || (ctrl_ref->p_pcc < -50 && battery->soc < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
 				 && !bms.tempWarn(
@@ -181,7 +181,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					case HYB_AC_OFF:
 						if (   battery_connected()
 							&& (   (battery->soc > 20      // enough energy for feedin
-							        && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+150)) // todo: implement Kalman filter (in BMS) for accurate SoC
+							        && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100)) // todo: implement Kalman filter (in BMS) for accurate SoC
 							    || battery_almost_full()  // or battery charge has to be reduced
 							    || bms.tempWarn()         // hot or cold battery -> PV2AC
 							    || p_bat_50Hz >= p_bat_chg_max)  // or battery charge power is large and has to be reduced
