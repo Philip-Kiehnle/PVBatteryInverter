@@ -27,8 +27,15 @@ Device ID    : 0x0469 (STM32G47xxx/48xxx)
 
 Write with verify and start application:
 ```
-./stm32flash -w firmware.bin -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1 -b 115200
+./stm32flash -b 115200 -w firmware.bin -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1
 ```
+
+Or flash via Android phone:
+```
+pkill log-
+./stm32flash -b 115200 -w /data/local/STM32_PVBatteryInverter.bin  -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1
+```
+
 
 ### Problems:
 #### Data corruption can lead to execution of incomplete program
