@@ -22,7 +22,8 @@
 //#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
 //#define E_IAC_MAX_10mA (10 * 100)  // 1625W÷230V×sqrt(2) amplitude
 
-#define E_I_AC_RMS_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for 5 samples
+#define E_I_AC_RMS_MAX_CNT 10  // 10 samples @ 20kHz -> 500us
+#define E_I_AC_RMS_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
 #define E_I_AC_PULSE_MAX_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
 
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease

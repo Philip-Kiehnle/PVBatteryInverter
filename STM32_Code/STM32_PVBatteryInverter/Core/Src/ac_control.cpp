@@ -526,7 +526,7 @@ errorPVBI_t checkACLimits() {
 	if ( i_ac_10mA > E_I_AC_PULSE_MAX_10mA || i_ac_10mA < -E_I_AC_PULSE_MAX_10mA) {
 		return EC_I_AC_PULSE_MAX;
 	} else if ( i_ac_10mA > E_I_AC_RMS_MAX_10mA || i_ac_10mA < -E_I_AC_RMS_MAX_10mA) {
-		if (cnt_i_ac_rmslimit < 5) {
+		if (cnt_i_ac_rmslimit < E_I_AC_RMS_MAX_CNT) {
 			cnt_i_ac_rmslimit++;
 		} else {
 			return EC_I_AC_RMS_MAX;
