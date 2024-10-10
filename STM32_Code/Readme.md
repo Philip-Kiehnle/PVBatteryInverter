@@ -32,8 +32,11 @@ Write with verify and start application:
 
 Or flash via Android phone:
 ```
+adb push 'STM32_PVBatteryInverter/Debug/STM32_PVBatteryInverter.bin' /data/local
+adb shell
 pkill log-
-./stm32flash -b 115200 -w /data/local/STM32_PVBatteryInverter.bin  -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1
+/data/local/stm32flash -b 115200 -w /data/local/STM32_PVBatteryInverter.bin  -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1
+# A reset seems to be necessary after flash process. Direct start does not charge battery.
 ```
 
 

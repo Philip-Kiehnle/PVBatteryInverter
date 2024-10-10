@@ -18,7 +18,7 @@ bool locked = false;
 static uint16_t p_bat_chg_max;
 static uint16_t p_bat_chg_externalmax = UINT16_MAX;
 static uint32_t cnt_rel_1Hz;
-extern volatile uint32_t cnt_1Hz;
+extern volatile uint32_t cnt_1Hz;  // overflow in 136 years
 extern volatile uint32_t cntErr_1Hz;
 
 
@@ -48,47 +48,83 @@ static inline void nextMode(enum mode_t next_mode)
 		sys_mode_needs_battery = false;
 		battery_state_request(BAT_OFF);
 	}
-	sys_mode = next_mode;
-	cnt_rel_1Hz = cnt_1Hz;
+
+	if (sys_mode == OFF) {
+		// stay in OFF mode for 5 minutes to discharge DC bus
+		if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) && !locked) {
+			sys_mode = next_mode;
+			cnt_rel_1Hz = cnt_1Hz;
+		}
+	} else {
+		sys_mode = next_mode;
+		cnt_rel_1Hz = cnt_1Hz;
+	}
 }
 
 
-void parse_cmd(char* rx_buf, uint16_t rx_len)
+void parse_cmd(char* rx_buf, uint16_t rx_len, control_ref_t* ctrl_ref)
 {
+	static uint32_t cnt_1Hz_prev_ext_cmd;
 	bool found_newline = false;
 	uint8_t i = 0;
 	std::string cmdString;
 	while(i < rx_len){
 	    if (rx_buf[i] == '\n') {
 	    	found_newline = true;
-	    	break;  // no valid command
+	    	break;
 	    }
 	    cmdString.push_back(rx_buf[i]);
 	    i++;
 	}
 
-	if (!found_newline) return;
+	if (found_newline) {
+		int16_t p_ac_parsed = 0;
 
-	if (cmdString == "reset") {
-		GPIOB->BRR = (1<<0);  // enable red LED
-		if (get_sys_errorcode() != EC_NO_ERROR) {
-			if (cntErr_1Hz >= 120) {  // reset possible after 120 seconds in case of error
+		if (cmdString == "reset") {
+			GPIOB->BRR = (1<<0);  // enable red LED
+			if (get_sys_errorcode() != EC_NO_ERROR) {
+				if (cntErr_1Hz > 120) {  // reset possible after 120 seconds in case of error
+					NVIC_SystemReset();
+				}
+			} else {
+				shutdownAll();  // todo: battery off sends to late
 				NVIC_SystemReset();
 			}
-		} else {
-			shutdownAll();  // todo: battery off sends to late
-			NVIC_SystemReset();
-		}
-	} else if (cmdString == "shutdown") {
-		locked = true;
-		shutdownAll();
-		nextMode(OFF);
+		} else if (cmdString == "shutdown") {
+			locked = true;
+			shutdownAll();
+			nextMode(OFF);
 
-	// commands with arguments:
-	} else if (cmdString.rfind("p_bat_chg_max", 0) == 0) {
-		p_bat_chg_externalmax = atoi(&rx_buf[sizeof("p_bat_chg_max")]);
+		} else if (cmdString == "p_ac_extOFF") {
+			ctrl_ref->ext_ctrl_mode = EXT_OFF;
+
+		// commands with arguments:
+		} else if (cmdString.rfind("p_bat_chg_max") == 0) {
+			p_bat_chg_externalmax = atoi(&rx_buf[sizeof("p_bat_chg_max")-1]);
+		} else if (cmdString.rfind("p_ac_soft") == 0) {
+			p_ac_parsed = atoi(&rx_buf[sizeof("p_ac_soft")-1]);
+			ctrl_ref->ext_ctrl_mode = EXT_AC_SOFT;
+			cnt_1Hz_prev_ext_cmd = cnt_1Hz;
+		} else if (cmdString.rfind("p_ac_hard") == 0) {
+			p_ac_parsed = atoi(&rx_buf[sizeof("p_ac_hard")-1]);
+			ctrl_ref->ext_ctrl_mode = EXT_AC_HARD;
+			cnt_1Hz_prev_ext_cmd = cnt_1Hz;
+		}
+
+		if (ctrl_ref->ext_ctrl_mode != EXT_OFF) {
+			//ctrl_ref->p_ac_external = p_ac_parsed;  // wokring
+			ctrl_ref->p_ac_external = std::clamp(p_ac_parsed, (int16_t)(-P_AC_MAX), (int16_t)P_AC_MAX);
+			nextMode(HYBRID_REMOTE_CONTROLLED);
+		}
 	}
 
+	if (cnt_1Hz > cnt_1Hz_prev_ext_cmd+60) {  // internal control after 60 sec without command
+		ctrl_ref->ext_ctrl_mode = EXT_OFF;
+	}
+
+	if (ctrl_ref->ext_ctrl_mode == EXT_OFF && sys_mode == HYBRID_REMOTE_CONTROLLED) {
+		nextMode(HYBRID_PCC_SENSOR);
+	}
 }
 
 
@@ -102,15 +138,11 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 	static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
 
 	switch (sys_mode) {
-		   case OFF:
+		  case OFF:
 			ctrl_ref->mode = AC_OFF;
 			ctrl_ref->v_dc_100mV = 0;
 			sys_mode_needs_battery = false;
-
-			// stay in OFF mode for 5 minutes to discharge DC bus
-			if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) && !locked) {
-				nextMode(SYS_MODE);
-			}
+			nextMode(SYS_MODE);
 			break;
 
 		  case PV2AC:  // EnergyMeter: 29.6W 30.2VA with saturating inductor model
@@ -159,6 +191,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			}
 			break;
 
+		  case HYBRID_REMOTE_CONTROLLED:
 		  case HYBRID_PCC_SENSOR:
 			// preload DC bus if battery is in deepsleep to test PV power
 			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
@@ -182,9 +215,11 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						if (   battery_connected()
 							&& (   (battery->soc > 20      // enough energy for feedin
 							        && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100)) // todo: implement Kalman filter (in BMS) for accurate SoC
-							    || battery_almost_full()  // or battery charge has to be reduced
-							    || bms.tempWarn()         // hot or cold battery -> PV2AC
-							    || p_bat_50Hz >= p_bat_chg_max)  // or battery charge power is large and has to be reduced
+							    || bms.tempWarn()                      // hot or cold battery -> PV2AC
+							    || battery_almost_full()               // or battery charge power has to be reduced
+							    || p_bat_50Hz >= p_bat_chg_max         // or battery charge power is large and has to be reduced
+							    || ctrl_ref->ext_ctrl_mode != EXT_OFF  // or external control
+							   )
 							) {
 								stateHYBRID_AC = HYB_AC_ALLOWED;
 						}
@@ -196,6 +231,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							|| bms.tempWarn()                      // hot or cold battery -> PV2AC
 							|| battery_almost_full()               // or battery charge power has to be reduced
 							|| p_bat_50Hz > p_bat_chg_max          // or battery charge power is large and has to be reduced
+							|| ctrl_ref->ext_ctrl_mode != EXT_OFF  // or external control
 							) {
 							stateHYBRID_AC = HYB_AC_ON;
 						}
@@ -206,7 +242,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						if (!battery_connected()) {  // AC already on but battery reconnect because previous mode was PV2AC
 							// wait until battery is connected
 						} else {
-							ctrl_ref->mode = PAC_CONTROL_PCC;
+							ctrl_ref->mode = PAC_CONTROL;
 						}
 
 						// check if battery should be disconnected (variable Vdc -> higher efficiency)
@@ -248,12 +284,6 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				sys_mode_needs_battery = false;
 				ctrl_ref->mode = AC_OFF;
 			}
-			break;
-
-		  case HYBRID_REMOTE_CONTROLLED:  // todo implement control interface
-			ctrl_ref->mode = PAC_CONTROL_PCC;
-			ctrl_ref->v_dc_100mV = battery->voltage_100mV;
-			sys_mode_needs_battery = true;
 			break;
 #endif //SYSTEM_HAS_BATTERY
 

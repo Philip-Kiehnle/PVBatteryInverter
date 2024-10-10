@@ -26,6 +26,13 @@
 #define E_I_AC_RMS_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
 #define E_I_AC_PULSE_MAX_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
 
+#define PERMIL_V_DFFW_MIN  100  // 10% grid voltage direct feedforward, 90% PLL
+#define PERMIL_V_DFFW_MAX  700  // 70% maximum in case of high current due to distorted grid
+#define PERMIL_V_DFFW_INCR 60  // 60 equals 6% per control cycle -> 60% in 500µs
+#define PERMIL_V_DFFW_DECR 1  // 1 equals 0.1% per control cycle; @70% direct feedforward, it takes 600*50µs=30ms to come back to 10%
+// always 50% has higher inductor sound
+// always 80% has even higher inductor sound
+
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
 #define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
@@ -59,16 +66,24 @@ typedef enum
 	FFWD_ONLY,
 	VDC_CONTROL,
 	VDC_VARIABLE_CONTROL,  // keeps DC voltage just above AC amplitude
-	PAC_CONTROL_PCC,  // control point of common coupling to zero
-	PAC_CONTROL_V_P_BAT_CONST  // keeps max battery charge power or Vcell below protect limit
+	PAC_CONTROL,  // controls point of common coupling to zero or external power cmd or keeps max battery charge power or Vcell below protect limit
 } ac_ctrl_mode_t;
+
+typedef enum
+{
+	EXT_OFF,
+	EXT_AC_SOFT,  // e.g. GRID2AC is ignored if Ppcc consumes power from grid
+	EXT_AC_HARD,
+} ext_ctrl_mode_t;
 
 typedef struct {
 	ac_ctrl_mode_t mode;
 	uint16_t v_dc_100mV;
 	int16_t p_pcc;  // power at point of common coupling (electricity meter)
 	int16_t p_pcc_prev;
-	int16_t p_ac_rms_pccCtrl;  // power from PCC controller
+	int16_t p_ac_pccCtrl;  // power from PCC controller
+	ext_ctrl_mode_t ext_ctrl_mode;
+	int16_t p_ac_external;
 	int16_t p_ac_rms;  // power for AC control
 } control_ref_t;
 
@@ -94,7 +109,11 @@ typedef enum
 	EC_BATTERY_I_DISCHARGE_MAX   = -17,
 	EC_BATTERY_TEMPERATURE_MIN   = -18,
 	EC_BATTERY_TEMPERATURE_MAX   = -19,
-	EC_BATTERY_OTHER             = -20
+	EC_BATTERY_OTHER             = -20,
+	EC_V_AC_LOW                  = -21,
+	EC_V_AC_HIGH                 = -22,
+	EC_FREQ_AC_LOW               = -23,
+	EC_FREQ_AC_HIGH              = -24,
 } errorPVBI_t;
 
 
