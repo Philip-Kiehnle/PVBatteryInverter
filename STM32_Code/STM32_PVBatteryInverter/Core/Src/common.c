@@ -15,7 +15,7 @@ struct _sys_modedesc {
     { PV2AC, "PV2AC (default): PV power completely fed into the AC grid." },
 	{ PV2BAT, "PV2BAT : PV power completely fed into the battery." },
 	{ HYBRID_PCC_SENSOR, "HYBRID_PCC_SENSOR : PCC controlled to zero. Without PCC sensor: PV power 50% into battery and 50% into grid. 100W into AC grid if no PV power."},
-	{ HYBRID_REMOTE_CONTROLLED, "HYBRID_REMOTE_CONTROLLED : Externally controlled power distribution, regarding limits: Pbat_charge=1.6kW (0.25C), Pac=1.5kW."}
+	{ HYBRID_REMOTE_CONTROLLED, "HYBRID_REMOTE_CONTROLLED : Externally controlled Pac. todo: power distribution, regarding limits: Pbat_charge=1.6kW (0.25C), Pac=1.5kW."}
 };
 
 

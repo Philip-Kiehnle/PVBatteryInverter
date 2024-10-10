@@ -38,6 +38,8 @@ volatile int16_t debug_i_ac_amp_10mA;
 volatile enum stateAC_t stateAC = INIT_AC;
 bool sampling_trig_en = false;
 
+static int16_t permil_v_dffw = PERMIL_V_DFFW_MIN;  // per mil of direct voltage feedforward
+
 static uint32_t cnt_rel = 0;
 
 static int cnt_intr = 0;  // for sigma_delta processing
@@ -89,6 +91,26 @@ static inline bool check_zero_crossing(int16_t phase)
 	return false;
 }
 
+// todo: add controller for stationary accuracy for p_bat_reduction and p_external, e.g. later in code when P is converted to current
+void calc_p_ac(control_ref_t* ctrl_ref)
+{
+	int16_t p_default = ctrl_ref->p_ac_pccCtrl + get_p_ac_bat_chg_reduction();
+
+	if (ctrl_ref->ext_ctrl_mode == EXT_AC_HARD) {
+		ctrl_ref->p_ac_rms = ctrl_ref->p_ac_external;  // risk of BMS action; useful for BMS test
+	} else if (ctrl_ref->ext_ctrl_mode == EXT_AC_SOFT) {
+		if (    ctrl_ref->p_ac_pccCtrl > 0  // ignore power setpoints smaller than grid consumption
+		     || get_p_ac_bat_chg_reduction()  // handle high PV input; todo GRID2BAT interrupts grid current at Pbat~=60W
+			) {
+			ctrl_ref->p_ac_rms = std::max(ctrl_ref->p_ac_external, p_default);
+		} else {
+			ctrl_ref->p_ac_rms = ctrl_ref->p_ac_external;
+		}
+	} else {
+		ctrl_ref->p_ac_rms = p_default;
+	}
+}
+
 
 int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
 {
@@ -132,6 +154,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 		//i_ac_dc_offset_mA = (i_ac_sum*10)/CYCLES_cnt20kHz_20ms;
 
+		// check DC component in AC current
 		if ( i_ac_sum > (E_I_AC_DC_OFFSET_MAX_10mA*CYCLES_cnt20kHz_20ms) ) {
 			i_ac_sum = 0;
 			cnt_dc_offset++;
@@ -186,8 +209,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 #define DEBUG_OUTPUT_CURRENT 0  // for testing output current without grid
 #if DEBUG_OUTPUT_CURRENT == 0
-	if (vd > VD_MIN_RAW && vd < VD_MAX_RAW &&
-	   w > W_MIN_RAW && w < W_MAX_RAW) {
+	if (vd >= VD_MIN_RAW && vd <= VD_MAX_RAW &&
+	     w >= W_MIN_RAW && w <= W_MAX_RAW) {
 	  if (cnt_pll_locked >= 0.2*AC_CTRL_FREQ) {  // 200ms
 		  acGrid_valid = true;
 	  } else {
@@ -197,7 +220,17 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	  shutdownAC();
 	  acGrid_valid = false;
 	  if (stateAC == GRID_SYNC) {
-		  set_sys_errorcode(EC_GRID_SYNC_LOST);
+		  if (vd < VD_MIN_RAW) {
+			set_sys_errorcode(EC_V_AC_LOW);
+		  } else if (vd > VD_MAX_RAW) {
+			set_sys_errorcode(EC_V_AC_HIGH);
+		  } else if (w < W_MIN_RAW) {
+			set_sys_errorcode(EC_FREQ_AC_LOW);
+		  } else if (w > W_MAX_RAW) {
+			set_sys_errorcode(EC_FREQ_AC_HIGH);
+		  } else {
+		  	set_sys_errorcode(EC_GRID_SYNC_LOST);
+	  	  }
 	  }
 	  stateAC = INIT_AC;
 	  cnt_pll_locked = 0;
@@ -358,10 +391,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 				break;
 			  }
 
-			  case PAC_CONTROL_PCC:
+			  case PAC_CONTROL:
 			  {
-				ctrl_ref.p_ac_rms = ctrl_ref.p_ac_rms_pccCtrl + get_p_ac_bat_chg_reduction();
-
 				// use power reference from power controller
 				int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;
 
@@ -386,12 +417,14 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 				if (    ((ctrl_ref.p_ac_rms <= 50 && get_p_dc_filt50Hz() < 40) || ctrl_ref.p_ac_rms <= 20) // reduce number of switching events during PV production
 					 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)
 					 && check_zero_crossing(phase)  // turnoff during zero crossing reduces "click" noise in inductor
+					 && ctrl_ref.ext_ctrl_mode == EXT_OFF  // do not use packet mode in case of external power control
 				) {
 					gatedriverAC(0);
 					low_power_mode_cnt++;
 				} else if (low_power_mode_cnt) {
 					if(    ctrl_ref.p_ac_rms > P_LOW_POWER_CTRL_REENABLE  // 200/50 = 3sec off / 1sec on, depends on power_controller tuning, see calc sheet
 						|| ( low_power_mode_cnt > (AC_CTRL_FREQ*3) && (get_p_ac_max_dc_lim() < P_LOW_POWER_CTRL_REENABLE) )  // en if power controller is limited by reduced battery power
+						|| ctrl_ref.ext_ctrl_mode != EXT_OFF  // leave packet mode in case of external power control
 					) {
 						gatedriverAC(1);
 						low_power_mode_cnt = 0;
@@ -463,12 +496,17 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 
 	// grid voltage feedforward
 #if DEBUG_OUTPUT_CURRENT == 0
-	int v_amp_pll_100mV = v_ac_amp_filt50Hz_100mV;
+	int32_t v_amp_pll_100mV = v_ac_amp_filt50Hz_100mV;
+	int32_t v_pll = v_amp_pll_100mV*(int32_t)cos1(phase);  // range: +-6553V
+	#define SCALE_FFW 6
+	v_pll >>= SCALE_FFW;  // with permil gain in next step, range will be: *64/1000 -> +- 419V
+	int32_t v_ffw = (permil_v_dffw*((-v_ac_100mV)<<(15-SCALE_FFW)) + (1000-permil_v_dffw)*v_pll)/1000;
+	v_ffw <<= SCALE_FFW;
 #else
-	int v_amp_pll_100mV = 0;
+	int32_t v_ffw = 0;
 #endif
 
-	int32_t vout = (v_amp_pll_100mV*(int32_t)cos1(phase) + v_amp_pred_100mV*(int32_t)cos1(phase+phaseshift_RL) + (v_prCtrl_10mV<<15)/10 + (v_dcCtrl_mV<<15)/100 ) / v_dc_modulator_100mV;
+	int32_t vout = (v_ffw + v_amp_pred_100mV*(int32_t)cos1(phase+phaseshift_RL) + (v_prCtrl_10mV<<15)/10 + (v_dcCtrl_mV<<15)/100 ) / v_dc_modulator_100mV;
 
 	duty = AC_DUTY_HALF + ( (AC_DUTY_HALF*vout) >> 15 );
 //	duty = AC_DUTY_HALF + ( ( (AC_DUTY_HALF)*(int32_t)cos1(phase) ) >> 15 );  // MAX amplitude test
@@ -526,6 +564,8 @@ errorPVBI_t checkACLimits() {
 	if ( i_ac_10mA > E_I_AC_PULSE_MAX_10mA || i_ac_10mA < -E_I_AC_PULSE_MAX_10mA) {
 		return EC_I_AC_PULSE_MAX;
 	} else if ( i_ac_10mA > E_I_AC_RMS_MAX_10mA || i_ac_10mA < -E_I_AC_RMS_MAX_10mA) {
+		permil_v_dffw = std::clamp(permil_v_dffw+PERMIL_V_DFFW_INCR, PERMIL_V_DFFW_MIN, PERMIL_V_DFFW_MAX);
+
 		if (cnt_i_ac_rmslimit < E_I_AC_RMS_MAX_CNT) {
 			cnt_i_ac_rmslimit++;
 		} else {
@@ -533,6 +573,10 @@ errorPVBI_t checkACLimits() {
 		}
 	} else {
 		if (cnt_i_ac_rmslimit > 0) cnt_i_ac_rmslimit--;
+	}
+
+	if (cnt_i_ac_rmslimit == 0) {
+		permil_v_dffw = std::clamp(permil_v_dffw-PERMIL_V_DFFW_DECR, PERMIL_V_DFFW_MIN, PERMIL_V_DFFW_MAX);
 	}
 
 	return EC_NO_ERROR;

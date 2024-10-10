@@ -271,7 +271,7 @@ int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp)  // returns amplitude at sec
 }
 
 
-uint16_t calc_v_amp_pred(uint32_t i_amp, int32_t i_ac_100mA)
+int16_t calc_v_amp_pred(int32_t i_amp, int32_t i_ac_100mA)
 {
 	int32_t v_amp;
 #if INDUCTOR == L_SATURATING

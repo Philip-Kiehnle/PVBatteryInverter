@@ -27,6 +27,7 @@ void measVdcFBgrid();
 const int16_t get_p_ac_filt50Hz();
 const int16_t get_p_ac_filt1minute();
 errorPVBI_t checkACLimits();
+void calc_p_ac(control_ref_t* ctrl_ref);
 int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw);
 void fill_monitor_vars_ac(monitor_vars_t* mon_vars);
 

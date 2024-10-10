@@ -380,9 +380,9 @@ void calc_and_wait(uint32_t delay)
 #endif //DUMMY_METER
 			uint16_t p_ac_max = get_p_ac_max_dc_lim();
 			if (p_ac_max > P_AC_MAX) p_ac_max = P_AC_MAX;
-			ctrl_ref.p_ac_rms_pccCtrl = power_controller_step(ctrl_ref.p_pcc, p_ac_max);
+			ctrl_ref.p_ac_pccCtrl = power_controller_step(ctrl_ref.p_pcc, p_ac_max);
 		} else if (el_meter_status == EL_METER_CONN_ERR ) {
-			ctrl_ref.p_ac_rms_pccCtrl = 0;
+			ctrl_ref.p_ac_pccCtrl = 0;
 		}
 
 		if (el_meter_status == EL_METER_OKAY || el_meter_status == EL_METER_CONN_ERR ) {
@@ -397,7 +397,7 @@ void calc_and_wait(uint32_t delay)
 				uint8_t rx_buf[RX_MAX_CMD_LEN];
 				uint16_t rx_len;
 				HAL_UARTEx_ReceiveToIdle(huart_rs485, rx_buf, RX_MAX_CMD_LEN, &rx_len, 100);  // 100ms rx window
-				parse_cmd((char *)rx_buf, rx_len);
+				parse_cmd((char *)rx_buf, rx_len, &ctrl_ref);
 			}
 		}
 	} else {
@@ -407,6 +407,9 @@ void calc_and_wait(uint32_t delay)
 		async_battery_communication();
 	}
 #endif //COMM_READ_ELECTRICITY_METER
+
+	calc_p_ac(&ctrl_ref);
+
 	resetWatchdog();
 	async_monitor_check(&huart3);
 }
