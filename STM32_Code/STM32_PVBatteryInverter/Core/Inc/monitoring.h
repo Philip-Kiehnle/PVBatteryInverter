@@ -27,8 +27,7 @@ typedef struct {
 	int16_t p_ac_filt50Hz;
 	int16_t p_ac_ref;  // for debugging
 	int16_t bat_p;
-	uint8_t bat_soc;
-	uint8_t bat_soc_kalman;
+	uint16_t soc_10mPercent;
 	uint16_t v_dc_FBboost_sincfilt_100mV;
 	uint16_t v_dc_FBgrid_sincfilt_100mV;
 } __attribute__((__packed__)) monitor_vars_t;
