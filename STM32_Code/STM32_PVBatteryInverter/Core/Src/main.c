@@ -287,7 +287,7 @@ void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
 #if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
 	mon_vars->bat_p = battery->power_W;
-	mon_vars->bat_soc = battery->soc;
+	mon_vars->soc_10mPercent = battery->soc_percent*100;
 #endif //SYSTEM_HAS_BATTERY
 }
 
@@ -893,7 +893,7 @@ int main(void)
 			uSend("\n");
 
 			uSend("SoC ");
-			uSendInt(battery->soc);
+			uSendInt(battery->soc_percent);
 			uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
 

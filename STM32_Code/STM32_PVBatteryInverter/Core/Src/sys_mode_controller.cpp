@@ -8,6 +8,7 @@
 #include "electricity_meter.h"
 
 #include "battery.h"
+#include "battery_config.h"
 #include "BatteryManagement/bms_types.h"
 //#include "BatteryManagement/STW_mBMS.hpp"
 #include "BatteryManagement/ETI_DualBMS.hpp"
@@ -24,7 +25,7 @@ extern volatile uint32_t cntErr_1Hz;
 
 #if SYSTEM_HAS_BATTERY == 1
 //static STW_mBMS bms(2);  // BMS address
-ETI_DualBMS bms(15, 1.0);  // BMS address
+ETI_DualBMS bms(15, 1.0, BATTERY);  // BMS address=15
 #endif
 
 
@@ -159,12 +160,12 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
 			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100))  // more feedin required and battery not empty
 #if SYSTEM_HAS_BATTERY == 1
-					 || (ctrl_ref->p_pcc < -50 && battery->soc < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
+					 || (ctrl_ref->p_pcc < -50 && battery->soc_percent < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
 				 && !bms.tempWarn(
 #endif //SYSTEM_HAS_BATTERY
 			   )) {
 				ctrl_ref->mode = VDC_CONTROL;
-				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
+				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				nextMode(SYS_MODE);
 			} else if (    cnt_1Hz > (cnt_rel_1Hz+(3*60))  // stay in PV2AC mode for min 3 minutes in case of low PV power
 					    && get_p_ac_filt1minute() < 5 && get_p_ac_filt50Hz() < 5  // todo: AC power seems larger than measured
@@ -174,7 +175,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				} else if (cnt_1Hz > (cnt_rel_1Hz+(10*60))) {  // limit toggling rate between battery charging and PV2AC
 					// prevent short turnoff in the evening when battery is full
 					ctrl_ref->mode = VDC_CONTROL;
-					ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
+					ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 					nextMode(SYS_MODE);
 				}
 			}
@@ -184,7 +185,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 		  case PV2BAT:
 			ctrl_ref->v_dc_100mV = battery->voltage_100mV;
 			ctrl_ref->mode = AC_OFF;
-			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT()*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT()*10) {
+			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
 				sys_mode_needs_battery = true;
 			} else {
 				sys_mode_needs_battery = false;
@@ -195,7 +196,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 		  case HYBRID_PCC_SENSOR:
 			// preload DC bus if battery is in deepsleep to test PV power
 			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
-				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT()*10 + bms.V_MAX_PROTECT()*10)/2;
+				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
 					battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
 				}
@@ -203,7 +204,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
 		    }
 
-			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT()*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT()*10) {
+			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
 				// battery charging
 				sys_mode_needs_battery = true;
 
@@ -213,7 +214,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
-							&& (   (battery->soc > 20      // enough energy for feedin
+							&& (   (battery->soc_percent > 20      // enough energy for feedin
 							        && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100)) // todo: implement Kalman filter (in BMS) for accurate SoC
 							    || bms.tempWarn()                      // hot or cold battery -> PV2AC
 							    || battery_almost_full()               // or battery charge power has to be reduced
