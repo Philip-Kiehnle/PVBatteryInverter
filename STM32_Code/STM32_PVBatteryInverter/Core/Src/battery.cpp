@@ -63,7 +63,7 @@ const bool battery_almost_empty()
 
 const bool battery_almost_full()
 {
-	bool cell_imbalance_flag =    (bms.batteryStatus.maxVcell_mV > BATTERY.V_CELL_NOM_mV)
+	bool cell_imbalance_flag =    (bms.batteryStatus.minVcell_mV > BATTERY.V_CELL_NOM_mV && bms.batteryStatus.maxVcell_mV > BATTERY.V_CELL_NOM_mV)
 			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_INFO_mV);
 	return (bms.batteryStatus.soc_percent == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_POWER_REDUCE_mV || cell_imbalance_flag);
 }
