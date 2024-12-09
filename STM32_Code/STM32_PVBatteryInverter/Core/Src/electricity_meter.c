@@ -81,7 +81,8 @@ el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 
 	if (rx_len == 0) {
 		//if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*200) {  // 1sec/2ms = 500 but takes longer -> 200
-		if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*500) {
+		//if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*500) {   // 38sec_meas/20sec = factor 1.9 too long
+		if (smart_meter_no_comm_cnt < COMM_ERR_TIMEOUT_SEC*263) {
 			smart_meter_no_comm_cnt++;
 		} else {
 			el_meter_status = EL_METER_CONN_ERR;

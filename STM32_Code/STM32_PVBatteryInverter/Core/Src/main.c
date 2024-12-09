@@ -39,6 +39,7 @@
 #include "power_controller.h"
 #include "battery.h"
 #include <sml/sml_crc16.h>
+#include <hybridinverter_modbus.h>
 
 
 // todo
@@ -94,6 +95,10 @@ DMA_HandleTypeDef hdma_usart3_tx;
 /* USER CODE BEGIN PV */
 char tx_buf[64];
 uint8_t tx_len;
+
+UART_HandleTypeDef* huart_rs485;
+UART_HandleTypeDef* huart_debug;
+mbus_t modbus;
 
 uint16_t ADC1ConvertedData[2];
 uint16_t ADC2ConvertedData[1];
@@ -211,7 +216,7 @@ static void FDCAN_Config(void);
 
 void uartSend(char* ptr, int len)
 {
-    HAL_UART_Transmit(&huart3, (uint8_t *)ptr,len, 10);
+    HAL_UART_Transmit(huart_debug, (uint8_t *)ptr,len, 10);
 
 }
 
@@ -219,7 +224,7 @@ void uSendInt(int value)
 {
 	itoa(value, tx_buf, 10);
 	tx_len=strlen(tx_buf);
-	HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+	HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 }
 
 void uSend_1m(int int_value)
@@ -228,7 +233,7 @@ void uSend_1m(int int_value)
 	tx_len = snprintf(NULL, 0, "%.03f", value);
 	char *str = (char *)malloc(tx_len + 1);
 	snprintf(str, tx_len + 1, "%f.03", value);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str, tx_len, 10);
+	HAL_UART_Transmit(huart_debug, (uint8_t *)str, tx_len, 10);
 	free(str);
 }
 
@@ -238,7 +243,7 @@ void uSend_10m(int int_value)
 	tx_len = snprintf(NULL, 0, "%.02f", value);
 	char *str = (char *)malloc(tx_len + 1);
 	snprintf(str, tx_len + 1, "%f.02", value);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str, tx_len, 10);
+	HAL_UART_Transmit(huart_debug, (uint8_t *)str, tx_len, 10);
 	free(str);
 }
 
@@ -248,8 +253,25 @@ void uSend_100m(int int_value)
 	tx_len = snprintf(NULL, 0, "%.01f", value);
 	char *str = (char *)malloc(tx_len + 1);
 	snprintf(str, tx_len + 1, "%f.01", value);
-	HAL_UART_Transmit(&huart3, (uint8_t *)str, tx_len, 10);
+	HAL_UART_Transmit(huart_debug, (uint8_t *)str, tx_len, 10);
 	free(str);
+}
+
+
+int mbus_send(const mbus_t context, const uint8_t* data, const uint16_t size)
+{
+	// V1: blocking during send
+	//HAL_Delay(1);
+	if (HAL_UART_Transmit( huart_rs485, (uint8_t*) data, size, 1000) == HAL_OK) {
+		return size;
+	}
+
+	// V2: use DMA
+//	if (HAL_UART_Transmit_DMA( huart_rs485, (uint8_t*) data, size) == HAL_OK) {
+//		return size;
+//	}
+
+	return 0;
 }
 
 
@@ -303,10 +325,10 @@ static void send_inverterdata()
 
 	mon_packet.crc = sml_crc16_calculate((uint8_t *)&mon_packet.monitor_vars, sizeof(mon_packet.monitor_vars));
 
-	if (HAL_UART_Transmit(&huart5, (uint8_t *)&mon_packet, sizeof(mon_packet), 10) != HAL_OK) {
+	if (HAL_UART_Transmit(huart_rs485, (uint8_t *)&mon_packet, sizeof(mon_packet), 10) != HAL_OK) {
 		Error_Handler();
 	}
-//	if (HAL_UART_Transmit_DMA(&huart5, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot)) != HAL_OK) {
+//	if (HAL_UART_Transmit_DMA(huart_rs485, (uint8_t *)&mon_vars_snapshot, sizeof(mon_vars_snapshot)) != HAL_OK) {
 //		Error_Handler();
 //	}
 }
@@ -336,7 +358,9 @@ void shutdownAll()
 	gatedriverDC(0);
 	contactorAC(0);
 	contactorBattery(0);
+#if SYSTEM_HAS_BATTERY == 1
 	battery_state_request(BAT_OFF);
+#endif //SYSTEM_HAS_BATTERY
 }
 
 int el_meter_status;
@@ -357,7 +381,6 @@ void calc_and_wait(uint32_t delay)
 
 
 #if COMM_READ_ELECTRICITY_METER == 1
-	UART_HandleTypeDef* huart_rs485 = &huart5;
 	if (!monitoring_binary_en) {  // smart meter polling read takes too much time
 		reinitUART(huart_rs485, 9600);
 		resetWatchdog();
@@ -378,9 +401,11 @@ void calc_and_wait(uint32_t delay)
 #else
 			ctrl_ref.p_pcc = electricity_meter_get_power();
 #endif //DUMMY_METER
+#if SYSTEM_HAS_BATTERY == 1
 			uint16_t p_ac_max = get_p_ac_max_dc_lim();
 			if (p_ac_max > P_AC_MAX) p_ac_max = P_AC_MAX;
 			ctrl_ref.p_ac_pccCtrl = power_controller_step(ctrl_ref.p_pcc, p_ac_max);
+#endif //SYSTEM_HAS_BATTERY
 		} else if (el_meter_status == EL_METER_CONN_ERR ) {
 			ctrl_ref.p_ac_pccCtrl = 0;
 		}
@@ -393,11 +418,19 @@ void calc_and_wait(uint32_t delay)
 				send_inverterdata();
 
 				// receive commands from external energy management system
-#define RX_MAX_CMD_LEN (sizeof("p_bat_chg_max65535\n")+5)
+//#define RX_MAX_CMD_LEN (sizeof("p_bat_chg_max65535\n")+5)
+#define RX_MAX_CMD_LEN (sizeof(modbus_param_rw_t)+8)
 				uint8_t rx_buf[RX_MAX_CMD_LEN];
-				uint16_t rx_len;
-				HAL_UARTEx_ReceiveToIdle(huart_rs485, rx_buf, RX_MAX_CMD_LEN, &rx_len, 100);  // 100ms rx window
-				parse_cmd((char *)rx_buf, rx_len, &ctrl_ref);
+
+				for (uint16_t i = 0; i < 10; i++) {
+					uint16_t rx_len = 0;
+					HAL_UARTEx_ReceiveToIdle(huart_rs485, rx_buf, RX_MAX_CMD_LEN, &rx_len, 10);  // 10 x 10ms rx window
+
+					for (uint16_t j = 0; j < rx_len; j++) {
+						mbus_poll(modbus, rx_buf[j]);
+					}
+				}
+				apply_sys_mode_cmd(&ctrl_ref);
 			}
 		}
 	} else {
@@ -411,7 +444,7 @@ void calc_and_wait(uint32_t delay)
 	calc_p_ac(&ctrl_ref);
 
 	resetWatchdog();
-	async_monitor_check(&huart3);
+	async_monitor_check(huart_debug);
 }
 
 
@@ -596,6 +629,27 @@ int main(void)
 
   /* Configure the FDCAN peripheral */
   FDCAN_Config();  // CAN2 is connected to Battery Cell Stack Controller CAN Bus
+
+  /* Modbus interface */
+  uint8_t modbus_tx_buf[STMODBUS_MAX_RESPONSE_SIZE] = {0};
+  uint8_t modbus_rx_buf[STMODBUS_MAX_RESPONSE_SIZE] = {0};
+
+  Modbus_Conf_t mb_config;
+  mb_config.send = &mbus_send;
+  mb_config.sendbuf = modbus_tx_buf;
+  mb_config.sendbuf_sz = STMODBUS_MAX_RESPONSE_SIZE;
+  mb_config.recvbuf = modbus_rx_buf;
+  mb_config.recvbuf_sz = STMODBUS_MAX_RESPONSE_SIZE;
+  modbus = mbus_hybridinverter_open(&mb_config);
+
+// Set to 1 to swap UARTs for Modbus debugging without using RS485 transceivers
+#if 0
+  huart_rs485 = &huart3;
+  huart_debug = &huart5;
+#else  // production
+  huart_rs485 = &huart5;  // binary communication
+  huart_debug = &huart3;  // text messages
+#endif
 
   // DCDC sw-freq: 20kHz 170MHz/20kHz = 8500 -> Period = 4249
   // DCDC ctrl-freq: 100Hz -> Repetition Counter = 200
@@ -793,7 +847,7 @@ int main(void)
 					if ( (1<<bit) & cellStack.csc_err[csc]) {
 						const char * strerr = csc_err_str[bit];
 						tx_len=strlen(strerr);
-						HAL_UART_Transmit(&huart3, (uint8_t *)strerr, tx_len, 10);
+						HAL_UART_Transmit(huart_debug, (uint8_t *)strerr, tx_len, 10);
 						uSend("\n");
 					}
 				}
@@ -809,38 +863,38 @@ int main(void)
 				uSend("E ");
 				itoa(get_sys_errorcode(), tx_buf, 10);
 				tx_len=strlen(tx_buf);
-				HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+				HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 				uSend(" ");
 				char * strerr = strerror(get_sys_errorcode());
 				tx_len=strlen(strerr);
-				HAL_UART_Transmit(&huart3, (uint8_t *)strerr, tx_len, 10);
+				HAL_UART_Transmit(huart_debug, (uint8_t *)strerr, tx_len, 10);
 				uSend("\n");
 			}
 
 			uSend("\nS ");
 			itoa(get_sys_mode(), tx_buf, 10);
 			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 
 			uSend("\nDC ");
 			itoa(stateDC, tx_buf, 10);
 			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 #if SYSTEM_HAS_BATTERY == 1
 			uSend(" Bat ");
 			itoa(get_stateBattery(), tx_buf, 10);
 			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 #endif //SYSTEM_HAS_BATTERY
 
 			uSend("\nAC ");
 			itoa(stateAC, tx_buf, 10);
 			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 			uSend("; ");
 			itoa(ctrl_ref.mode, tx_buf, 10);
 			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(&huart3, (uint8_t *)tx_buf, tx_len, 10);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 			uSend("\n");
 
 #if SYSTEM_HAS_BATTERY == 1
@@ -914,7 +968,7 @@ int main(void)
 		//	uSend("Vg_raw_filt ");
 		//	itoa(debug_Vg_raw_filt, Tx_Buffer, 10);
 		//	Tx_len=strlen(Tx_Buffer);
-		//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		//	HAL_UART_Transmit(huart_debug, (uint8_t *)Tx_Buffer, Tx_len, 10);
 		//	uSend("\n");
 		//	// no voltage 4avg: 1971-1982
 		//	// +5V + an N  - an L: 1995-2005  5V/24=0,2V per LSB
@@ -924,7 +978,7 @@ int main(void)
 		//	uSend("Ig_raw_filt ");
 		//	itoa(debug_Ig_raw_filt, Tx_Buffer, 10);
 		//	Tx_len=strlen(Tx_Buffer);
-		//	HAL_UART_Transmit(&huart3, (uint8_t *)Tx_Buffer, Tx_len, 10);
+		//	HAL_UART_Transmit(huart_debug, (uint8_t *)Tx_Buffer, Tx_len, 10);
 		//	uSend("\n");
 		//	// no current 4avg: 2627-2630
 		//	// ~+1A 2671
@@ -933,7 +987,7 @@ int main(void)
 
 	// UART RX
 	uint8_t rx_buf = 0;
-	HAL_UART_Receive(&huart3, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
+	HAL_UART_Receive(huart_debug, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
 
 	if (uart_input_text) {
 		if (rx_buf == 'p') {
