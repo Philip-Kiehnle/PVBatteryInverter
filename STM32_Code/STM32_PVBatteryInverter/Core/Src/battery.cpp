@@ -74,13 +74,7 @@ const bool battery_full()
 			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_WARN_mV);
 	return (bms.batteryStatus.soc_percent == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_PROTECT_mV || cell_imbalance_flag);
 }
-#endif //SYSTEM_HAS_BATTERY
 
-
-void battery_update_request()
-{
-	update_request = true;
-}
 
 static void check_bat_error()
 {
@@ -134,6 +128,13 @@ static bool voltage_in_range()
 		return true;
 	}
 	return false;
+}
+#endif //SYSTEM_HAS_BATTERY
+
+
+void battery_update_request()
+{
+	update_request = true;
 }
 
 

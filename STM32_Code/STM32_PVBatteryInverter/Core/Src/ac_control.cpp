@@ -407,7 +407,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 				}
 
 #define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
-#if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1
+#if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1 && SYSTEM_HAS_BATTERY == 1
 constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold in 10 minutes and 600mWh buyed
 				// electricity meter stores energy in 100mWh
 				//-> in 1 sec, 100mWh/1sec=360W offset can be tolerated

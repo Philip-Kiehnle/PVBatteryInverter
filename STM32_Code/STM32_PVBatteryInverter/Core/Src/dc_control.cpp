@@ -260,7 +260,9 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownDC();
+#if SYSTEM_HAS_BATTERY == 1
 		battery_state_request(BAT_OFF);
+#endif //SYSTEM_HAS_BATTERY
 		nextState(INIT_DC);
 	}
 
@@ -348,14 +350,18 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		    || (SYS_MODE==PV2AC && stateAC == GRID_SYNC)
 			){
 
+#if SYSTEM_HAS_BATTERY == 1
 			if (sys_mode_needs_battery) {
 				contactorBattery(1);
 				battery_state_request(BMS_ON__BAT_ON);
 				nextState(WAIT_CONTACTOR_DC);
 			} else {
+#endif //SYSTEM_HAS_BATTERY
 				mppTracker.duty_raw = dutyLS1;
 				nextState(MPPT);
+#if SYSTEM_HAS_BATTERY == 1
 			}
+#endif //SYSTEM_HAS_BATTERY
 		}
 		break;
 	  }
