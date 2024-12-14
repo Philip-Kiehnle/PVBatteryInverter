@@ -431,6 +431,7 @@ void calc_and_wait(uint32_t delay)
 					}
 				}
 				apply_sys_mode_cmd(&ctrl_ref);
+				mbus_flush(modbus);  // reset incomplete messages
 			}
 		}
 	} else {
