@@ -110,7 +110,7 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 		cnt_1Hz_prev_ext_cmd = cnt_1Hz;
 	}
 
-	if (ctrl_ref->ext_ctrl_mode != EXT_OFF) {
+	if ( ctrl_ref->ext_ctrl_mode != EXT_OFF && sys_mode != OFF ) {
 		ctrl_ref->p_ac_external = std::clamp(p_ac_unclamped, (int16_t)(-P_AC_MAX), (int16_t)P_AC_MAX);
 		nextMode(HYBRID_REMOTE_CONTROLLED);
 	}
@@ -213,33 +213,36 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				// battery charging
 				sys_mode_needs_battery = true;
 
-				// todo intervall charging at low bat temp to maximise resistive power loss and generate heat
+				// todo interval charging at low bat temp to maximise resistive power loss and generate heat
 				int p_bat_50Hz = get_p_dc_filt50Hz() - get_p_ac_filt50Hz();
+				static uint16_t cnt_lowPV = 0;
 
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
 							&& (   (battery->soc_percent > 10          // enough energy for feedin
-							        && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+80))
+								    && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+80)
+								    && (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50))  // feedin required; filter 1 second spikes from freezer motor start
 							    || bms.tempWarn()                      // hot or cold battery -> PV2AC
 							    || battery_almost_full()               // or battery charge power has to be reduced
 							    || p_bat_50Hz >= p_bat_chg_max         // or battery charge power is large and has to be reduced
 							    || ctrl_ref->ext_ctrl_mode != EXT_OFF  // or external control
 							   )
 							) {
-								stateHYBRID_AC = HYB_AC_ALLOWED;
-						}
-						break;
-
-					case HYB_AC_ALLOWED:
-						// AC turnon if
-						if (   (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50)  // feedin required; filter 1 second spikes from freezer motor start
-							|| bms.tempWarn()                      // hot or cold battery -> PV2AC
-							|| battery_almost_full()               // or battery charge power has to be reduced
-							|| p_bat_50Hz > p_bat_chg_max          // or battery charge power is large and has to be reduced
-							|| ctrl_ref->ext_ctrl_mode != EXT_OFF  // or external control
-							) {
-							stateHYBRID_AC = HYB_AC_ON;
+								stateHYBRID_AC = HYB_AC_ON;
+								cnt_lowPV = 0;
+						// Shutdown of already discharged battery when PV power is low
+						} else if(   battery_connected()
+								  && get_p_dc_filt50Hz() < P_BAT_MIN_CHARGE
+								  && battery_almost_empty()
+								  ) {
+							cnt_lowPV++;
+							if (cnt_lowPV == 500) {  // ~500 seconds, but function call has no defined interval
+								nextMode(OFF);
+								cnt_lowPV = 0;
+							}
+						} else {
+							cnt_lowPV = 0;
 						}
 						break;
 
@@ -263,7 +266,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						// AC turnoff in case of empty battery.
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required
 						} else if ( battery_connected()
-									&& (  battery_almost_empty()
+									&& (  battery_empty()
 									    || bms.tempHighWarn()
 									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
 									   )
