@@ -134,6 +134,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 	const batteryStatus_t* battery = get_batteryStatus();
 	p_bat_chg_max = std::min(battery->p_charge_max, p_bat_chg_externalmax);
 #endif //SYSTEM_HAS_BATTERY
+	static uint32_t cnt_1Hz_chargeDC;
 
 	switch (sys_mode) {
 		  case OFF:
@@ -212,6 +213,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
 				// battery charging
 				sys_mode_needs_battery = true;
+				cnt_1Hz_chargeDC = cnt_1Hz;
 
 				// todo interval charging at low bat temp to maximise resistive power loss and generate heat
 				int p_bat_50Hz = get_p_dc_filt50Hz() - get_p_ac_filt50Hz();
@@ -288,7 +290,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						stateHYBRID_AC = HYB_AC_OFF;
 						break;
 				}
-			} else {
+			// if MPP Tracker does not provide enough power to charge DC bus, shutdown battery after 30sec
+			} else if (cnt_1Hz > (cnt_1Hz_chargeDC+30)) {
 				sys_mode_needs_battery = false;
 				ctrl_ref->mode = AC_OFF;
 			}
