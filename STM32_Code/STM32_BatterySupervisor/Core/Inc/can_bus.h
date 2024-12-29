@@ -9,9 +9,14 @@
 
 #include "BatteryManagement/bms_types.h"
 
-void can_bus_read();
+void can_bus_init();
+void can_bus_set_filter(uint32_t filter_type, uint32_t filter_id1, uint32_t filter_id2);
 
-extern struct CellStack cellStack;
+uint8_t* getRxMsg_8byte_blocking(uint32_t* id);
+uint8_t* getRxMsg_8byte_singleID_blocking(uint32_t filter_id);
+
+bool addTxMsg_8byte(uint32_t id, uint8_t* tx_data);
+
 
 #ifdef __cplusplus
 }
