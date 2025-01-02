@@ -265,10 +265,12 @@ void calc_and_wait(uint32_t delay)
 }
 
 
-#define IDC_OFFSET_RAW 2636  // 2632->60mA
+#define IDC_OFFSET_RAW 2636  // at ~18°C after microcontroller start -40mA instead 0mA at 21°C
 #define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
-#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // = 2.301897321
+#define IDC_RAW_TO_10mA (-IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // = 2.301897321  // sign inversion (pos means battery charging)
+#define CNT_I_DC_AVG 16  // +3bit in hardware
+
 
 // +-50A sensor range with 3.3V ADC:
 // −62.1A to +32.1A
@@ -279,7 +281,7 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 {
 	shutdownAll();
 
-	i_dc_filt_10mA = (HAL_ADC_GetValue(&hadc1)-IDC_OFFSET_RAW) * IDC_RAW_TO_10mA;
+	i_dc_filt_10mA = (HAL_ADC_GetValue(&hadc2) - CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
 
 	if (i_dc_filt_10mA > 0) {
 		set_sys_errorcode(EC_BATTERY_I_CHARGE_MAX);
@@ -341,6 +343,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc == &hadc2) {
 	// called with f=40kHz when repetition counter = 0 -> for double current sense
 	// called with f=20kHz when repetition counter = 1 -> for single current sense or hardware oversampling
+	// called with f=20kHz when repetition counter = 3 and PWM period for 40kHz
 	//
 	// In interleaved DCDC booster with diodes, discontinuous current can occur -> Sampling the whole period is necessary
 	// fadc = 170MHz/4 = 42.5MHz
@@ -352,7 +355,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 		measVdcFBboost();
 
-#define CNT_I_DC_AVG 16  // +3bit in hardware
 		i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
 
 		cnt20kHz_20ms++;
@@ -371,7 +373,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		}
 
 		int16_t dutyHS = dcControlStep(cnt20kHz_20ms, ctrl_ref.v_dc_100mV, i_dc_filt_10mA);
-		dutyHS = DEF_MPPT_DUTY_ABSMAX/2;
+
+		// Test using AC-DC trafo rectifier with Vin=150V:
+
+		//dutyHS = DEF_MPPT_DUTY_ABSMAX*0.75;  // boost to 200V
+		// Iripple=0,25*25us*150V/130uH =       7.2A  6.4Ameas  Vdc_bus 188.6 Sigmadelta=207.0
+		// Iripple=0,25*25us*150V/(130uH + 1mH)=0.83A 0.36Ameas Vdc_bus 197.3 Sigmadelta=214.1
+
+		//dutyHS = DEF_MPPT_DUTY_ABSMAX*0.5;  // boost to 300V; UART shows wrong letters -> fix by GND cable wound around RX
+		// Iripple=0,5*25us*150V/(130uH + 1mH)=1.66A 0.70Ameas Vdc_bus 292.1 Sigmadelta=297.2
+
+		dutyHS = DEF_MPPT_DUTY_ABSMAX*0.4;  // boost to 375V; UART shows wrong letters, USB reset
+		// Iripple=0,6*25us*150V/(130uH + 1mH)=2.00A  0.80Ameas Vdc_bus 363.2 Sigmadelta=366.6 Multimeter=365V
+		//  PacELV=12W (1,9W im Notaus bei 150Vdc) -> bei 90% Trafo Wirkungsgrad, ca. 9W Drossel + Halbleiterverluste
+
 
 		int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
 //		int16_t dutyB2 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
@@ -581,20 +596,22 @@ int main(void)
 
 		uint8_t nr_cells_balancing = 0;
 
-		for (int c=0; c<96; c++) {
-			if (c%12 == 0) uSend(" ");
-			uSend("Vc");
-			if (c<=8)
+		if (battery->voltage_100mV != 0) {
+			for (int c=0; c<96; c++) {
+				if (c%12 == 0) uSend(" ");
+				uSend("Vc");
+				if (c<=8)
+					uSend(" ");
+				uSendInt(c+1);
 				uSend(" ");
-			uSendInt(c+1);
-			uSend(" ");
-			uSend_1m(get_battery_vCell_mV(c));
+				uSend_1m(get_battery_vCell_mV(c));
 
-			if (get_battery_balancingState(c)) {
-				uSend(" balancing");
-				nr_cells_balancing++;
+				if (get_battery_balancingState(c)) {
+					uSend(" balancing");
+					nr_cells_balancing++;
+				}
+				uSend("\n");
 			}
-			uSend("\n");
 		}
 		uSend("nr_cells_balancing ");
 		uSendInt(nr_cells_balancing);
@@ -647,12 +664,12 @@ int main(void)
 			itoa(stateDC, tx_buf, 10);
 			tx_len=strlen(tx_buf);
 			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
-//#if SYSTEM_HAS_BATTERY == 1
-//			uSend(" Bat ");
-//			itoa(get_stateBattery(), tx_buf, 10);
-//			tx_len=strlen(tx_buf);
-//			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
-//#endif //SYSTEM_HAS_BATTERY
+#if SYSTEM_HAS_BATTERY == 1
+			uSend(" Bat ");
+			itoa(get_stateBattery(), tx_buf, 10);
+			tx_len=strlen(tx_buf);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+#endif //SYSTEM_HAS_BATTERY
 			uSend("\n");
 
 #if SYSTEM_HAS_BATTERY == 1
@@ -1211,9 +1228,9 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
-  htim1.Init.Period = 4249;
+  htim1.Init.Period = 2124;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 1;
+  htim1.Init.RepetitionCounter = 3;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {

@@ -14,8 +14,10 @@ extern STW_mBMS bms;
 
 
 static volatile bool update_request;
-static volatile stateBattery_t stateBattery_next = BMS_ON__BAT_OFF;
-static stateBattery_t stateBattery = BMS_ON__BAT_OFF;
+constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_OFF__BAT_OFF;
+//constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_ON__BAT_OFF;
+static volatile stateBattery_t stateBattery_next = DEFAULT_BATTERY_STATE;
+static stateBattery_t stateBattery = DEFAULT_BATTERY_STATE;
 static uint16_t bat_comm_fail_cnt;
 static uint16_t bat_state_fail_cnt;  // for battery disconnects
 static bool bat_connected;
@@ -154,7 +156,6 @@ void battery_state_request(stateBattery_t state)
 			state = BMS_OFF__BAT_OFF;
 		}
 	}
-
 
 	stateBattery_next = state;
 }
