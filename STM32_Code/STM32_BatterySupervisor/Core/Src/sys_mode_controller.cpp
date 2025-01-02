@@ -80,14 +80,23 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 #if SYSTEM_HAS_BATTERY == 1
 		  case PV2BAT:
-			ctrl_ref->v_dc_100mV = battery->voltage_100mV;
+			// preload DC bus if battery is in deepsleep to test PV power
+			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
+				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
+				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
+					//battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
+				}
+			} else {
+				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
+			}
+
 			ctrl_ref->mode = AC_OFF;
 			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
-				sys_mode_needs_battery = true;
+				//sys_mode_needs_battery = true;  // todo
 			} else {
 				sys_mode_needs_battery = false;
 			}
-			sys_mode_needs_battery = true; // todo remove debug
+			//sys_mode_needs_battery = true; // todo remove this battery debug line
 			break;
 #endif //SYSTEM_HAS_BATTERY
 

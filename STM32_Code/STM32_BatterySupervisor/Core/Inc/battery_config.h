@@ -7,8 +7,8 @@
 constexpr BatteryParameter_t BATTERY = {
 	.CHEMISTRY = CHEM_NMC,
 	.CONFIG = BAT_SINGLE,
-	.NR_PACKS = 4,  // 4 CSCs
-	.NR_MODULES_PER_PACK = 2,  // 2 Containers
+	.NR_PACKS = 1,
+	.NR_MODULES_PER_PACK = 8,  // 4 CSCs x 2 Containers per CSC
 	.NR_CELLS_PER_MODULE = 12,
 	.PARALLEL_CELLS = 3,
 	.R_SINGLE_CELL_mOHM = (29+1),  // internal resistance of single cell and the corresponding part of cell connector

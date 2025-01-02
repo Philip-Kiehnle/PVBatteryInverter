@@ -322,7 +322,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		}
 #endif //SYSTEM_HAS_BATTERY
 
-		if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
+		if ( v_dc_FBboost_sincfilt_100mV > VDC_MAX_MPPT_100mV ) {
 			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
 			dutyLS1 = 0;
 			nextState(VOLTAGE_CONTROL);
