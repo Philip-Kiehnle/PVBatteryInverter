@@ -84,7 +84,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
-					//battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
+					battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
 				}
 			} else {
 				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
@@ -92,7 +92,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 			ctrl_ref->mode = AC_OFF;
 			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
-				//sys_mode_needs_battery = true;  // todo
+				sys_mode_needs_battery = true;
 			} else {
 				sys_mode_needs_battery = false;
 			}

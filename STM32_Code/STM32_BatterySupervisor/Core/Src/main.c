@@ -331,6 +331,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 #define VDC_OFFSET_RAW 8
 #define VDC_mV_per_LSB (443763/4096)
 
+//V3:  Oszi 312V Amprobe AM-550-EUR: 306.5V
+//     Vdc_bus 297.1  raw=2744
+//     v_dc_FBboost_filt50Hz308.1
+//#define VDC_OFFSET_RAW 8
+//#define VDC_mV_per_LSB (456000/4096)
+
+//V4: Lower voltage without parallel Multimeter -> using V2 again
+//    	Vdc_bus 354.5  raw=3186
+//    	v_dc_FBboost_filt50Hz347.3
+
 		int v_dc_raw_no_calib = ADC1ConvertedData[0];
 		debug_v_dc_raw = v_dc_raw_no_calib;
 		v_dc_bus_100mV = ((v_dc_raw_no_calib+VDC_OFFSET_RAW)*VDC_mV_per_LSB)/100;
@@ -383,7 +393,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		//dutyHS = DEF_MPPT_DUTY_ABSMAX*0.5;  // boost to 300V; UART shows wrong letters -> fix by GND cable wound around RX
 		// Iripple=0,5*25us*150V/(130uH + 1mH)=1.66A 0.70Ameas Vdc_bus 292.1 Sigmadelta=297.2
 
-		dutyHS = DEF_MPPT_DUTY_ABSMAX*0.4;  // boost to 375V; UART shows wrong letters, USB reset
+		//dutyHS = DEF_MPPT_DUTY_ABSMAX*0.4;  // boost to 375V; UART shows wrong letters, USB reset
 		// Iripple=0,6*25us*150V/(130uH + 1mH)=2.00A  0.80Ameas Vdc_bus 363.2 Sigmadelta=366.6 Multimeter=365V
 		//  PacELV=12W (1,9W im Notaus bei 150Vdc) -> bei 90% Trafo Wirkungsgrad, ca. 9W Drossel + Halbleiterverluste
 
@@ -766,6 +776,9 @@ int main(void)
 //			uSend("Fast monitor TRIG\n");
 //			fast_mon_vars_trig = true;
 //			uart_output_text = false;
+//		} else if (rx_buf == 'c') {
+//			uSend("Contactor Enable\n");
+//			contactorBattery(1);
 		} else if (rx_buf == 'b') {
 			uSend("BALANCING ENABLE\n");
 			battery_set_balancing(0b1111, 3600);  // all CSCs
@@ -1629,21 +1642,6 @@ static void MX_GPIO_Init(void)
   */
 static void FDCAN_Config(void)
 {
-//  FDCAN_FilterTypeDef sFilterConfig;
-
-  /* Configure Rx filter */
-//  sFilterConfig.IdType = FDCAN_STANDARD_ID;
-//  sFilterConfig.FilterIndex = 0;
-//  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-//  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-//  sFilterConfig.FilterID1 = 0;
-//  sFilterConfig.FilterID2 = 0x7FF;  // reject everything but ID=0
-
-//  if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
-
   /* Configure global filter:
      Filter all remote frames with STD and EXT ID
      Reject non matching frames with STD ID and EXT ID */

@@ -35,6 +35,7 @@ void battery_update_request();
 void battery_state_request(stateBattery_t state);
 bool async_battery_communication();
 bool battery_set_balancing(uint8_t stack_mask, uint16_t vCellBalTarget_mV);
+bool battery_bus_voltage_match_coarse();
 
 #ifdef __cplusplus
 }

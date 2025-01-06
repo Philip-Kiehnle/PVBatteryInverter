@@ -47,8 +47,8 @@ struct _sys_errordesc {
 	{ EC_BATTERY_TEMPERATURE_MIN,   "EC_BATTERY_TEMPERATURE_MIN : battery temperature below minimum" },
 	{ EC_BATTERY_TEMPERATURE_MAX,   "EC_BATTERY_TEMPERATURE_MAX : battery temperature above maximum" },
 	{ EC_BATTERY_OTHER,             "EC_BATTERY_OTHER : other bms error, see BMS registers" },
-	{ EC_V_DC_MAX_BUS,              "EC_V_DC_MAX_BUS : DC voltage too high (DC bus sensor)" }
-
+	{ EC_V_DC_MAX_BUS,              "EC_V_DC_MAX_BUS : DC voltage too high (DC bus sensor)" },
+	{ EC_BATTERY_V_BUS_DEVIATION,   "EC_BATTERY_V_BUS_DEVIATION : battery voltage deviates from bus voltage" }
 };
 
 
@@ -84,22 +84,23 @@ errorPVBI_t get_sys_errorcode()
 static void checkEmergencyStop()
 {
 	//(GPIOA->IDR & GPIO_PIN_15)
-  	if ( !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) ) {
-  		// prevent noise
-        if ( !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) ) {
-        	shutdownAll();
-        	sys_errcode = EC_EMERGENCY_STOP;
-        }
-    }
+	if ( !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) ) {
+		// prevent noise
+		if ( !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) ) {
+			shutdownAll();
+			sys_errcode = EC_EMERGENCY_STOP;
+		}
+	}
 
+	// Second parallel emergency pin because of slightly bended microcontroller pin A15.
 	//(GPIOC->IDR & GPIO_PIN_9)
-  	if ( !HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9) ) {
-  		// prevent noise
-        if ( !HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9) ) {
-        	shutdownAll();
-        	sys_errcode = EC_EMERGENCY_STOP;
-        }
-    }
+	if ( !HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9) ) {
+		// prevent noise
+		if ( !HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9) ) {
+			shutdownAll();
+			sys_errcode = EC_EMERGENCY_STOP;
+		}
+	}
 }
 
 

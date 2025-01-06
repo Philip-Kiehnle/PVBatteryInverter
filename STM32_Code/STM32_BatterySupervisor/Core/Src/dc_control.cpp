@@ -14,6 +14,7 @@
 #include "battery.h"
 #include "mpptracker.hpp"
 #include "sys_mode_controller.h"
+#include "PICtrl.hpp"
 
 #include "BatteryManagement/STW_mBMS.hpp"
 extern STW_mBMS bms;
@@ -179,11 +180,17 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	static int16_t dutyLS1 = 0;
 
+	// PI controller
+	constexpr float TE = 1.0/50;   // 20ms execution interval
+	constexpr float KP = 0.6;      // 0.6 dutycycle change per 100mV difference; 300 per 50V; 1÷(1−(300÷2125))×310V=360V
+	constexpr float KI = 0.01/TE;  // 0.01 dutycycle change per 100mV difference per cycle; 300 per 50V for 60cycles (60/50=1.2sec)
+	static PICtrl piCtrl(TE, KP, KI);
+
 	bool vdc_inRange = false;
 
 	// 50Hz more robust: for critical increase from 400V to 500V in 20ms: 0.5*4*390uF*(500^2-400^2)/0.02 = 3.5kW
-	if (   v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_100mV
-		&& v_dc_FBboost_filt50Hz_100mV < E_VDC_MAX_100mV
+	if (   v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_LOW_100mV
+		&& v_dc_FBboost_filt50Hz_100mV < (E_VDC_MAX_100mV-VDC_TOLERANCE_100mV)
 #if SYSTEM_HAS_BATTERY == 1
 		&& battery_maxVcell_OK()
 #endif //SYSTEM_HAS_BATTERY
@@ -264,6 +271,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			&& pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
 		) {
 			dutyLS1 = 0;
+			piCtrl.y = 0;
 			nextState(VOLTAGE_CONTROL);
 		}
 		break;
@@ -273,21 +281,18 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		gatedriverDC(1);
 
 		if (cnt20kHz_20ms == 0) {
-			if ( v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV-VDC_TOLERANCE_100mV) ) {
-				dutyLS1 += 2;
-			} else if (v_dc_FBboost_sincfilt_100mV < v_dc_ref_100mV) {
-				dutyLS1++;
-			} else if ( v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV+VDC_TOLERANCE_100mV/4) ) {
-				dutyLS1 -= 2;
-			}
 			constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAMS.vin_min/MPPTPARAMS.vout_max);
-			dutyLS1 = std::clamp(dutyLS1, (int16_t)0, (int16_t)(MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY));  // prevent short circuit of PV plant
+			int16_t err = v_dc_ref_100mV-v_dc_FBboost_sincfilt_100mV;
+			piCtrl.step(err, 0, MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY);
+			dutyLS1 = piCtrl.y;
 		}
 
 		if (   (  v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
 		       && v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
 		       && v_dc_filt50Hz*10            > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
-		       && v_dc_filt50Hz*10            < (v_dc_ref_100mV+VDC_TOLERANCE_100mV))
+		       && v_dc_filt50Hz*10            < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
+		       && v_dc_bus_100mV              > (bms.batteryStatus.voltage_100mV-VDC_TOLERANCE_100mV)
+		       && v_dc_bus_100mV              < (bms.batteryStatus.voltage_100mV+VDC_TOLERANCE_100mV))
 		    || (SYS_MODE==PV2AC && stateAC == GRID_SYNC)
 			){
 
@@ -449,16 +454,11 @@ errorPVBI_t checkDCLimits()
 	}
 
 #if SYSTEM_HAS_BATTERY == 1
-	// check if sum of cell voltages deviates from DC bus voltage +-10Volt (~0.1V per Cell)
-	else if ( battery_connected()
-			  && (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()+100
-				  || bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()-100
-				  )
-	) {
-		return EC_BATTERY_COMM_FAIL;
+	// check if sum of cell voltages deviates from DC bus voltage e.g. +-10Volt (~0.1V per Cell)
+	else if ( battery_connected() && !battery_bus_voltage_match_coarse() ) {
+		return EC_BATTERY_V_BUS_DEVIATION;
 	}
 #endif //SYSTEM_HAS_BATTERY
-
 
 	return EC_NO_ERROR;
 }
@@ -573,7 +573,8 @@ void measVdcFBboost()
 //#define V_DC_MAX_FBboost (1+600)  // original 4 x 150kOhm voltage divider
 
 #define V_DC_MAX_FBboost (1+450)  // 3 x 150kOhm = 450k voltage divider
-#define V_DC_CALIB_FBboost  995
+//#define V_DC_CALIB_FBboost  995  // 307.1V is shown as 308.3V
+#define V_DC_CALIB_FBboost  991
 
 #if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBboost*97)/100)
 #error Choose E_VDC_MAX_100mV lower than FBboost sensor range

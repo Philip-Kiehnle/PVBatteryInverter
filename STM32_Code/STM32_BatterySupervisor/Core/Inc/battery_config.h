@@ -29,6 +29,19 @@ constexpr uint16_t V_CELL_IMBALANCE_INFO_mV = 250;
 constexpr uint16_t V_CELL_IMBALANCE_WARN_mV = 270;
 //constexpr uint16_t V_CELL_IMBALANCE_ERR_mV = 300;  // BMS value
 
+constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_OFF__BAT_OFF;
+//constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_ON__BAT_OFF;  // CAN communication without need for high DC voltage
+
+// Battery voltage tolerance while connected:
+// coarse in case where current flow
+// fine in case no current flows
+
+//constexpr uint16_t BAT_BUS_VOLTAGE_TOLERANCE_COARSE_100mV = 10*10;  // 10V
+//constexpr uint16_t BAT_BUS_VOLTAGE_TOLERANCE_FINE_100mV = 5;  // 0.5V
+
+constexpr uint16_t BAT_BUS_VOLTAGE_TOLERANCE_COARSE_100mV = 15*10;  // works with 35W light bulb as series resistor
+constexpr uint16_t BAT_BUS_VOLTAGE_TOLERANCE_FINE_100mV = 6*10;
+
 // NMC chemistry
 constexpr uint16_t SoC_mV_lookup_table_100[100] = {
      2605,2720,2799,2867,2930,2977,3015,3049,3081,3110,  // 1%, 2%, ...

@@ -14,8 +14,6 @@ extern STW_mBMS bms;
 
 
 static volatile bool update_request;
-constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_OFF__BAT_OFF;
-//constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_ON__BAT_OFF;
 static volatile stateBattery_t stateBattery_next = DEFAULT_BATTERY_STATE;
 static stateBattery_t stateBattery = DEFAULT_BATTERY_STATE;
 static uint16_t bat_comm_fail_cnt;
@@ -160,12 +158,23 @@ void battery_state_request(stateBattery_t state)
 	stateBattery_next = state;
 }
 
-
-static bool voltage_in_range()
+// check if sum of cell voltages deviates from DC bus voltage e.g. +-10Volt (~0.1V per Cell)
+bool battery_bus_voltage_match_coarse()
 {
-#define BATTERY_VOLTAGE_TOLERANCE
-	if (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-5
-	    && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+5) {
+	if (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-BAT_BUS_VOLTAGE_TOLERANCE_COARSE_100mV
+	    && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+BAT_BUS_VOLTAGE_TOLERANCE_COARSE_100mV
+	) {
+		return true;
+	}
+	return false;
+}
+
+
+static bool battery_bus_voltage_match_fine()
+{
+	if (   bms.batteryStatus.voltage_100mV > get_v_dc_FBboost_filt50Hz_100mV()-BAT_BUS_VOLTAGE_TOLERANCE_FINE_100mV
+	    && bms.batteryStatus.voltage_100mV < get_v_dc_FBboost_filt50Hz_100mV()+BAT_BUS_VOLTAGE_TOLERANCE_FINE_100mV
+	) {
 		return true;
 	}
 	return false;
@@ -223,7 +232,7 @@ bool async_battery_communication()
 
 	if ( stateBattery == BMS_ON__BAT_ON
 	     && (abs(bms.batteryStatus.power_W) > 5
-			 || voltage_in_range()
+			 || battery_bus_voltage_match_fine()
 		)
 	) {
 		bat_connected = true;
@@ -251,7 +260,7 @@ bool async_battery_communication()
 			// check for battery disconnect
 			if (bms.batteryStatus.power_W == 0) {
 				if (bat_state_fail_cnt == 180) {  // 3 minutes
-					if (!voltage_in_range()) {
+					if (!battery_bus_voltage_match_fine()) {
 						bat_state_fail_cnt = 0;
 						stateBattery = BMS_ON__BAT_OFF;
 						//NVIC_SystemReset();  // todo check negative effects
