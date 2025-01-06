@@ -17,7 +17,8 @@
 #define E_VDC_MAX_100mV 375*10
 //#define E_VDC_MAX_100mV 384*10   // worst case for battery if BMS fails: 384V / 96cells = 4.0V
 //#define E_VDC_MAX_100mV 404*10   // worst case for battery if BMS fails: 404V / 96cells = 4.208V
-#define VDC_MAX_MPPT_100mV 375*10  // 375V / 96cells = 3.91V
+#define VDC_MAX_MPPT_100mV 360*10  // 360V / 96cells = 3.75V
+//#define VDC_MAX_MPPT_100mV 375*10  // 375V / 96cells = 3.91V
 //#define VDC_MAX_MPPT_100mV 384*10  // 384V / 96cells = 4.0V
 
 //#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
@@ -99,6 +100,7 @@ typedef enum
 	EC_FREQ_AC_LOW               = -23,
 	EC_FREQ_AC_HIGH              = -24,
 	EC_V_DC_MAX_BUS              = -25,
+	EC_BATTERY_V_BUS_DEVIATION   = -26,
 } errorPVBI_t;
 
 

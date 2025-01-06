@@ -17,11 +17,18 @@ void gatedriverDC(bool state)
 
 void contactorBattery(bool state)
 {
-	// Bat2DCboost
-	if ( state ) {
+	// Bat2DCboost -> Now used for negative battery contactor. Only connected to BatterySupervisor.
+	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOC->BSRR = (1<<13);
 	} else {
 		GPIOC->BRR = (1<<13);
+	}
+
+	// Bat2Inverter -> Now used for positive battery contactor. Only connected to PVBatteryInverter.
+	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
+		GPIOC->BSRR = (1<<14);
+	} else {
+		GPIOC->BRR = (1<<14);
 	}
 }
 
@@ -34,4 +41,3 @@ void bmsPower(bool state)
 		GPIOC->BRR = (1<<0);
 	}
 }
-
