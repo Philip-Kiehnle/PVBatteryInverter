@@ -16,18 +16,18 @@ constexpr BatteryParameter_t BATTERY = {
 	.V_CELL_MIN_PROTECT_mV      = 3050,  // BMS CSC PCBS UV_THRESHOLD_mV 3000  ~7% SoC
 	.V_CELL_MIN_POWER_REDUCE_mV = 3300,
 	.V_CELL_MAX_POWER_REDUCE_mV = 3900,
-	.V_CELL_MAX_PROTECT_mV      = 4200,  // BMS OV_THRESHOLD_mV 4200
-	.I_CHARGE_MAX    = 8.0,
-	.I_DISCHARGE_MAX = 8.0,  // BMS softlimit 8A; BMS ADC watchdog 10A
-	.T_CELL_MIN_ERR  = 0,  // BMS limit 0°C
+	.V_CELL_MAX_PROTECT_mV      = 4200,
+	.I_CHARGE_MAX    = 8.0,  // ADC watchdog 10A
+	.I_DISCHARGE_MAX = 8.0,  // ADC watchdog 10A
+	.T_CELL_MIN_ERR  = 0,
 	.T_CELL_MIN_WARN = 2,
-	.T_CELL_MAX_WARN = 43,
-	.T_CELL_MAX_ERR  = 45,  // BMS limit 45°C
+	.T_CELL_MAX_WARN = 49,
+	.T_CELL_MAX_ERR  = 50,
 };
 
 constexpr uint16_t V_CELL_IMBALANCE_INFO_mV = 250;
 constexpr uint16_t V_CELL_IMBALANCE_WARN_mV = 270;
-//constexpr uint16_t V_CELL_IMBALANCE_ERR_mV = 300;  // BMS value
+//constexpr uint16_t V_CELL_IMBALANCE_ERR_mV = 300;  // BMS value ?
 
 constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_OFF__BAT_OFF;
 //constexpr stateBattery_t DEFAULT_BATTERY_STATE = BMS_ON__BAT_OFF;  // CAN communication without need for high DC voltage

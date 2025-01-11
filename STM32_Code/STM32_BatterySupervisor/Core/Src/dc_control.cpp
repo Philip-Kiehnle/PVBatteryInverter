@@ -16,6 +16,7 @@
 #include "sys_mode_controller.h"
 #include "PICtrl.hpp"
 
+#include "battery_config.h"
 #include "BatteryManagement/STW_mBMS.hpp"
 extern STW_mBMS bms;
 
@@ -186,6 +187,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	constexpr float KI = 0.01/TE;  // 0.01 dutycycle change per 100mV difference per cycle; 300 per 50V for 60cycles (60/50=1.2sec)
 	static PICtrl piCtrl(TE, KP, KI);
 
+#if IS_BATTERY_SUPERVISOR_PCB != 1
 	bool vdc_inRange = false;
 
 	// 50Hz more robust: for critical increase from 400V to 500V in 20ms: 0.5*4*390uF*(500^2-400^2)/0.02 = 3.5kW
@@ -205,6 +207,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		vdc_inRange = false;
 		nextState(INIT_DC);
 	}
+#endif  // IS_BATTERY_SUPERVISOR_PCB != 1
 
 	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownDC();
@@ -257,12 +260,71 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		bat_protect_calc_request = true;
 	}
 
+#if IS_BATTERY_SUPERVISOR_PCB == 1
+	switch (stateDC) {
+	  case INIT_DC:
+		shutdownDC();
+		nextState(WAIT_BUS_VOLTAGE);
+		break;
+
+	  case WAIT_BUS_VOLTAGE:
+		if (   v_dc_bus_100mV > bms.V_MIN_PROTECT*10
+		    && v_dc_bus_100mV < bms.V_MAX_PROTECT*10
+		) {
+			battery_state_request(BMS_ON__BAT_OFF);
+			nextState(WAIT_BATTERY_STATUS);
+		}
+		break;
+
+	  case WAIT_BATTERY_STATUS:
+		if (   v_dc_bus_100mV > bms.V_MIN_PROTECT*10
+		    && v_dc_bus_100mV < bms.V_MAX_PROTECT*10
+		    && v_dc_bus_100mV > (bms.batteryStatus.voltage_100mV-VDC_TOLERANCE_100mV)
+		    && v_dc_bus_100mV < (bms.batteryStatus.voltage_100mV+VDC_TOLERANCE_100mV)
+		) {
+			contactorBattery(1);
+			battery_state_request(BMS_ON__BAT_ON);
+			nextState(BAT_CONNECTED);
+		}
+		break;
+
+	  case BAT_CONNECTED:
+		// These conditions do not produce error code -> just wait for recovery
+		// ADC analog watchdog current error produces error code and needs reset
+		// or BMS power removal, which causes watchdog systemreset because of missing CAN communication.
+		if (   bms.batteryStatus.voltage_100mV < bms.V_MIN_PROTECT*10  // opposite of WAIT_BUS_VOLTAGE
+		    || bms.batteryStatus.voltage_100mV > bms.V_MAX_PROTECT*10
+		    || v_dc_bus_100mV < (bms.batteryStatus.voltage_100mV-BAT_BUS_VOLTAGE_TOLERANCE_COARSE_100mV)
+		    || v_dc_bus_100mV > (bms.batteryStatus.voltage_100mV+BAT_BUS_VOLTAGE_TOLERANCE_COARSE_100mV)
+		    || i_dc_filt50Hz_mA > BATTERY.I_CHARGE_MAX*1000
+		    || i_dc_filt50Hz_mA < -BATTERY.I_DISCHARGE_MAX*1000
+		) {
+			contactorBattery(0);
+			battery_state_request(BMS_OFF__BAT_OFF);
+			nextState(CONTACTOR_PROTECTION);
+		}
+		break;
+
+	  // BMS power removal, which causes watchdog systemreset because of missing CAN communication skips this case
+	  case CONTACTOR_PROTECTION:
+		  if ( cnt_rel >= 120*DC_CTRL_FREQ) {  // wait at least 120 sec to avoid contactor wearout
+			nextState(INIT_DC);
+		  }
+		  break;
+
+	  default:
+		contactorBattery(0);
+		battery_state_request(BMS_OFF__BAT_OFF);
+		nextState(INIT_DC);
+		break;
+	}
+#else
+
 	switch (stateDC) {
 	  case INIT_DC:
 		shutdownDC();
 		nextState(WAIT_PV_VOLTAGE);
 		break;
-
 	  case WAIT_PV_VOLTAGE:
 	  {
 		gatedriverDC(0);
@@ -375,6 +437,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
       default:
           break;
       }
+#endif  // IS_BATTERY_SUPERVISOR_PCB == 1
 
 
 //	GaN Booster Interleaved Mode for full PV panel current
