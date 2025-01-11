@@ -117,76 +117,7 @@ extern volatile int16_t debug_i_ac_amp_10mA;
 
 
 uint8_t ubKeyNumber = 0x0;
-//FDCAN_RxHeaderTypeDef RxHeader;
-//uint8_t RxData[8];
-FDCAN_TxHeaderTypeDef TxHeader;
-uint8_t TxData[8];
-const char csc_err_str[][64] = { \
-	"ErrFLAG",
-	"Err001_EMERGENCY_LINE",
-	"Err002_ARTICLE_NUMBER",
-	"Err003_LIM_OVERVOLT",
-	"Err004_LIM_UNDERVOLT",
-	"Err005_LIM_OVERTEMP",
-	"Err006_LIM_UNDERTEMP",
-	"Err007_LIM_OVERTEMP_PCB",
-	"Err008",
-	"Err009",
-	"Err010",
-	"Err011",
-	"Err012_MEAS_INIT",
-	"Err013_MEAS_READ_TEMP",
-	"Err014_MEAS_READ_VOLT",
-	"Err015_MEAS_START_TEMP",
-	"Err016_MEAS_START_VOLT",
-	"Err017_MEAS_SET_CONFIG",
-	"Err018_MEAS_VOLT_SEQ",
-	"Err019_MEAS_TEMP_SEQ",
-	"Err020_MEAS_VOLT_TIMEOUT",
-	"Err021_MEAS_TEMP_TIMEOUT",
-	"Err022_MEAS_REF_VOLT",
-	"Err023",
-	"Err024_BAL_WRITE_CFRG",
-	"Err025_BAL_COMPARE_CFRG",
-	"Err026_BAL_THRESHOLD",
-	"Err027",
-	"Err028",
-	"Err029_SYS_GENERAL",
-	"Err030_SYS_SWITCH_DEF",
-	"Err031_SYS_DIFF_ZERO",
-	"Err032_SYS_TASK_TIME",
-	"Err033_SYS_DATASET_WARN",
-	"Err034_SYS_DATASET",
-	"Err035",
-	"Err036",
-	"Err037_FLASH_CRC_CAN",
-	"Err038_FLASH_READ_CAN",
-	"Err039_FLASH_CRC_PROD",
-	"Err040_FLASH_READ_PROD",
-	"Err041",
-	"Err042",
-	"Err043_CAN_BUFFER_FULL",
-	"Err044_CAN_SEND_SEQ",
-	"Err045",
-	"Err046",
-	"Err047",
-	"Err048_FST_LTC6801",
-	"Err049_FST_STACK",
-	"Err050_FST_INTERRUPT",
-	"Err051_FST_RESET",
-	"Err052_FST_CPU",
-	"Err053_FST_RAM_STARTUP",
-	"Err054_FST_RAM_SECTION_1",
-	"Err055_FST_RAM_SECTION_2",
-	"Err056_FST_ROM",
-	"Err057",
-	"Err058",
-	"Err059",
-	"Err060",
-	"Err061",
-	"Err062",
-	"Err063"
-};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -758,95 +689,69 @@ int main(void)
 
 
 	// UART
-	if (uart_output_text) {
+	if (print_request && uart_output_text) {
+		print_request = false;
 
 		calc_and_wait(250);  //ms
 
 #if SYSTEM_HAS_BATTERY == 1
-		//can_bus_read();  // todo implement anti lockup
-	#if 0  // debug print battery info
+		const batteryStatus_t* battery = get_batteryStatus();
+#endif //SYSTEM_HAS_BATTERY
+
+#if 1  // debug print battery info
 		/************************/
 		/* print battery status */
 		/************************/
-		int16_t temperatureBatteryMIN = 127;
-		int16_t temperatureBatteryMAX = -128;
 
-		for (int c=0; c<(4*14);c++) {
+		uSend("\nBatteryStatus\n");
 
-			if (cellStack.temperature[c] < temperatureBatteryMIN) {
-				temperatureBatteryMIN = cellStack.temperature[c];
-			}
-			if (cellStack.temperature[c] > temperatureBatteryMAX) {
-				temperatureBatteryMAX = cellStack.temperature[c];
-			}
+		for (int c=0; c<(4*14); c++) {
 
 			uSend("Temp");
 			if (c<=8)
 				uSend(" ");
 			uSendInt(c+1);
 			uSend(" ");
-			uSendInt(cellStack.temperature[c]);
+			uSendInt(get_battery_temperature(c));
 			uSend("\n");
 		}
 
-		battery.temperatureBatteryMIN = temperatureBatteryMIN;
-		battery.temperatureBatteryMAX = temperatureBatteryMAX;
-
-
-		uint16_t vCellMIN_mV = 5000;
-		uint16_t vCellMAX_mV = 0;
-
 		uint8_t nr_cells_balancing = 0;
 
-		for (int c=0; c<96;c++) {
-
-			if (cellStack.vCell_mV[c] < vCellMIN_mV) {
-				vCellMIN_mV = cellStack.vCell_mV[c];
-			}
-			if (cellStack.vCell_mV[c] > vCellMAX_mV) {
-				vCellMAX_mV = cellStack.vCell_mV[c];
-			}
-
-			uSend("Vc");
-			if (c<=8)
+		if (battery->voltage_100mV != 0) {
+			for (int c=0; c<96; c++) {
+				if (c%12 == 0) uSend(" ");
+				uSend("Vc");
+				if (c<=8)
+					uSend(" ");
+				uSendInt(c+1);
 				uSend(" ");
-			uSendInt(c+1);
-			uSend(" ");
-			uSend_1m(cellStack.vCell_mV[c]);
+				uSend_1m(get_battery_vCell_mV(c));
 
-			if (cellStack.balancingState[c]) {
-				uSend(" balancing");
-				nr_cells_balancing++;
+				if (get_battery_balancingState(c)) {
+					uSend(" balancing");
+					nr_cells_balancing++;
+				}
+				uSend("\n");
 			}
-			uSend("\n");
 		}
 		uSend("nr_cells_balancing ");
 		uSendInt(nr_cells_balancing);
 		uSend("\n");
 
-		// todo implement safety mechanism for hangups and tolerate 3 can message errors
-		battery.vCell_max_mV = vCellMAX_mV;
-		battery.vCell_min_mV = vCellMIN_mV;
-
-		int16_t vCellDIFF_mV = vCellMAX_mV - vCellMIN_mV;
-		uSend("vCellMAX_mV ");
-		uSend_1m(vCellMAX_mV);
-		uSend("\n");
-		uSend("vCellMIN_mV ");
-		uSend_1m(vCellMIN_mV);
-		uSend("\n");
+		int16_t vCellDIFF_mV = battery->maxVcell_mV - battery->minVcell_mV;
 		uSend("vCellDIFF_mV ");
 		uSend_1m(vCellDIFF_mV);
 		uSend("\n");
 
 		for (int csc=0; csc<4;csc++) {
-			if (cellStack.csc_err[csc]) {
+			if (get_battery_csc_err(csc)) {
 				uSend("Err in CSC");
 				uSendInt(csc+1);
 				uSend("\n");
 				for (uint8_t bit=0; bit<64; bit++) {
-					if ( (1<<bit) & cellStack.csc_err[csc]) {
-						const char * strerr = csc_err_str[bit];
+					if ( (1<<bit) & get_battery_csc_err(csc)) {
+						const char* strerr = get_battery_csc_err_str(bit);
 						tx_len=strlen(strerr);
 						HAL_UART_Transmit(huart_debug, (uint8_t *)strerr, tx_len, 10);
 						uSend("\n");
@@ -854,102 +759,103 @@ int main(void)
 				}
 			}
 		}
-	#endif
-#endif  // SYSTEM_HAS_BATTERY
+#endif
 
-		if (print_request && uart_output_text) {
-			print_request = false;
-
-			if (get_sys_errorcode()!=EC_NO_ERROR) {
-				uSend("E ");
-				itoa(get_sys_errorcode(), tx_buf, 10);
-				tx_len=strlen(tx_buf);
-				HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
-				uSend(" ");
-				char * strerr = strerror(get_sys_errorcode());
-				tx_len=strlen(strerr);
-				HAL_UART_Transmit(huart_debug, (uint8_t *)strerr, tx_len, 10);
-				uSend("\n");
-			}
-
-			uSend("\nS ");
-			itoa(get_sys_mode(), tx_buf, 10);
+		if (get_sys_errorcode()!=EC_NO_ERROR) {
+			uSend("E ");
+			itoa(get_sys_errorcode(), tx_buf, 10);
 			tx_len=strlen(tx_buf);
 			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+			uSend(" ");
+			char * strerr = strerror(get_sys_errorcode());
+			tx_len=strlen(strerr);
+			HAL_UART_Transmit(huart_debug, (uint8_t *)strerr, tx_len, 10);
+			uSend("\n");
+		}
 
-			uSend("\nDC ");
-			itoa(stateDC, tx_buf, 10);
-			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+		uSend("\nS ");
+		itoa(get_sys_mode(), tx_buf, 10);
+		tx_len=strlen(tx_buf);
+		HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+
+		uSend("\nDC ");
+		itoa(stateDC, tx_buf, 10);
+		tx_len=strlen(tx_buf);
+		HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 #if SYSTEM_HAS_BATTERY == 1
-			uSend(" Bat ");
-			itoa(get_stateBattery(), tx_buf, 10);
-			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+		uSend(" Bat ");
+		itoa(get_stateBattery(), tx_buf, 10);
+		tx_len=strlen(tx_buf);
+		HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 #endif //SYSTEM_HAS_BATTERY
 
-			uSend("\nAC ");
-			itoa(stateAC, tx_buf, 10);
-			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
-			uSend("; ");
-			itoa(ctrl_ref.mode, tx_buf, 10);
-			tx_len=strlen(tx_buf);
-			HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
-			uSend("\n");
+		uSend("\nAC ");
+		itoa(stateAC, tx_buf, 10);
+		tx_len=strlen(tx_buf);
+		HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+		uSend("; ");
+		itoa(ctrl_ref.mode, tx_buf, 10);
+		tx_len=strlen(tx_buf);
+		HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
+		uSend("\n");
 
 #if SYSTEM_HAS_BATTERY == 1
-			uSend("Vbat ");
-			const batteryStatus_t* battery = get_batteryStatus();
-			uSend_100m(battery->voltage_100mV);
-			uSend("  ");
-			uSend_1m(battery->minVcell_mV);
-			uSend("  ");
-			uSend_1m(battery->maxVcell_mV);
-			uSend("\n");
+		uSend("Vbat ");
+		uSend_100m(battery->voltage_100mV);
+		uSend("  ");
+		uSend_1m(battery->minVcell_mV);
+		uSend("  ");
+		uSend_1m(battery->maxVcell_mV);
+		uSend("\n");
+
+		uSend("Tmin");
+		uSendInt(battery->minTemp);
+		uSend("  Tmax");
+		uSendInt(battery->maxTemp);
+		uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
 
-	//		uSend("VdcFBboost_sinc ");
-	//		uSend_100m(VdcFBboost_sincfilt_100mV);
-	//		uSend("\n");
-	//
-	//		uSend("VdcFBgrid_sinc  ");
-	//		uSend_100m(VdcFBgrid_sincfilt_100mV);
-	//		uSend("\n");
-	//
-	//		uSend("vac_filt50Hz ");
-	//		uSend_100m(debug_vac_filt50Hz_100mV);
-	//		uSend("\n");
+//		uSend("VdcFBboost_sinc ");
+//		uSend_100m(VdcFBboost_sincfilt_100mV);
+//		uSend("\n");
+//
+//		uSend("VdcFBgrid_sinc  ");
+//		uSend_100m(VdcFBgrid_sincfilt_100mV);
+//		uSend("\n");
+//
+//		uSend("vac_filt50Hz ");
+//		uSend_100m(debug_vac_filt50Hz_100mV);
+//		uSend("\n");
 
-			uSend("vdc ");
-			uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
-			uSend("\n");
+		uSend("vdc ");
+		uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
+		uSend("\n");
 
-			uSend("iac ");
-			uSend_10m(debug_i_ac_amp_10mA);
-			uSend("\n");
+		uSend("iac ");
+		uSend_10m(debug_i_ac_amp_10mA);
+		uSend("\n");
 
-			uSend("Ppcc ");
-			uSendInt(ctrl_ref.p_pcc);
-			if (el_meter_status == EL_METER_CONN_ERR) {
-				uSend(" connErr");
-			} else if (el_meter_status == EL_METER_CONN_WARN) {
-				uSend(" connWarn");
-			}
-			uSend("\n");
+		uSend("Ppcc ");
+		uSendInt(ctrl_ref.p_pcc);
+		if (el_meter_status == EL_METER_CONN_ERR) {
+			uSend(" connErr");
+		} else if (el_meter_status == EL_METER_CONN_WARN) {
+			uSend(" connWarn");
+		}
+		uSend("\n");
 
-			uSend("Pac ");
-			uSendInt(get_p_ac_filt50Hz());
-			uSend("\n");
+		uSend("Pac ");
+		uSendInt(get_p_ac_filt50Hz());
+		uSend("\n");
 
 #if SYSTEM_HAS_BATTERY == 1
-			uSend("Pb ");
-			uSendInt(battery->power_W);
-			uSend("\n");
+		uSend("Pb ");
+		uSendInt(battery->power_W);
+		uSend("\n");
 
-			uSend("SoC ");
-			uSendInt(battery->soc_percent);
-			uSend("\n");
+		uSend("SoC ");
+		uSendInt(battery->soc_percent);
+		uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
 
 		//	uSend("iac ");
@@ -983,7 +889,6 @@ int main(void)
 		//	uSend("\n");
 		//	// no current 4avg: 2627-2630
 		//	// ~+1A 2671
-		}
 	}
 
 	// UART RX
@@ -1006,45 +911,15 @@ int main(void)
 			uSend("Fast monitor TRIG\n");
 			fast_mon_vars_trig = true;
 			uart_output_text = false;
+//		} else if (rx_buf == 'c') {
+//			uSend("Contactor Enable\n");
+//			contactorBattery(1);
 		} else if (rx_buf == 'b') {
 			uSend("BALANCING ENABLE\n");
-
-			//cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
-
-			TxHeader.Identifier = 0x110;
-			TxHeader.DataLength = FDCAN_DLC_BYTES_8;
-
-			/* Set the data to be transmitted */
-			memset(TxData, 0, sizeof(TxData));
-			TxData[0] = 0x0F;  // CSC1-4
-			TxData[5] = 0x01;  // Enable_Threshold
-	//	    TxData[6] = 0x74;
-	//	    TxData[7] = 0x0E;
-			uint16_t vCellBalTarget_mV = 3700;
-			memcpy(&TxData[6], &vCellBalTarget_mV, 2);
-			/* Start the Transmission process */
-			if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
-			{
-			  /* Transmission request Error */
-			  Error_Handler();
-			}
-		} else	if (rx_buf == 'd') {
+			battery_set_balancing(0b1111, 3650);  // all CSCs
+		} else	if (rx_buf == 's') {
 			uSend("BALANCING DISABLE\n");
-
-			//cansend slcan0 110#0F 00 00 00 00 01 74 0E  # Alle auf 3700mV balancen
-
-			TxHeader.Identifier = 0x110;
-			TxHeader.DataLength = FDCAN_DLC_BYTES_8;
-
-			/* Set the data to be transmitted */
-			memset(TxData, 0, sizeof(TxData));
-
-			/* Start the Transmission process */
-			if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) != HAL_OK)
-			{
-			  /* Transmission request Error */
-			  Error_Handler();
-			}
+			battery_set_balancing(0b0, 3600);
 		}
 	}
 
@@ -1926,22 +1801,6 @@ static void MX_GPIO_Init(void)
   */
 static void FDCAN_Config(void)
 {
-  FDCAN_FilterTypeDef sFilterConfig;
-
-  /* Configure Rx filter */
-  sFilterConfig.IdType = FDCAN_STANDARD_ID;
-  sFilterConfig.FilterIndex = 0;
-  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x40D;  // CSC01_CELL_VOLT_21_24
-  //sFilterConfig.FilterID2 = 0x7FF;
-  sFilterConfig.FilterID2 = 0x000;
-
-  if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
   /* Configure global filter:
      Filter all remote frames with STD and EXT ID
      Reject non matching frames with STD ID and EXT ID */
@@ -1962,16 +1821,6 @@ static void FDCAN_Config(void)
 //    Error_Handler();
 //  }
 
-  /* Prepare Tx Header */
-  TxHeader.Identifier = 0x40D;
-  TxHeader.IdType = FDCAN_STANDARD_ID;
-  TxHeader.TxFrameType = FDCAN_DATA_FRAME;
-  TxHeader.DataLength = FDCAN_DLC_BYTES_8;
-  TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
-  TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
-  TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  TxHeader.MessageMarker = 0;
 }
 
 /**

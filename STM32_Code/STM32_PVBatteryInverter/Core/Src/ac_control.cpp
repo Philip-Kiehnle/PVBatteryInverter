@@ -686,11 +686,11 @@ void measVdcFBgrid()
 		// 1V = 90% bitstream ones = 50 edges counted in 50us
 		// pos value range from 50 to 250 -> div by 200
 
-#define V_DC_MAX_FBgrid (1+59)  // 68kOhm 450×68÷(450+68)
+//#define V_DC_MAX_FBgrid (1+59)  // 68kOhm 450×68÷(450+68)
 #define V_DC_CALIB_FBgrid  992  // per mil for 68kOhm 450×68÷(450+68)
-//#define V_DC_MAX_FBgrid (1+450)  // todo 450 voltage divider
+#define V_DC_MAX_FBgrid (1+375)  // 375k voltage divider  4.1Vcell*96=393.6V -> Vadc=1.05V -> 40edges
 
-#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBgrid*97)/100)
+#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBgrid*105)/100)
 #error Choose E_VDC_MAX_100mV lower than FBgrid sensor range
 #endif
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
