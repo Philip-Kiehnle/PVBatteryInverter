@@ -207,6 +207,7 @@ bool async_battery_communication()
 				  stateBattery = BMS_OFF__BAT_OFF;
 				  bat_connected = false;
 			  }
+			  bms.batteryStatus = {0};
 			  break;
 
 		  case BMS_ON__BAT_ON:

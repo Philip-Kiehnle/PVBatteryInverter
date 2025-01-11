@@ -79,6 +79,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			break;
 
 #if SYSTEM_HAS_BATTERY == 1
+		  case BAT_SUPERVISOR_MODE:
+			  sys_mode_needs_battery = true;
+			  break;
 		  case PV2BAT:
 			// preload DC bus if battery is in deepsleep to test PV power
 			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {

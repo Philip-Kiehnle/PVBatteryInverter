@@ -310,36 +310,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	//static volatile uint16_t vdc_sinc_mix_100mV;
 	static volatile uint16_t cnt20kHz_20ms = 0;
 
-	// ADC1_IN8 = PC2 = Vdc measurement with resistive voltage divider
+	// ADC1 = Vdc measurement with resistive voltage divider
 	// one channel -> called once
     if (hadc == &hadc1) {
 
-    	// Battery Vdc measurement
-    	// V4: 2x330k THT + 2x330k SMD
-    	// C=4.7uF
-    	// 3.3V×((2×660+10)÷10) = 438.9V
-// V0:
-//#define VDC_mV_per_LSB (438900/4096)  // 438.9Vmax -> 3.3V 12bit
-    	//Vdc_bus 31.2   raw=293   V_multimeter=38.35V
-    	//Vdc_bus 359.1  raw=3361  V_multimeter=365.1V
-// V1: calib
-//#define VDC_OFFSET_RAW 67
-//#define VDC_mV_per_LSB (436235/4096)  // 436.235Vmax -> 3.3V 12bit
-// Problem: idle 7.1V
+ 		// Battery Vdc measurement
+		// 2x330k THT + 2x330k SMD + 10k SMD; Bias: Vcc -> 8.2k -> 4.3k -> GND
+		// C=1.0uF
 
-// V2: calib with idle < 1V
-#define VDC_OFFSET_RAW 8
-#define VDC_mV_per_LSB (443763/4096)
-
-//V3:  Oszi 312V Amprobe AM-550-EUR: 306.5V
-//     Vdc_bus 297.1  raw=2744
-//     v_dc_FBboost_filt50Hz308.1
-//#define VDC_OFFSET_RAW 8
-//#define VDC_mV_per_LSB (456000/4096)
-
-//V4: Lower voltage without parallel Multimeter -> using V2 again
-//    	Vdc_bus 354.5  raw=3186
-//    	v_dc_FBboost_filt50Hz347.3
+		// V7: Using differential ADC and positive bias, see LTspice DC-sense.asc
+		// 400Vdc -> 1.09Vadc according to LTspice
+		// 1.09V/6.6V * 2^12 = 676 LSBs for 400V
+#define VDC_OFFSET_RAW -1982
+//#define VDC_mV_per_LSB ((400*1000)/676)  //313.6V :Vdc_bus 315.5  raw=2516  -> Fix by factor 0.994
+#define VDC_mV_per_LSB ((0.994*400*1000)/676)
 
 		int v_dc_raw_no_calib = ADC1ConvertedData[0];
 		debug_v_dc_raw = v_dc_raw_no_calib;
@@ -363,7 +347,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	// todo: 22kHz vs 20kHz : no exact average current, but robust for MPPT and much better in discontinuous mode than double sample
 		//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
+#if IS_BATTERY_SUPERVISOR_PCB != 1  // battery supervisor board has no sigmadelta ADC connected
 		measVdcFBboost();
+#endif
 
 		i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
 
@@ -895,10 +881,10 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_8;
+  sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
-  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.SingleDiff = ADC_DIFFERENTIAL_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)

@@ -8,12 +8,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define SYS_MODE PV2BAT
+// Define a system mode or uncomment IS_BATTERY_SUPERVISOR_PCB
+//#define SYS_MODE PV2BAT
+#define IS_BATTERY_SUPERVISOR_PCB 1
 
-#define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
+#if IS_BATTERY_SUPERVISOR_PCB == 1
+#define SYS_MODE BAT_SUPERVISOR_MODE
+#endif
+
+#define COMM_READ_ELECTRICITY_METER 0  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
 
-#define E_VDC_BUS_MAX_100mV 375*10  // limit for ADC with voltage divider
+#define E_VDC_BUS_MAX_100mV 404*10  // limit for ADC with voltage divider
 #define E_VDC_MAX_100mV 375*10
 //#define E_VDC_MAX_100mV 384*10   // worst case for battery if BMS fails: 384V / 96cells = 4.0V
 //#define E_VDC_MAX_100mV 404*10   // worst case for battery if BMS fails: 404V / 96cells = 4.208V
@@ -38,10 +44,15 @@
 #define V_TO_100mV(x)  (10*x)
 
 
-enum mode_t {OFF, PV2AC, PV2BAT, HYBRID_PCC_SENSOR, HYBRID_REMOTE_CONTROLLED};
+enum mode_t {OFF, PV2AC, PV2BAT, HYBRID_PCC_SENSOR, HYBRID_REMOTE_CONTROLLED, BAT_SUPERVISOR_MODE};
 enum stateHYBRID_AC_t {HYB_AC_OFF, HYB_AC_ON};
 
+#if IS_BATTERY_SUPERVISOR_PCB == 1
+enum stateDC_t {INIT_DC, WAIT_BUS_VOLTAGE, WAIT_BATTERY_STATUS, BAT_CONNECTED, CONTACTOR_PROTECTION};
+#else
 enum stateDC_t {INIT_DC, WAIT_PV_VOLTAGE, VOLTAGE_CONTROL, WAIT_CONTACTOR_DC, MPPT};
+#endif // SYS_MODE == BAT_SUPERVISOR_MODE
+
 enum stateAC_t {INIT_AC, WAIT_AC_DC_VOLTAGE, WAIT_ZERO_CROSSING, CLOSE_CONTACTOR_AC, WAIT_CONTACTOR_AC, GRID_CONNECTING, GRID_SYNC};
 
 typedef enum
