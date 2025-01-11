@@ -18,8 +18,8 @@
 #include "PICtrl.hpp"
 #include "sys_mode_controller.h"
 
-#include "BatteryManagement/ETI_DualBMS.hpp"
-extern ETI_DualBMS bms;
+#include "BatteryManagement/STW_mBMS.hpp"
+extern STW_mBMS bms;
 
 
 // single PWM step has 1/170MHz = 5.88ns -> center aligned PWM -> 11.8ns
@@ -46,14 +46,15 @@ constexpr pvModule_t PVMODULE = pvModule_t{
 	.nr_bypassDiodes = 3
 };
 
-//constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
-//	.vin_min = 62,  // 2 modules * 31V
-//	.vin_max = 424,  // 8 modules * 53V
-//	.vout_min = 256,  // 80 Li-cells * 3.2
-//	.vout_max = 336,  // 80 Li-cells * 4.2
-//	.nr_pv_modules = 8,
-//	.nr_substring_search_per_interval = 6
-//};
+constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
+	.debug = false,
+	.vin_min = 62,  // 2 modules * 31V
+	.vin_max = 424,  // 8 modules * 53V
+	.vout_min = 288,  // 96 Li-cells * 3.0
+	.vout_max = 403,  // 96 Li-cells * 4.2
+	.nr_pv_modules = 8,
+	.nr_bypassDiodes_search_per_interval = 6
+};
 
 // PV emulator:
 // 2*Voc = 2*46.3 = 92.6V
@@ -61,16 +62,16 @@ constexpr pvModule_t PVMODULE = pvModule_t{
 // 30%*Isc = 0.3*11.84 = 3.55A
 // 30%*Imp = 0.3*11.1 = 3.33A
 
-constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
-	.debug = false,
-//	.vin_min = 0.33*31,  // 1/3 module * 31V
-	.vin_min = 0.2*31,  // 20% * Vmodule
-	.vin_max = 1*53,  // 1 module * 53V
-	.vout_min = 38,
-	.vout_max = 58,
-	.nr_pv_modules = 1,
-	.nr_bypassDiodes_search_per_interval = 1
-};
+//constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
+//	.debug = false,
+////	.vin_min = 0.33*31,  // 1/3 module * 31V
+//	.vin_min = 0.2*31,  // 20% * Vmodule
+//	.vin_max = 1*53,  // 1 module * 53V
+//	.vout_min = 38,
+//	.vout_max = 58,
+//	.nr_pv_modules = 1,
+//	.nr_bypassDiodes_search_per_interval = 1
+//};
 
 
 constexpr unsigned int MPPT_FREQ = DC_CTRL_FREQ_MPPT/2;  // one cycle stabilisation, one cycle MPPT calculation
@@ -238,11 +239,17 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	static int16_t dutyLS1 = 0;
 
+	// PI controller
+	constexpr float TE = 1.0/50;   // 20ms execution interval
+	constexpr float KP = 0.6;      // 0.6 dutycycle change per 100mV difference; 300 per 50V; 1÷(1−(300÷4250))×310V=334V
+	constexpr float KI = 0.01/TE;  // 0.01 dutycycle change per 100mV difference per cycle; 300 per 50V for 60cycles (60/50=1.2sec)
+	static PICtrl piCtrl(TE, KP, KI);
+
 	bool vdc_inRange = false;
 
 	// 50Hz more robust: for critical increase from 400V to 500V in 20ms: 0.5*4*390uF*(500^2-400^2)/0.02 = 3.5kW
-	if (   v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_100mV
-		&& v_dc_FBboost_filt50Hz_100mV < E_VDC_MAX_100mV
+	if (   v_dc_FBboost_filt50Hz_100mV > VDC_BOOST_STOP_LOW_100mV
+		&& v_dc_FBboost_filt50Hz_100mV < (E_VDC_MAX_100mV-VDC_TOLERANCE_100mV)
 #if SYSTEM_HAS_BATTERY == 1
 		&& battery_maxVcell_OK()
 #endif //SYSTEM_HAS_BATTERY
@@ -323,6 +330,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			&& pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
 		) {
 			dutyLS1 = 0;
+			piCtrl.y = 0;
 			nextState(VOLTAGE_CONTROL);
 		}
 		break;
@@ -332,15 +340,10 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		gatedriverDC(1);
 
 		if (cnt20kHz_20ms == 0) {
-			if ( v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV-VDC_TOLERANCE_100mV) ) {
-				dutyLS1 += 2;
-			} else if (v_dc_FBboost_sincfilt_100mV < v_dc_ref_100mV) {
-				dutyLS1++;
-			} else if ( v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV+VDC_TOLERANCE_100mV/4) ) {
-				dutyLS1 -= 2;
-			}
 			constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAMS.vin_min/MPPTPARAMS.vout_max);
-			dutyLS1 = std::clamp(dutyLS1, (int16_t)0, (int16_t)(MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY));  // prevent short circuit of PV plant
+			int16_t err = v_dc_ref_100mV-v_dc_FBboost_sincfilt_100mV;
+			piCtrl.step(err, 0, MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY);
+			dutyLS1 = piCtrl.y;
 		}
 
 		if (   (  v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
@@ -352,16 +355,22 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 #if SYSTEM_HAS_BATTERY == 1
 			if (sys_mode_needs_battery) {
-				contactorBattery(1);
-				battery_state_request(BMS_ON__BAT_ON);
-				nextState(WAIT_CONTACTOR_DC);
+				// wait for negative contactor which is controlled by battery supervisor PCB
+				if (cnt_rel > 10*DC_CTRL_FREQ) {  // 10sec delay
+					contactorBattery(1);
+					battery_state_request(BMS_ON__BAT_ON);
+					nextState(WAIT_CONTACTOR_DC);
+				}
 			} else {
 #endif //SYSTEM_HAS_BATTERY
+				cnt_rel = 0;
 				mppTracker.duty_raw = dutyLS1;
 				nextState(MPPT);
 #if SYSTEM_HAS_BATTERY == 1
 			}
 #endif //SYSTEM_HAS_BATTERY
+		} else {
+			cnt_rel = 0;
 		}
 		break;
 	  }
@@ -381,7 +390,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		}
 #endif //SYSTEM_HAS_BATTERY
 
-		if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_MPPT_100mV ) {
+		if ( v_dc_FBboost_sincfilt_100mV > VDC_MAX_MPPT_100mV ) {
 			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
 			dutyLS1 = 0;
 			nextState(VOLTAGE_CONTROL);
@@ -499,10 +508,19 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  return dutyB1;
 }
 
-errorPVBI_t checkDCLimits(){
+errorPVBI_t checkDCLimits()
+{
 	if ( v_dc_FBboost_sincfilt_100mV > E_VDC_MAX_100mV ) {
 		return EC_V_DC_MAX_FB_BOOST;
 	}
+
+#if SYSTEM_HAS_BATTERY == 1
+	// check if sum of cell voltages deviates from DC bus voltage e.g. +-10Volt (~0.1V per Cell)
+	else if ( battery_connected() && !battery_bus_voltage_match_coarse() ) {
+		return EC_BATTERY_V_BUS_DEVIATION;
+	}
+#endif //SYSTEM_HAS_BATTERY
+
 	return EC_NO_ERROR;
 }
 
@@ -537,7 +555,7 @@ void measVdcFBboost()
 	TIM4->CNT = 0;
 
 	// if sensor sees more than 1V, 90% high increase up to only a single zero in 128cycles, which equals 1.25V
-	if (sigma_delta_re < 35 || sigma_delta_re > 500) {
+	if (sigma_delta_re < 32 || sigma_delta_re > 500) {
 		set_sys_errorcode(EC_V_DC_SENSOR_FB_BOOST);
 	}
 
@@ -610,12 +628,13 @@ void measVdcFBboost()
 		// 0V = 50% bitstream ones = 250 edges counted in 50us -> probability of doubles high -> less edges
 		// 1V = 90% bitstream ones = 50 edges counted in 50us
 		// pos value range from 50 to 250 -> div by 200
-#define V_DC_MAX_FBboost (1+59)  // 68kOhm 450×68÷(450+68)
-#define V_DC_CALIB_FBboost  995  // per mil for 68kOhm 450×68÷(450+68)
+//#define V_DC_MAX_FBboost (1+59)  // 68kOhm 450×68÷(450+68)
+//#define V_DC_CALIB_FBboost  995  // per mil for 68kOhm 450×68÷(450+68)
 
-//#define V_DC_MAX_FBboost (1+450)  // todo 450 voltage divider
+#define V_DC_MAX_FBboost (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.25Vcell*96=408V -> Vadc=1.088V (32edges)
+#define V_DC_CALIB_FBboost  995  // 310.1V is shown as 310.3V
 
-#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBboost*97)/100)
+#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBboost*105)/100)
 #error Choose E_VDC_MAX_100mV lower than FBboost sensor range
 #endif
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit

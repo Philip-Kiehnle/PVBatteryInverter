@@ -21,10 +21,13 @@ extern "C" {
 // for autonomous operation
 // PV-Panel: Voc(STC)=46.30V Voc(NOCT)=43.70V; morning Voc_dcbus=35.7V; 28°C cloudy Voc_dcbus=35.5V Ppv=22W => choose 35.4Vstart
 // 25.6.2024 11:00 module in shadow, little bit dirty;,Voc_dcbus=35.0V => choose 34.0Vstart (voltage at 6:20)
-#define VDC_BOOST_START_100mV 34.0*10
-#define VDC_BOOST_STOP_100mV 26*10
+//#define VDC_BOOST_START_100mV 34.0*10
+//#define VDC_BOOST_STOP_100mV 26*10
 
-#define VDC_TOLERANCE_100mV 2*10  // 2V tolerance for connecting battery
+#define VDC_BOOST_START_100mV 8*34.0*10  // 272V
+#define VDC_BOOST_STOP_LOW_100mV 8*26*10  // 208V
+
+#define VDC_TOLERANCE_100mV 4*10  // 4V tolerance for connecting battery
 
 enum dcdc_mode_t {INACTIVE, DCDC_HB1, DCDC_HB2, DCDC_INTERLEAVED};
 

@@ -10,8 +10,8 @@
 #include "battery.h"
 #include "battery_config.h"
 #include "BatteryManagement/bms_types.h"
-//#include "BatteryManagement/STW_mBMS.hpp"
-#include "BatteryManagement/ETI_DualBMS.hpp"
+#include "BatteryManagement/STW_mBMS.hpp"
+//#include "BatteryManagement/ETI_DualBMS.hpp"
 #include <hybridinverter_modbus.h>
 
 
@@ -26,8 +26,8 @@ extern volatile uint32_t cntErr_1Hz;
 
 
 #if SYSTEM_HAS_BATTERY == 1
-//static STW_mBMS bms(2);  // BMS address
-ETI_DualBMS bms(15, 1.0, BATTERY);  // BMS address=15
+STW_mBMS bms(0, 1.0, BATTERY);
+//ETI_DualBMS bms(15, 1.0, BATTERY);  // BMS address=15
 #endif
 
 
@@ -189,9 +189,20 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 #if SYSTEM_HAS_BATTERY == 1
 		  case PV2BAT:
-			ctrl_ref->v_dc_100mV = battery->voltage_100mV;
+			// preload DC bus if battery is in deepsleep to test PV power
+			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
+				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
+				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
+					battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
+				}
+			} else {
+				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
+			}
+
 			ctrl_ref->mode = AC_OFF;
-			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
+			if (   get_v_dc_FBboost_filt50Hz_100mV() > bms.V_MIN_PROTECT*10
+				&& get_v_dc_FBboost_filt50Hz_100mV() < bms.V_MAX_PROTECT*10
+			) {
 				sys_mode_needs_battery = true;
 			} else {
 				sys_mode_needs_battery = false;
