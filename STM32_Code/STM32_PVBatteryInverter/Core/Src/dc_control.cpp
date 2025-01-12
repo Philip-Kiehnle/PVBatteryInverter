@@ -354,7 +354,11 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			){
 
 #if SYSTEM_HAS_BATTERY == 1
-			if (sys_mode_needs_battery) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			if (    sys_mode_needs_battery
+				&& v_dc_filt50Hz*10 > (battery->voltage_100mV-VDC_TOLERANCE_100mV)
+				&& v_dc_filt50Hz*10 < (battery->voltage_100mV+VDC_TOLERANCE_100mV)
+				){
 				// wait for negative contactor which is controlled by battery supervisor PCB
 				if (cnt_rel > 10*DC_CTRL_FREQ) {  // 10sec delay
 					contactorBattery(1);

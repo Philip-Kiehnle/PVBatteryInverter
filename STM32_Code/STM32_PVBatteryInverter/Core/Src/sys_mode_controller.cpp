@@ -132,6 +132,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 {
 #if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
+	bms.read_current = true;
 	p_bat_chg_max = std::min(battery->p_charge_max, p_bat_chg_externalmax);
 #endif //SYSTEM_HAS_BATTERY
 	static uint32_t cnt_1Hz_chargeDC;
