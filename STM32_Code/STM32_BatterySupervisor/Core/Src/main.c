@@ -96,6 +96,7 @@ uint16_t ADC1ConvertedData[1];
 uint16_t ADC2ConvertedData[1];
 volatile uint16_t debug_sigma_delta_re;
 volatile int16_t i_dc_filt_10mA;
+volatile int16_t i_dc_filt_1s_10mA;
 volatile uint16_t debug_v_dc_raw;
 
 
@@ -265,11 +266,15 @@ void calc_and_wait(uint32_t delay)
 }
 
 
-#define IDC_OFFSET_RAW 2636  // at ~18°C after microcontroller start -40mA instead 0mA at 21°C
+#define IDC_OFFSET_RAW 2634  // 0.00A to 0.01A at ~19°C
 #define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
-#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
-#define IDC_RAW_TO_10mA (-IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // = 2.301897321  // sign inversion (pos means battery charging)
 #define CNT_I_DC_AVG 16  // +3bit in hardware
+#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
+
+//#define IDC_RAW_TO_100uA (-IDC_mV_per_LSB * 10000.0/IDC_mV_per_A)  // = 230.1897321  // sign inversion (pos means battery charging)
+// Amprobe +2.50A -> +2.54A
+// Amprobe -2.50A -> -2.52A  -> Gain 0.99
+#define IDC_RAW_TO_100uA (-IDC_mV_per_LSB * 0.99*10000.0/IDC_mV_per_A)  // sign inversion (pos means battery charging)
 
 
 // +-50A sensor range with 3.3V ADC:
@@ -281,7 +286,7 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 {
 	shutdownAll();
 
-	i_dc_filt_10mA = (HAL_ADC_GetValue(&hadc2) - CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
+	i_dc_filt_10mA = (((int32_t)HAL_ADC_GetValue(&hadc2) - CNT_I_DC_AVG*IDC_OFFSET_RAW) * IDC_RAW_TO_100uA) / (CNT_I_DC_AVG*100);
 
 	if (i_dc_filt_10mA > 0) {
 		set_sys_errorcode(EC_BATTERY_I_CHARGE_MAX);
@@ -351,7 +356,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		measVdcFBboost();
 #endif
 
-		i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
+		i_dc_filt_10mA = (((int32_t)ADC2ConvertedData[0] - CNT_I_DC_AVG*IDC_OFFSET_RAW) * IDC_RAW_TO_100uA) / (CNT_I_DC_AVG*100);
+
+		static int i_dc_sum_10mA = 0;
+		i_dc_sum_10mA += i_dc_filt_10mA;
 
 		cnt20kHz_20ms++;
 
@@ -365,6 +373,15 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 				cnt50Hz_1s = 0;
 				battery_update_request();
 				print_request = true;
+				i_dc_filt_1s_10mA = i_dc_sum_10mA/20000;
+				i_dc_sum_10mA = 0;
+
+				// Send battery current to CAN bus once a second.
+				// Actual config does not repeat in case of no ACK.
+				uint16_t id = 0x640;  // ID 1600 has lower prio than CSC messages
+				uint8_t tx_data[8] = {0};
+				memcpy(tx_data, (int16_t*) &i_dc_filt_1s_10mA, 2);
+				addTxMsg_8byte(id, tx_data);
 			}
 		}
 
@@ -704,17 +721,19 @@ int main(void)
 			uSend("\n");
 
 #if SYSTEM_HAS_BATTERY == 1
-			uSend("Pb ");
-			uSendInt(battery->power_W);
-			uSend("\n");
+//			uSend("Pb ");
+//			uSendInt(battery->power_W);
+//			uSend("\n");
 
-			uSend("SoC ");
-			uSendInt(battery->soc_percent);
-			uSend("\n");
+//			uSend("SoC ");
+//			uSendInt(battery->soc_percent);
+//			uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
 
 			uSend("Idc ");
 			uSend_10m(i_dc_filt_10mA);
+			uSend("  1s filt ");
+			uSend_10m(i_dc_filt_1s_10mA);
 
 	//		uSend("Idc ");
 	//		uSend_10m(Idc_filt_10mA);

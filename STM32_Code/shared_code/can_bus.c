@@ -17,20 +17,9 @@ FDCAN_TxHeaderTypeDef TxHeader;
 
 // todo: clear FIFO before next message is received or rewrite and use multiple filters
 
-static void getRxMsg_blocking()
+void can_bus_stop(uint8_t fifo_nr)
 {
-	/* Wait for one message received in one FDCAN instance */
-	while ( (HAL_FDCAN_GetRxFifoFillLevel(&hfdcan2, FDCAN_RX_FIFO0) < 1)) {}
-
-	/* Retrieve Rx message from RX FIFO0 */
-	if (HAL_FDCAN_GetRxMessage(&hfdcan2, FDCAN_RX_FIFO0, &RxHeader, rx_data) != HAL_OK) {
-		Error_Handler();
-	}
-}
-
-
-void can_bus_stop_rx()
-{
+	sFilterConfig.FilterIndex = fifo_nr;
 	sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE;
 	if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
 		Error_Handler();
@@ -39,39 +28,28 @@ void can_bus_stop_rx()
 
 // message ID is written to id
 // return pointer to data or null in case of error
-uint8_t* getRxMsg_8byte_blocking(uint32_t* id)
+uint8_t* can_bus_getRxMsg_8byte(uint8_t fifo_nr, uint32_t* id, bool blocking)
 {
-	getRxMsg_blocking();
+	const uint32_t fdcan_rx_fifo = (fifo_nr == 0) ? FDCAN_RX_FIFO0 : FDCAN_RX_FIFO1;
+
+	if (blocking) {
+		/* Wait for one message received in one FDCAN instance */
+		while ( (HAL_FDCAN_GetRxFifoFillLevel(&hfdcan2, fdcan_rx_fifo) < 1)) {}
+	} else {
+		if ( HAL_FDCAN_GetRxFifoFillLevel(&hfdcan2, fdcan_rx_fifo) <= 0) return NULL;
+	}
+
+	/* Retrieve Rx message from RX FIFO */
+	if (HAL_FDCAN_GetRxMessage(&hfdcan2, fdcan_rx_fifo, &RxHeader, rx_data) != HAL_OK) {
+		Error_Handler();
+	}
+
 	if (   (RxHeader.IdType == FDCAN_STANDARD_ID)
 		&& (RxHeader.DataLength == FDCAN_DLC_BYTES_8)
 	){
 		*id = RxHeader.Identifier;
 		return rx_data;
 	}
-
-	return NULL;
-}
-
-
-uint8_t* getRxMsg_8byte_singleID_blocking(uint32_t filter_id)
-{
-	/* Configure Rx filter */
-	sFilterConfig.IdType = FDCAN_STANDARD_ID;
-	sFilterConfig.FilterIndex = 0;
-	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-
-	sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
-	sFilterConfig.FilterID1 = filter_id;
-	sFilterConfig.FilterID2 = filter_id;
-	if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
-	{
-		Error_Handler();
-	}
-
-	uint32_t id;
-	getRxMsg_8byte_blocking(&id);
-
-	if (id == filter_id) return rx_data;
 
 	return NULL;
 }
@@ -102,12 +80,17 @@ bool addTxMsg_8byte(uint32_t id, uint8_t* tx_data)
 }
 
 
-void can_bus_set_filter(uint32_t filter_type, uint32_t filter_id1, uint32_t filter_id2)
+void can_bus_set_filter(uint8_t fifo_nr, uint32_t filter_type, uint32_t filter_id1, uint32_t filter_id2)
 {
 	/* Configure Rx filter */
 	sFilterConfig.IdType = FDCAN_STANDARD_ID;
-	sFilterConfig.FilterIndex = 0;
-	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	if(fifo_nr == 0) {
+		sFilterConfig.FilterIndex = 0;
+		sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	} else {
+		sFilterConfig.FilterIndex = 1;
+		sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
+	}
 
 	sFilterConfig.FilterType = filter_type;
 	sFilterConfig.FilterID1 = filter_id1;
@@ -118,3 +101,16 @@ void can_bus_set_filter(uint32_t filter_type, uint32_t filter_id1, uint32_t filt
 	}
 }
 
+
+// avoid old values, e.g. battery current and keep only x messages
+void can_bus_FIFO_drop_msgs(uint8_t fifo_nr, uint8_t nr_msgs_left)
+{
+	const uint32_t fdcan_rx_fifo = (fifo_nr == 0) ? FDCAN_RX_FIFO0 : FDCAN_RX_FIFO1;
+
+	while ( HAL_FDCAN_GetRxFifoFillLevel(&hfdcan2, fdcan_rx_fifo) > nr_msgs_left) {
+		/* Retrieve Rx message from RX FIFO */
+		if (HAL_FDCAN_GetRxMessage(&hfdcan2, fdcan_rx_fifo, &RxHeader, rx_data) != HAL_OK) {
+			Error_Handler();
+		}
+	}
+}
