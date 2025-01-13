@@ -221,10 +221,13 @@ void reinitUART(UART_HandleTypeDef *huart, uint32_t BaudRate)
 }
 
 
-void shutdownAll()
+inline void shutdownAll()
 {
+#if IS_BATTERY_SUPERVISOR_PCB != 1  // battery supervisor board has no gatedriver, so save one cycle before contactor disable
 	gatedriverDC(0);
+#endif
 	contactorBattery(0);
+	gatedriverDC(0);
 }
 
 
@@ -275,7 +278,7 @@ void calc_and_wait(uint32_t delay)
 // Amprobe +2.50A -> +2.54A
 // Amprobe -2.50A -> -2.52A  -> Gain 0.99
 #define IDC_RAW_TO_100uA (-IDC_mV_per_LSB * 0.99*10000.0/IDC_mV_per_A)  // sign inversion (pos means battery charging)
-
+// after AC +15A in overcurrent test, sensor shows offset 0.07A (0.05A after 2min); todo: auto offset calibration
 
 // +-50A sensor range with 3.3V ADC:
 // −62.1A to +32.1A
@@ -289,9 +292,9 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 	i_dc_filt_10mA = (((int32_t)HAL_ADC_GetValue(&hadc2) - CNT_I_DC_AVG*IDC_OFFSET_RAW) * IDC_RAW_TO_100uA) / (CNT_I_DC_AVG*100);
 
 	if (i_dc_filt_10mA > 0) {
-		set_sys_errorcode(EC_BATTERY_I_CHARGE_MAX);
+		set_sys_errorcode(EC_BATTERY_I_CHARGE_PULSE_MAX);
 	} else {
-		set_sys_errorcode(EC_BATTERY_I_DISCHARGE_MAX);
+		set_sys_errorcode(EC_BATTERY_I_DISCHARGE_PULSE_MAX);
 	}
 }
 
@@ -1560,7 +1563,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PC3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
@@ -1633,6 +1636,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF9_FDCAN1;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

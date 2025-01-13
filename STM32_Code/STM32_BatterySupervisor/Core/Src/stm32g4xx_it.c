@@ -22,6 +22,7 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <common.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -84,6 +85,7 @@ void NMI_Handler(void)
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
   while (1)
   {
+	shutdownAll();
   }
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
@@ -99,6 +101,7 @@ void HardFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_HardFault_IRQn 0 */
+	shutdownAll();
     /* USER CODE END W1_HardFault_IRQn 0 */
   }
 }
@@ -114,6 +117,7 @@ void MemManage_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
+	shutdownAll();
     /* USER CODE END W1_MemoryManagement_IRQn 0 */
   }
 }
@@ -129,6 +133,7 @@ void BusFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_BusFault_IRQn 0 */
+	shutdownAll();
     /* USER CODE END W1_BusFault_IRQn 0 */
   }
 }
@@ -144,6 +149,7 @@ void UsageFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
+	shutdownAll();
     /* USER CODE END W1_UsageFault_IRQn 0 */
   }
 }
@@ -207,6 +213,21 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32g4xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles EXTI line3 interrupt.
+  */
+void EXTI3_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI3_IRQn 0 */
+  shutdownAll();
+  set_sys_errorcode(EC_I_DC_SENSOR);
+  /* USER CODE END EXTI3_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_3);
+  /* USER CODE BEGIN EXTI3_IRQn 1 */
+
+  /* USER CODE END EXTI3_IRQn 1 */
+}
 
 /**
   * @brief This function handles DMA1 channel1 global interrupt.
