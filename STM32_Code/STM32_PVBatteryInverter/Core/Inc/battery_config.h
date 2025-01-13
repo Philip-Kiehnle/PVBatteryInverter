@@ -3,7 +3,7 @@
 
 #include "BatteryManagement/STW_mBMS.hpp"
 
-
+// KaRaceIng13 355V 3x6Ah
 constexpr BatteryParameter_t BATTERY = {
 	.CHEMISTRY = CHEM_NMC,
 	.CONFIG = BAT_SINGLE,
@@ -11,7 +11,10 @@ constexpr BatteryParameter_t BATTERY = {
 	.NR_MODULES_PER_PACK = 8,  // 4 CSCs x 2 Containers per CSC
 	.NR_CELLS_PER_MODULE = 12,
 	.PARALLEL_CELLS = 3,
-	.R_SINGLE_CELL_mOHM = (29+1),  // internal resistance of single cell and the corresponding part of cell connector
+	.R_SINGLE_CELL_mOHM = (59+1),  // internal resistance of single cell and the corresponding part of cell connector; worst cell
+	.CAPACITY_Ah = 12,  // 12 instead of 18 because of aging
+	.ETA_CHG = 0.99,
+	.ETA_DISCHG = 1.0,
 	.V_CELL_NOM_mV              = 3700,
 	.V_CELL_MIN_PROTECT_mV      = 3100,  // Battery_Supervisor: 3050mV
 	.V_CELL_MIN_POWER_REDUCE_mV = 3300,
@@ -23,6 +26,9 @@ constexpr BatteryParameter_t BATTERY = {
 	.T_CELL_MIN_WARN = 2,
 	.T_CELL_MAX_WARN = 45,
 	.T_CELL_MAX_ERR  = 49,  // Battery_Supervisor: 50°C
+	// For Kalman filter:
+	.REST_TIME = 400,  // s
+	.R0 = 0.02,  // internal resistance R0 of parallel cells
 };
 
 constexpr uint16_t V_CELL_IMBALANCE_INFO_mV = 250;

@@ -112,6 +112,7 @@ volatile uint32_t cnt_1Hz;
 volatile uint32_t cntErr_1Hz;
 
 volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
+volatile uint16_t debug_v_dc_FBgrid_sincfilt_100mV;
 
 extern volatile int16_t debug_i_ac_amp_10mA;
 
@@ -820,16 +821,14 @@ int main(void)
 //		uSend_100m(VdcFBboost_sincfilt_100mV);
 //		uSend("\n");
 //
-//		uSend("VdcFBgrid_sinc  ");
-//		uSend_100m(VdcFBgrid_sincfilt_100mV);
-//		uSend("\n");
-//
 //		uSend("vac_filt50Hz ");
 //		uSend_100m(debug_vac_filt50Hz_100mV);
 //		uSend("\n");
 
-		uSend("vdc ");
+		uSend("vdc b ");
 		uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
+		uSend("  g ");
+		uSend_100m(debug_v_dc_FBgrid_sincfilt_100mV);
 		uSend("\n");
 
 		uSend("iac ");
@@ -855,7 +854,7 @@ int main(void)
 		uSend("\n");
 
 		uSend("SoC ");
-		uSendInt(battery->soc_percent);
+		uSend_1m(battery->soc_percent*1000);
 		uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
 

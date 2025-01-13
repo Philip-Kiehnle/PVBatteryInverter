@@ -22,6 +22,7 @@ extern "C" {
 //#define FGRID_MIN_mHz (49*1000)
 //#define FGRID_MAX_mHz (51*1000)
 
+extern volatile uint16_t debug_v_dc_FBgrid_sincfilt_100mV;
 
 void measVdcFBgrid();
 const int16_t get_p_ac_filt50Hz();
