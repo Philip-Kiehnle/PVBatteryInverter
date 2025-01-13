@@ -56,31 +56,40 @@ typedef enum
 {
 	EC_NO_ERROR                  = 0,
 	EC_EMERGENCY_STOP            = -1,
-	EC_V_DC_MAX_FB_BOOST         = -2,
-	EC_V_DC_MAX_FB_GRID          = -3,
-	EC_V_DC_SENSOR_FB_BOOST      = -4,
-	EC_V_DC_SENSOR_FB_GRID       = -5,
-	EC_I_DC_MAX                  = -6,
-	EC_I_AC_PULSE_MAX            = -7,
-	EC_I_AC_RMS_MAX              = -8,
-	EC_I_AC_DC_OFFSET            = -9,
-	EC_GRID_SYNC_LOST            = -10,
-	EC_WATCHDOG_RESET            = -11,
-	EC_BATTERY_COMM_FAIL         = -12,
-	EC_BATTERY_V_CELL_MIN        = -13,
-	EC_BATTERY_V_CELL_MAX        = -14,
-	EC_BATTERY_V_CELL_IMBALANCE  = -15,
-	EC_BATTERY_I_CHARGE_MAX      = -16,
-	EC_BATTERY_I_DISCHARGE_MAX   = -17,
-	EC_BATTERY_TEMPERATURE_MIN   = -18,
-	EC_BATTERY_TEMPERATURE_MAX   = -19,
-	EC_BATTERY_OTHER             = -20,
-	EC_V_AC_LOW                  = -21,
-	EC_V_AC_HIGH                 = -22,
-	EC_FREQ_AC_LOW               = -23,
-	EC_FREQ_AC_HIGH              = -24,
-	EC_V_DC_MAX_BUS              = -25,
-	EC_BATTERY_V_BUS_DEVIATION   = -26,
+	EC_WATCHDOG_RESET            = -2,
+	EC_V_BUS_V_BATTERY_DEVIATION = -3,
+	EC_V_DC_MAX_BUS              = -4,
+	EC_I_DC_SENSOR               = -5,
+	EC_I_AC_SENSOR               = -6,
+
+	EC_V_DC_MAX_FB_BOOST         = -10,
+	EC_V_DC_SENSOR_FB_BOOST      = -11,
+	EC_TEMPERATURE_FB_BOOST      = -12,
+
+	EC_V_DC_MAX_FB_GRID          = -20,
+	EC_V_DC_SENSOR_FB_GRID       = -21,
+	EC_TEMPERATURE_FB_GRID       = -22,
+
+	EC_GRID_SYNC_LOST            = -50,
+	EC_V_AC_LOW                  = -51,
+	EC_V_AC_HIGH                 = -52,
+	EC_FREQ_AC_LOW               = -53,
+	EC_FREQ_AC_HIGH              = -54,
+	EC_I_AC_RMS_MAX              = -55,
+	EC_I_AC_PULSE_MAX            = -56,
+	EC_I_AC_DC_OFFSET            = -57,
+
+	EC_BATTERY_COMM_FAIL             = -100,
+	EC_BATTERY_V_CELL_MIN            = -101,
+	EC_BATTERY_V_CELL_MAX            = -102,
+	EC_BATTERY_V_CELL_IMBALANCE      = -103,
+	EC_BATTERY_I_CHARGE_RMS_MAX      = -104,
+	EC_BATTERY_I_CHARGE_PULSE_MAX    = -105,
+	EC_BATTERY_I_DISCHARGE_RMS_MAX   = -106,
+	EC_BATTERY_I_DISCHARGE_PULSE_MAX = -107,
+	EC_BATTERY_TEMPERATURE_MIN       = -108,
+	EC_BATTERY_TEMPERATURE_MAX       = -109,
+	EC_BATTERY_OTHER                 = -120,
 } errorPVBI_t;
 
 
@@ -94,6 +103,7 @@ char *strerror(int errcode);
 void set_sys_errorcode(errorPVBI_t err);
 errorPVBI_t get_sys_errorcode();
 
+void checkTemperatureSensors();
 void checkErrors();
 
 uint16_t lowpass4(uint16_t in, uint16_t* prev);

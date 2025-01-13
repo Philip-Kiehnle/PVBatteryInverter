@@ -519,7 +519,7 @@ errorPVBI_t checkDCLimits()
 #if SYSTEM_HAS_BATTERY == 1
 	// check if sum of cell voltages deviates from DC bus voltage e.g. +-10Volt (~0.1V per Cell)
 	else if ( battery_connected() && !battery_bus_voltage_match_coarse() ) {
-		return EC_BATTERY_V_BUS_DEVIATION;
+		return EC_V_BUS_V_BATTERY_DEVIATION;
 	}
 #endif //SYSTEM_HAS_BATTERY
 

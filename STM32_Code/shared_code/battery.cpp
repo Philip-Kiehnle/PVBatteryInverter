@@ -128,10 +128,10 @@ static void check_bat_error()
 		set_sys_errorcode(EC_BATTERY_V_CELL_IMBALANCE);
 
 	} else if (bms.fault_i_charge_max()) {
-		set_sys_errorcode(EC_BATTERY_I_CHARGE_MAX);
+		set_sys_errorcode(EC_BATTERY_I_CHARGE_RMS_MAX);
 
 	} else if (bms.fault_i_discharge_max()) {
-		set_sys_errorcode(EC_BATTERY_I_DISCHARGE_MAX);
+		set_sys_errorcode(EC_BATTERY_I_DISCHARGE_RMS_MAX);
 
 	} else if (bms.fault_temperature_min()) {
 		set_sys_errorcode(EC_BATTERY_TEMPERATURE_MIN);
@@ -243,7 +243,9 @@ bool async_battery_communication()
 	if (update_request) {
 		rate_limit = false;
 		update_request = false;
-		if (stateBattery != BMS_OFF__BAT_OFF) {
+		if (   stateBattery != BMS_OFF__BAT_OFF
+		    && get_sys_errorcode() == EC_NO_ERROR
+		) {
 			if (bms.get_summary() == BMS_OK) {
 				// bms.estimateSoC(SoC_mV_lookup_table_100);  // without call to estimateSoC, the estimation of the BMS is used
 				check_bat_error();
