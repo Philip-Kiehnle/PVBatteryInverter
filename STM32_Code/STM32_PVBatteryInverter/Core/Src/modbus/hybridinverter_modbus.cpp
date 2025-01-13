@@ -1,5 +1,6 @@
 #include <hybridinverter_modbus.h>
 #include <BatteryManagement/bms_types.h>
+#include "battery.h"
 #include <common.h>
 #include <stdio.h>
 #include <string.h>
@@ -9,9 +10,7 @@ extern          "C"
 {
 #endif
 
-struct CellStack cellstack;
 modbus_param_rw_t modbus_param_rw;
-
 
 bool modbus_p_ac_soft_update;
 bool modbus_p_ac_hard_update;
@@ -48,17 +47,12 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 {
 	// read only registers
 	constexpr uint16_t OFFSET = 30001;
-	if (la >= OFFSET && la < OFFSET+sizeof(cellstack.vCell_mV)/2) {
+	if (la >= OFFSET && la < (uint32_t)(OFFSET+get_battery_nr_series_cells())) {
 		int addr = la-OFFSET;
-
-		cellstack.vCell_mV[0] = 100;
-		cellstack.vCell_mV[1] = 1;
-		cellstack.vCell_mV[2] = 2;
-		cellstack.vCell_mV[3] = 3;
 
 		constexpr uint16_t CELLSTACK_START_ADDR = 0;
 		if (addr >= CELLSTACK_START_ADDR) {
-			return cellstack.vCell_mV[addr-CELLSTACK_START_ADDR];
+			return get_battery_vCell_mV(addr-CELLSTACK_START_ADDR);
 		}
 
 	// read and write registers

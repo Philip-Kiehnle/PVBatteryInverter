@@ -152,6 +152,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 		//v_ac_rms_filt50Hz_100mV = ((float)v_ac_amp_filt50Hz_100mV) / M_SQRT2;
 		v_ac_amp_sum = 0;
 
+		debug_v_dc_FBgrid_sincfilt_100mV = v_dc_FBgrid_sincfilt_100mV;
+
 		//i_ac_dc_offset_mA = (i_ac_sum*10)/CYCLES_cnt20kHz_20ms;
 
 		// check DC component in AC current
@@ -612,7 +614,8 @@ void measVdcFBgrid()
 	//uint16_t sigma_delta_re = 250;  //for DC debugging todo remove
 	TIM2->CNT = 0;
 
-	if (sigma_delta_re < 40 || sigma_delta_re > 500) {
+	// if sensor sees more than 1V, 90% high increase up to only a single zero in 128cycles, which equals 1.25V
+	if (sigma_delta_re < 32 || sigma_delta_re > 500) {
 		set_sys_errorcode(EC_V_DC_SENSOR_FB_GRID);
 	}
 
@@ -687,8 +690,8 @@ void measVdcFBgrid()
 		// pos value range from 50 to 250 -> div by 200
 
 //#define V_DC_MAX_FBgrid (1+59)  // 68kOhm 450×68÷(450+68)
-#define V_DC_CALIB_FBgrid  992  // per mil for 68kOhm 450×68÷(450+68)
-#define V_DC_MAX_FBgrid (1+375)  // 375k voltage divider  4.1Vcell*96=393.6V -> Vadc=1.05V -> 40edges
+#define V_DC_CALIB_FBgrid  995  // per mil
+#define V_DC_MAX_FBgrid (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.25Vcell*96=408V -> Vadc=1.088V (32edges)
 
 #if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBgrid*105)/100)
 #error Choose E_VDC_MAX_100mV lower than FBgrid sensor range

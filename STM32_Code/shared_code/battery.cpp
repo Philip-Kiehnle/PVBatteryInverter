@@ -27,6 +27,12 @@ const batteryStatus_t* get_batteryStatus()
 }
 
 
+const uint16_t get_battery_nr_series_cells()
+{
+	return bms.get_nr_series_cells();
+}
+
+
 const int8_t get_battery_temperature(uint8_t nr)
 {
 	return bms.cellStack.temperature[nr];
@@ -247,7 +253,9 @@ bool async_battery_communication()
 		    && get_sys_errorcode() == EC_NO_ERROR
 		) {
 			if (bms.get_summary() == BMS_OK) {
-				// bms.estimateSoC(SoC_mV_lookup_table_100);  // without call to estimateSoC, the estimation of the BMS is used
+#if IS_BATTERY_SUPERVISOR_PCB != 1  // supervisor does not need SoC
+				bms.estimateSoC();
+#endif
 				check_bat_error();
 				bat_comm_fail_cnt = 0;
 			} else {

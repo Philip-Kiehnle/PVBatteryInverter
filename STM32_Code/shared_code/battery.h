@@ -23,6 +23,7 @@ const bool battery_maxVcell_OK();
 const stateBattery_t get_stateBattery();
 const uint16_t get_p_bat_discharge_max();
 const batteryStatus_t* get_batteryStatus();
+const uint16_t get_battery_nr_series_cells();
 
 // for debug printing
 const int8_t    get_battery_temperature(uint8_t nr);
