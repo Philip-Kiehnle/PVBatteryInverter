@@ -114,6 +114,7 @@ volatile uint32_t cntErr_1Hz;
 volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 volatile uint16_t debug_v_dc_FBgrid_sincfilt_100mV;
 
+extern volatile int16_t debug_v_ac_rms_100mV;
 extern volatile int16_t debug_i_ac_amp_10mA;
 
 
@@ -700,7 +701,7 @@ int main(void)
 		const batteryStatus_t* battery = get_batteryStatus();
 #endif //SYSTEM_HAS_BATTERY
 
-#if 1  // debug print battery info
+#if 0  // debug print battery info
 		/************************/
 		/* print battery status */
 		/************************/
@@ -801,7 +802,7 @@ int main(void)
 		HAL_UART_Transmit(huart_debug, (uint8_t *)tx_buf, tx_len, 10);
 		uSend("\n");
 
-#if SYSTEM_HAS_BATTERY == 1
+#if SYSTEM_HAS_BATTERY == 1 && SYS_MODE != PV2AC
 		uSend("Vbat ");
 		uSend_100m(battery->voltage_100mV);
 		uSend("  ");
@@ -815,25 +816,15 @@ int main(void)
 		uSend("  Tmax");
 		uSendInt(battery->maxTemp);
 		uSend("\n");
+
+		uSend("SoC ");
+		uSend_1m(battery->soc_percent*1000);
+		uSend("\n");
+
+		uSend("Pb ");
+		uSendInt(battery->power_W);
+		uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
-
-//		uSend("VdcFBboost_sinc ");
-//		uSend_100m(VdcFBboost_sincfilt_100mV);
-//		uSend("\n");
-//
-//		uSend("vac_filt50Hz ");
-//		uSend_100m(debug_vac_filt50Hz_100mV);
-//		uSend("\n");
-
-		uSend("vdc b ");
-		uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
-		uSend("  g ");
-		uSend_100m(debug_v_dc_FBgrid_sincfilt_100mV);
-		uSend("\n");
-
-		uSend("iac ");
-		uSend_10m(debug_i_ac_amp_10mA);
-		uSend("\n");
 
 		uSend("Ppcc ");
 		uSendInt(ctrl_ref.p_pcc);
@@ -846,25 +837,23 @@ int main(void)
 
 		uSend("Pac ");
 		uSendInt(get_p_ac_filt50Hz());
+		uSend("  v_filt50Hz ");
+		uSend_100m(debug_v_ac_rms_100mV);
+//		uSend("  i ");
+//		uSend_10m(iac_10mA);
+		uSend("  I ");
+		uSend_10m(debug_i_ac_amp_10mA);
 		uSend("\n");
 
-#if SYSTEM_HAS_BATTERY == 1
-		uSend("Pb ");
-		uSendInt(battery->power_W);
-		uSend("\n");
+//		uSend("f_ac ");
+//		uSend_10m(debug_f_ac_10mHz);
+//		uSend(" Hz\n");
 
-		uSend("SoC ");
-		uSend_1m(battery->soc_percent*1000);
+		uSend("vdc b ");
+		uSend_100m(debug_v_dc_FBboost_sincfilt_100mV);
+		uSend("  g ");
+		uSend_100m(debug_v_dc_FBgrid_sincfilt_100mV);
 		uSend("\n");
-#endif //SYSTEM_HAS_BATTERY
-
-		//	uSend("iac ");
-		//	uSend_10m(iac_10mA);
-		//	uSend("\n");
-		//
-	//		uSend("f_ac ");
-	//		uSend_10m(debug_f_ac_10mHz);
-	//		uSend(" Hz\n");
 
 	//		uSend("Idc ");
 	//		uSend_10m(Idc_filt_10mA);

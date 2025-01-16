@@ -294,8 +294,13 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 	  case WAIT_AC_DC_VOLTAGE:
 		if (   acGrid_valid
+#ifdef TRAFO_TEST_33V
+			&& v_dc_FBgrid_sincfilt_100mV > 315*10  // no precharge resistors available
+			&& v_dc_FBgrid_sincfilt_100mV > 315*10
+#else
 		    && v_dc_FBgrid_sincfilt_100mV > v_ac_amp_100mV  // no precharge resistors available
 		    && v_dc_FBgrid_sincfilt_100mV > v_ac_amp_filt50Hz_100mV
+#endif
 		    && cnt_rel >= 2*AC_CTRL_FREQ)  // wait at least 2 sec to avoid instabilities
 		 {
 			// zero crossing of grid and converter voltage tuning:
@@ -693,9 +698,14 @@ void measVdcFBgrid()
 #define V_DC_CALIB_FBgrid  995  // per mil
 #define V_DC_MAX_FBgrid (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.25Vcell*96=408V -> Vadc=1.088V (32edges)
 
-#if (E_VDC_MAX_100mV/10) > ((V_DC_MAX_FBgrid*105)/100)
-#error Choose E_VDC_MAX_100mV lower than FBgrid sensor range
+#ifndef E_VDC_MAX_FB_GRID_100mV
+#error "Define E_VDC_MAX_FB_GRID_100mV"
 #endif
+
+#if (E_VDC_MAX_FB_GRID_100mV/10) > ((V_DC_MAX_FBgrid*110)/100)  // 125% is abs max
+#error Choose E_VDC_MAX_FB_GRID_100mV lower than FBgrid sensor range
+#endif
+
 		// decim=16 ->                                   7bit(100milliVolt) + 12bit(CIC_GAIN) + 8bit(signal) = 27bit
 		uint32_t vdc_no_calib = (V_DC_MAX_FBgrid * ( (10             * ((CIC_GAIN*250-filt_out)/200) ))/CIC_GAIN);
 		v_dc_FBgrid_sincfilt_100mV = (vdc_no_calib*V_DC_CALIB_FBgrid)/1000;
