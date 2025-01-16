@@ -146,12 +146,17 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			break;
 
 		  case PV2AC:  // EnergyMeter: 29.6W 30.2VA with saturating inductor model
+#ifdef TRAFO_TEST_33V
+			ctrl_ref->v_dc_100mV = (320*10);  // for init of PV DC controller
+			ctrl_ref->mode = VDC_CONTROL;
+#else
 			ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);  // for init of PV DC controller
 			if (stateDC > VOLTAGE_CONTROL) {
 			    ctrl_ref->mode = VDC_VARIABLE_CONTROL;
 			} else {
 			    ctrl_ref->mode = VDC_CONTROL;
 			}
+#endif
 
 			sys_mode_needs_battery = false;
 
