@@ -61,6 +61,7 @@ typedef enum
 	EC_V_DC_MAX_BUS              = -4,
 	EC_I_DC_SENSOR               = -5,
 	EC_I_AC_SENSOR               = -6,
+	EC_V_SUPPLY_5V_LOW           = -7,
 
 	EC_V_DC_MAX_FB_BOOST         = -10,
 	EC_V_DC_SENSOR_FB_BOOST      = -11,

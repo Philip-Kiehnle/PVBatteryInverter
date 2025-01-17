@@ -73,6 +73,8 @@ ADC_HandleTypeDef hadc2;
 DMA_HandleTypeDef hdma_adc1;
 DMA_HandleTypeDef hdma_adc2;
 
+COMP_HandleTypeDef hcomp2;
+
 FDCAN_HandleTypeDef hfdcan2;
 
 HRTIM_HandleTypeDef hhrtim1;
@@ -138,6 +140,7 @@ static void MX_UART5_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_IWDG_Init(void);
 static void MX_LPTIM1_Init(void);
+static void MX_COMP2_Init(void);
 /* USER CODE BEGIN PFP */
 static void FDCAN_Config(void);
 
@@ -560,6 +563,7 @@ int main(void)
   MX_USART3_UART_Init();
   MX_IWDG_Init();
   MX_LPTIM1_Init();
+  MX_COMP2_Init();
   /* USER CODE BEGIN 2 */
 
   /* Configure the FDCAN peripheral */
@@ -649,6 +653,15 @@ int main(void)
   }
 
   //__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, 2125);  //update pwm value 50% dutycycle
+
+  /* Start COMP2 for 5V undervoltage protection */
+  // test with load resistor:
+  // 15.6Ohm: 4.67 to 4.69V does not trigger
+  // 13.3Ohm: 4.60 to 4.65V triggers comparator
+  // 10Ohm: slow 20ms drop to 3.86V triggers comparator and caused sigmadelta sensor error when comparator was not active.
+  if(HAL_COMP_Start(&hcomp2) != HAL_OK) {
+    Error_Handler();
+  }
 
   uSend("PVBattery Inverter  ");
   uSend(__DATE__ " ");
@@ -1100,6 +1113,38 @@ static void MX_ADC2_Init(void)
   /* USER CODE BEGIN ADC2_Init 2 */
 
   /* USER CODE END ADC2_Init 2 */
+
+}
+
+/**
+  * @brief COMP2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_COMP2_Init(void)
+{
+
+  /* USER CODE BEGIN COMP2_Init 0 */
+
+  /* USER CODE END COMP2_Init 0 */
+
+  /* USER CODE BEGIN COMP2_Init 1 */
+
+  /* USER CODE END COMP2_Init 1 */
+  hcomp2.Instance = COMP2;
+  hcomp2.Init.InputPlus = COMP_INPUT_PLUS_IO1;
+  hcomp2.Init.InputMinus = COMP_INPUT_MINUS_VREFINT;
+  hcomp2.Init.OutputPol = COMP_OUTPUTPOL_NONINVERTED;
+  hcomp2.Init.Hysteresis = COMP_HYSTERESIS_NONE;
+  hcomp2.Init.BlankingSrce = COMP_BLANKINGSRC_NONE;
+  hcomp2.Init.TriggerMode = COMP_TRIGGERMODE_IT_FALLING;
+  if (HAL_COMP_Init(&hcomp2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN COMP2_Init 2 */
+
+  /* USER CODE END COMP2_Init 2 */
 
 }
 
