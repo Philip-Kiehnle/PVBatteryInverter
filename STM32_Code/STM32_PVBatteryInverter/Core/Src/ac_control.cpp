@@ -32,7 +32,7 @@ volatile int16_t p_ac_filt1minute;
 
 volatile int16_t debug_v_ac_rms_100mV;
 volatile int16_t debug_f_ac_10mHz;
-volatile int16_t debug_i_ac_amp_10mA;
+volatile int16_t debug_i_ac_ref_amp_10mA;
 
 
 volatile enum stateAC_t stateAC = INIT_AC;
@@ -62,7 +62,7 @@ void fill_monitor_vars_ac(monitor_vars_t* mon_vars)
 	mon_vars->stateAC = stateAC;
 	mon_vars->f_ac_10mHz = debug_f_ac_10mHz;
 	mon_vars->v_ac_rms_100mV = debug_v_ac_rms_100mV;
-	mon_vars->i_ac_amp_10mA = debug_i_ac_amp_10mA;
+	mon_vars->i_ac_ref_amp_10mA = debug_i_ac_ref_amp_10mA;
 	mon_vars->p_ac_filt50Hz = p_ac_filt50Hz;
 
 	mon_vars->v_dc_FBgrid_sincfilt_100mV = v_dc_FBgrid_sincfilt_100mV;
@@ -375,7 +375,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 		// grid current feedforward
 		//if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
-			static int16_t i_ac_amp_10mA = 0;
+			static int16_t i_ac_ref_amp_10mA = 0;
 			switch (ctrl_ref.mode) {
 			  case AC_PASSIVE:  // for battery reconnect to avoid DC voltage controller fighting AC Vdc voltage controller
 				gatedriverAC(0);
@@ -384,7 +384,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 			  case VDC_CONTROL:
 				gatedriverAC(1);
-				i_ac_amp_10mA = step_pi_Vdc2IacAmp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10 );
+				i_ac_ref_amp_10mA = step_pi_Vdc2IacAmp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10 );
 				//i_ac_amp_10mA = step_pi_Vdc2IacAmp_volt_comp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10, phase, 10*v_ac_amp_filt50Hz_100mV);
 				break;
 
@@ -392,8 +392,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 			  {
 				gatedriverAC(1);
 				// sine in modern power grid is flattened -> no extra headroom needed
-				uint32_t v_dc_ref_10mV = 10*v_ac_amp_filt50Hz_100mV + ((R*64)*i_ac_amp_10mA)/64;
-				i_ac_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_10mV, v_dc_sinc_mix_100mV*10 );
+				uint32_t v_dc_ref_10mV = 10*v_ac_amp_filt50Hz_100mV + ((R*64)*i_ac_ref_amp_10mA)/64;
+				i_ac_ref_amp_10mA = step_pi_Vdc2IacAmp( v_dc_ref_10mV, v_dc_sinc_mix_100mV*10 );
 				//i_ac_amp_10mA = step_pi_Vdc2IacAmp_volt_comp( ctrl_ref.v_dc_100mV*10, v_dc_sinc_mix_100mV*10, phase, 10*v_ac_amp_filt50Hz_100mV);
 				break;
 			  }
@@ -407,10 +407,10 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 				//i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
 
 				// V2: ramp: max decent per 50Hz period: 20kHz/50Hz * 10mA = 4A
-				if (i_ac_amp_10mA_unclamped > i_ac_amp_10mA  && i_ac_amp_10mA < IAC_AMP_MAX_10mA) {
-					i_ac_amp_10mA++;
-				} else if (i_ac_amp_10mA_unclamped < i_ac_amp_10mA  && i_ac_amp_10mA > -IAC_AMP_MAX_10mA) {
-					i_ac_amp_10mA--;
+				if (i_ac_amp_10mA_unclamped > i_ac_ref_amp_10mA  && i_ac_ref_amp_10mA < IAC_AMP_MAX_10mA) {
+					i_ac_ref_amp_10mA++;
+				} else if (i_ac_amp_10mA_unclamped < i_ac_ref_amp_10mA  && i_ac_ref_amp_10mA > -IAC_AMP_MAX_10mA) {
+					i_ac_ref_amp_10mA--;
 				}
 
 #define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
@@ -435,8 +435,8 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 					) {
 						gatedriverAC(1);
 						low_power_mode_cnt = 0;
-						if (i_ac_amp_10mA > 100) {
-							i_ac_amp_10mA = 100;  // clamp to 1A for starting point
+						if (i_ac_ref_amp_10mA > 100) {
+							i_ac_ref_amp_10mA = 100;  // clamp to 1A for starting point
 						}
 					}
 				}
@@ -449,8 +449,8 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 				break;
 			}
 
-			debug_i_ac_amp_10mA = i_ac_amp_10mA;
-			int i_ref_10mA = (i_ac_amp_10mA * (int32_t)cos1(phase))>>15;
+			debug_i_ac_ref_amp_10mA = i_ac_ref_amp_10mA;
+			int i_ref_10mA = (i_ac_ref_amp_10mA * (int32_t)cos1(phase))>>15;
 
 #define USE_AC_DC_OFFSET_CONTROLLER 0
 #if USE_AC_DC_OFFSET_CONTROLLER == 1
@@ -482,8 +482,8 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 			//int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
 
 			// V2: saturating inductor model; uses LUT with nonlinear inductance or remanence model
-			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_10mA, i_ac_10mA/10)/10;  // i_meas -> audible noise 150Hz:-10dBV 250Hz:-23dBV
-			v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_10mA, i_ref_10mA/10)/10;  // i_ref -> audible noise 150Hz:-11dBV 250Hz:-26dBV
+			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_ref_10mA, i_ac_10mA/10)/10;  // i_meas -> audible noise 150Hz:-10dBV 250Hz:-23dBV
+			v_amp_pred_100mV = calc_v_amp_pred(i_ac_ref_amp_10mA, i_ref_10mA/10)/10;  // i_ref -> audible noise 150Hz:-11dBV 250Hz:-26dBV
 
 		//}
 		phaseshift_RL = get_IacPhase();

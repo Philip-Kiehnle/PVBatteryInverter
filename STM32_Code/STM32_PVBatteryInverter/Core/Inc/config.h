@@ -7,7 +7,7 @@
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
 
-#define TRAFO_TEST_33V  // undefined: high voltage grid. defined: test with 33V trafo
+#define TRAFO_TEST_33V  // undefined: high voltage grid. defined: test with 33V trafo; trafo has ~30.5V with 9 extra windings for 15 cell LFP battery
 
 #define VDC_MAX_MPPT_100mV 360*10  // 360V / 96cells = 3.75V
 #define E_VDC_MAX_FB_BOOST_100mV 374*10   // worst case for battery if BMS fails: 384V / 96cells = 4.0V
