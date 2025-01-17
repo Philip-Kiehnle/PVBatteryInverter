@@ -66,6 +66,7 @@ void TIM1_TRG_COM_TIM17_IRQHandler(void);
 void EXTI15_10_IRQHandler(void);
 void LPTIM1_IRQHandler(void);
 void UART5_IRQHandler(void);
+void COMP1_2_3_IRQHandler(void);
 void FDCAN2_IT0_IRQHandler(void);
 void FDCAN2_IT1_IRQHandler(void);
 /* USER CODE BEGIN EFP */

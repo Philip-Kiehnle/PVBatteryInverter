@@ -33,6 +33,7 @@ struct _sys_errordesc {
 	{ EC_V_DC_MAX_BUS,              "EC_V_DC_MAX_BUS : DC voltage too high (DC bus sensor)" },
 	{ EC_I_DC_SENSOR,               "EC_I_DC_SENSOR : DC current sensor 60A overcurrent fault. 5V reset required." },
 	{ EC_I_AC_SENSOR,               "EC_I_AC_SENSOR : AC current sensor 60A overcurrent fault. 5V reset required." },
+	{ EC_V_SUPPLY_5V_LOW,           "EC_V_SUPPLY_5V_LOW : 5V supply voltage dropped. Prevented powerstage from low gate voltages." },
 
 	{ EC_V_DC_MAX_FB_BOOST,         "EC_V_DC_MAX_FB_BOOST : DC voltage too high (Full-bridge PV boost)" },
 	{ EC_V_DC_SENSOR_FB_BOOST,      "EC_V_DC_SENSOR_FB_BOOST : Vdc sigma delta pulse count invalid (Full-bridge PV boost)"},
