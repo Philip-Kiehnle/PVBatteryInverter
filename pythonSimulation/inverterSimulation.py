@@ -1,15 +1,13 @@
 #!/usr/bin/python3
 # simulation environment for photovoltaic grid inverter
-import argparse
-import os
 import sys
-import glob
 import numpy as np
 import matplotlib.pyplot as plt
 
 from ctypes import *
 
 import src_load
+from src_load import L_model
 
 T = 1/20e3
 fgrid = 50
@@ -28,7 +26,7 @@ def align_yaxis(ax1, ax2):
     # second data set to obtain a similar ratio to the first data set.
     # Else, do it the other way around
 
-    if ax1_yratio < ax2_yratio: 
+    if ax1_yratio < ax2_yratio:
         ax2.set_ylim(bottom = ax2_ylims[1]*ax1_yratio)
     else:
         ax1.set_ylim(bottom = ax1_ylims[1]*ax2_yratio)
@@ -46,11 +44,11 @@ def align_yaxis(ax1, ax2):
 ##########################
 ## SOGI-PLL common test ##
 ##########################
-T_sim = 1.0  # sec 
+T_sim = 1.0  # sec
 t = np.arange(0, T_sim, T)
 arg = 2*np.pi*t
-arg_offset = 0*1*np.pi 
-TRAFO_RATIO = 14
+arg_offset = 0*1*np.pi
+TRAFO_RATIO = 7
 v_grid = 325/TRAFO_RATIO * np.sin(fgrid*arg+arg_offset) + 0 * np.sin(3*fgrid*arg+arg_offset) + 0 * np.sin(5*fgrid*arg+arg_offset)
 
 N = len(v_grid)
@@ -128,9 +126,9 @@ for i, v in enumerate(v_grid_meas):
 ##################################
 ## voltage & current controller ##
 ##################################
-Vdc0 = 30
-Vdc_ref = 29.0
-Ipv = 0.5  # constant PV current; ToDo: implement PV LUT
+Vdc0 = 50
+Vdc_ref = 50.0
+Ipv = 2.0  # constant PV current; ToDo: implement PV LUT
 sourceDC = src_load.sourceDC(T=T, V0=Vdc0)
 v_dc = Vdc0 * np.ones(N)
 v_dc_comp = np.zeros(N)
@@ -138,8 +136,34 @@ v_dc_comp_python = np.zeros(N)
 
 i_dc = np.zeros(N)
 
-#loadRL = src_load.loadRL(L=(2*139e-6 + 4.7e-6 + 7.65e-6), R=(2*0.1 + 0.077), T=T)
-loadRL = src_load.loadRL(L=(2*2e-3 + 2*150e-6 + 7.65e-6), R=(2*0.1 + 2*0.01 + 0.077 + 4.0), T=T)
+i_corr_L = np.array([ [1.89, 1/0.95],  # current : inductance correction factor for nominal inductance
+                    [4.31, 1/1.07],
+                    [6.00, 1/1.20],
+                    [6.46, 1/1.24],
+                    [8.17, 1/1.36]])
+
+# i_corr_L = np.array([ [0.5, 1],  # current : inductance correction factor for nominal inductance
+#                     [8.0, 0.38],
+#                     [10.0, 0.35]])
+
+i_corr_L[1:,1] *= 0.5  # extreme saturation test
+
+i_corr_R = np.array([ [1.89, 1.0],  # current : resistance correction factor
+                    [8.17, 1.2]]) #1.3 i shifted down
+
+L=[10.2e-3]
+L_nonlinear = i_corr_L
+L_nonlinear[:,1] *= L
+
+R=[0.6978]
+# R_nonlinear = i_corr_R
+# R_nonlinear[:,1] *= R
+
+# Inductor model for simulation is defined here. The inductor model for the controller is defined in C code.
+#loadRL = src_load.loadRL(L=(2*2e-3 + 2*150e-6 + 7.65e-6), R=(2*0.1 + 2*0.01 + 0.077), T=T)
+#loadRL = src_load.loadRL(L=L, R=R, T=T, model=L_model.LINEAR_SAT)  # single L value -> linear inductor model
+loadRL = src_load.loadRL(L=L_nonlinear, R=R, T=T, model=L_model.LINEAR_SAT)  # nonlinear (saturating) inductor model
+#loadRL = src_load.loadRL(L=L_nonlinear, R=R, T=T, model=L_model.REMANENT)  # remanent inductor model
 i_ref = 3 * np.sin(fgrid*arg+arg_offset)
 v_pred = np.zeros(N)
 i_grid = np.zeros(N)
@@ -159,10 +183,10 @@ for i in range(len(v_grid)-1):
     if pll_locked:
         if 1:  # voltage and current control
             i_ref_amp_10mA = ctrl.step_pi_Vdc2IacAmp( int( 100*Vdc_ref), int( 100*v_dc[i]))
-            print("Vdc_ref={:.02f} v_dc={:.02f} i_ref_amp={:.03f}".format(Vdc_ref, v_dc[i], i_ref_amp_10mA/100))
-#            i_ref_amp = ctrl.step_pi_Vdc2IacAmp_volt_comp( int( SCALE_VIN2ADCRAW*Vdc_ref), int( SCALE_VIN2ADCRAW*v_dc[i]), int(phi_pll[i]*SCALE_PHASE2RAW) ) / SCALE_I2ADCRAW
+#            i_ref_amp_10mA = ctrl.step_pi_Vdc2IacAmp_volt_comp( int(100*Vdc_ref), int(100*v_dc[i]), int(phi_pll[i]*SCALE_PHASE2RAW), int(100*vac_sec))
 #            i_ref_amp = ctrl.step_pi_Vdc2IacAmp_charge_comp( int( SCALE_VIN2ADCRAW*Vdc_ref), int( SCALE_VIN2ADCRAW*v_dc[i]),
 #                                                             int( SCALE_VIN2ADCRAW*vac_sec ), int( SCALE_VIN2ADCRAW*i_ref[i] ) ) / SCALE_I2ADCRAW
+            print("Vdc_ref={:.02f} v_dc={:.02f} i_ref_amp={:.03f}".format(Vdc_ref, v_dc[i], i_ref_amp_10mA/100))
             i_ref[i+1] = i_ref_amp_10mA/100 * np.cos(phi_pll[i+1])
 
             if 0:  # with current sensor
@@ -170,7 +194,12 @@ for i in range(len(v_grid)-1):
 
             else:  # sensorless
                 phase_shiftRL = ctrl.get_IacPhase()/SCALE_PHASE2RAW
-                v_pred[i] = ctrl.calc_IacAmp2VacSecAmpDCscale(int( i_ref_amp_10mA))/100 * np.cos(phi_pll[i+1] +phase_shiftRL)
+                #v_pred[i] = ctrl.calc_IacAmp2VacSecAmpDCscale(int( i_ref_amp_10mA))/100 * np.cos(phi_pll[i+1] +phase_shiftRL)  # for linear inductor
+                v_pred[i] = ctrl.calc_v_amp_pred(int( i_ref_amp_10mA), int(i_grid[i]*10) )/100 * np.cos(phi_pll[i+1] +phase_shiftRL)  # for nonlinear inductor
+                #v_pr = ctrl.pr_step( int(100*(i_ref[i+1]-i_grid[i])) )/100
+                #print(v_pr)
+                #v_pred[i] += v_pr
+                #v_pred[i] = v_pr  without current feedforward
 
             v_dc_comp[i] = ctrl.get_vdc_comp()/ SCALE_VIN2ADCRAW
 
@@ -208,6 +237,11 @@ for i in range(len(v_grid)-1):
     else:
         cnt_locked = 0
 
+## DC component analysis
+periods = 4
+n = periods * 1/T / fgrid
+print("DC component in last {:d} periods: i_ac_mean={:.03f}".format(periods, sum(i_grid[-int(n):])/len(i_grid[-int(n):])))
+
 ##################
 ## plot results ##
 ##################
@@ -226,7 +260,7 @@ ax1.plot(t, v_dc_comp, label='v_dc_comp')
 ax1.plot(t, v_dc_comp_python, label='v_dc_comp_python')
 
 
-ax2 = ax1.twinx() 
+ax2 = ax1.twinx()
 ax2._get_lines.prop_cycler = ax1._get_lines.prop_cycler
 
 ax2.plot(t, phi_pll, label='phi_pll')

@@ -23,7 +23,7 @@ typedef struct {
 	uint16_t stateAC;  // AC variables
 	int16_t f_ac_10mHz;
 	int16_t v_ac_rms_100mV;
-	int16_t i_ac_amp_10mA;
+	int16_t i_ac_ref_amp_10mA;
 	int16_t p_ac_filt50Hz;
 	int16_t p_ac_ref;  // for debugging
 	int16_t bat_p;

@@ -117,7 +117,7 @@ volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 volatile uint16_t debug_v_dc_FBgrid_sincfilt_100mV;
 
 extern volatile int16_t debug_v_ac_rms_100mV;
-extern volatile int16_t debug_i_ac_amp_10mA;
+extern volatile int16_t debug_i_ac_ref_amp_10mA;
 
 
 uint8_t ubKeyNumber = 0x0;
@@ -854,8 +854,8 @@ int main(void)
 		uSend_100m(debug_v_ac_rms_100mV);
 //		uSend("  i ");
 //		uSend_10m(iac_10mA);
-		uSend("  I ");
-		uSend_10m(debug_i_ac_amp_10mA);
+		uSend("  rI ");
+		uSend_10m(debug_i_ac_ref_amp_10mA);
 		uSend("\n");
 
 //		uSend("f_ac ");
