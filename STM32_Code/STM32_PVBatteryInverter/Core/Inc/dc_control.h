@@ -41,6 +41,7 @@ uint16_t get_p_ac_max_dc_lim();
 uint16_t get_v_dc_FBboost_sincfilt_100mV();
 uint16_t get_v_dc_FBboost_filt50Hz_100mV();
 float get_p_dc_filt50Hz();
+float get_v_dc_filt50Hz();
 void shutdownDC();
 void calc_async_dc_control();
 void fill_monitor_vars_dc(monitor_vars_t* mon_vars);

@@ -1,5 +1,5 @@
-#ifndef INC_BATTERY_CONFIG_H
-#define INC_BATTERY_CONFIG_H
+#ifndef INC_CONFIG_BATTERY_H
+#define INC_CONFIG_BATTERY_H
 
 #include "BatteryManagement/STW_mBMS.hpp"
 
@@ -63,4 +63,4 @@ constexpr uint16_t SoC_mV_lookup_table_100[100] = {
  };
 
 
-#endif /* INC_BATTERY_CONFIG_H */
+#endif /* INC_CONFIG_BATTERY_H */

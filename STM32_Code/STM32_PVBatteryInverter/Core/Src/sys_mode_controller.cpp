@@ -8,18 +8,17 @@
 #include "electricity_meter.h"
 
 #include "battery.h"
-#include "battery_config.h"
+#include "config_battery.h"
 #include "BatteryManagement/bms_types.h"
 #include "BatteryManagement/STW_mBMS.hpp"
 //#include "BatteryManagement/ETI_DualBMS.hpp"
-#include <hybridinverter_modbus.h>
+#include <modbus_hybridinverter.h>
 
 
 enum mode_t sys_mode = SYS_MODE;
 bool locked = false;
 static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
 static uint16_t p_bat_chg_max;
-static uint16_t p_bat_chg_externalmax = UINT16_MAX;
 static uint32_t cnt_rel_1Hz;
 extern volatile uint32_t cnt_1Hz;  // overflow in 136 years
 extern volatile uint32_t cntErr_1Hz;
@@ -72,7 +71,7 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 {
 	static uint32_t cnt_1Hz_prev_ext_cmd;
 
-	if (modbus_param_rw.cmd == CMD_INVERTER_RESET) {
+	if (modbus_reg_rw.cmd == CMD_INVERTER_RESET) {
 		GPIOB->BRR = (1<<0);  // enable red LED
 		if (get_sys_errorcode() != EC_NO_ERROR) {
 			if (cntErr_1Hz > 120) {  // reset possible after 120 seconds in case of error
@@ -82,30 +81,28 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 			shutdownAll();  // todo: battery off sends to late
 			NVIC_SystemReset();
 		}
-	} else if (modbus_param_rw.cmd == CMD_INVERTER_OFF) {
+	} else if (modbus_reg_rw.cmd == CMD_INVERTER_OFF) {
 		locked = true;
 		shutdownAll();
 		nextMode(OFF);
-	} else if (modbus_param_rw.cmd == CMD_INVERTER_ON) {
+	} else if (modbus_reg_rw.cmd == CMD_INVERTER_ON) {
 		locked = false;
 
-	} else if (modbus_param_rw.cmd == CMD_P_AC_EXT_OFF) {
+	} else if (modbus_reg_rw.cmd == CMD_P_AC_EXT_OFF) {
 		ctrl_ref->ext_ctrl_mode = EXT_OFF;
 	}
 
-	modbus_param_rw.cmd = CMD_INVALID;  // reset to invalid command
-
-	p_bat_chg_externalmax = modbus_param_rw.p_bat_chg_max_W;
+	modbus_reg_rw.cmd = CMD_INVALID;  // reset to invalid command
 
 	int16_t p_ac_unclamped = 0;
 
 	if (modbus_p_ac_soft_update) {
-		p_ac_unclamped = modbus_param_rw.p_ac_soft_W;
+		p_ac_unclamped = modbus_reg_rw.p_ac_soft_W;
 		ctrl_ref->ext_ctrl_mode = EXT_AC_SOFT;
 		cnt_1Hz_prev_ext_cmd = cnt_1Hz;
 
 	} else if (modbus_p_ac_hard_update) {
-		p_ac_unclamped = modbus_param_rw.p_ac_hard_W;
+		p_ac_unclamped = modbus_reg_rw.p_ac_hard_W;
 		ctrl_ref->ext_ctrl_mode = EXT_AC_HARD;
 		cnt_1Hz_prev_ext_cmd = cnt_1Hz;
 	}
@@ -133,7 +130,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 #if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
 	bms.read_current = true;
-	p_bat_chg_max = std::min(battery->p_charge_max, p_bat_chg_externalmax);
+	p_bat_chg_max = std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
 #endif //SYSTEM_HAS_BATTERY
 	static uint32_t cnt_1Hz_chargeDC;
 
