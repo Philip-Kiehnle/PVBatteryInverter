@@ -3,7 +3,7 @@
 
 #include "dc_control.h"
 #include "battery.h"
-#include "battery_config.h"
+#include "config_battery.h"
 #include "BatteryManagement/STW_mBMS.hpp"
 extern STW_mBMS bms;
 

@@ -9,6 +9,7 @@
 
 
 #include "common.h"
+#include "config_pv.h"
 #include "gpio.h"
 #include "dc_control.h"
 #include "battery.h"
@@ -16,7 +17,7 @@
 #include "sys_mode_controller.h"
 #include "PICtrl.hpp"
 
-#include "battery_config.h"
+#include "config_battery.h"
 #include "BatteryManagement/STW_mBMS.hpp"
 extern STW_mBMS bms;
 
@@ -30,71 +31,6 @@ extern volatile uint16_t v_dc_ref_100mV;
 
 volatile uint16_t debug_dutyHS;
 
-// configure PV system and PWM dutycycle parameters of microcontroller here:
-
-// Jinko JKM405N-6RL3
-// Voc(25°C)=46.3
-// Vmpp(25°C)=36.48
-// Voc(-20°C)=46,3×(1+45×0,28÷100)=52,13
-// Vmpp(70°C)=46,3×(1+45×0,28÷100)=31,88
-constexpr pvModule_t PVMODULE = pvModule_t{
-	.v_mp = 36.48,
-	.i_mp = 11.1,
-	.coef_v_temp = -0.0028,  // The open-circuit voltage temperature coefficient of the module [%/K]
-	.v_bypassDiode = 0.5,
-	.nr_bypassDiodes = 3
-};
-
-constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
-	.debug = false,
-	.vin_min = 62,  // 2 modules * 31V
-	.vin_max = 424,  // 8 modules * 53V
-	.vout_min = 288,  // 96 Li-cells * 3.0
-	.vout_max = 403,  // 96 Li-cells * 4.2
-	.nr_pv_modules = 8,
-	.nr_bypassDiodes_search_per_interval = 6
-};
-
-// PV emulator:
-// 2*Voc = 2*46.3 = 92.6V
-// 2*Vmp = 2*36.48 = 73.0V
-// 30%*Isc = 0.3*11.84 = 3.55A
-// 30%*Imp = 0.3*11.1 = 3.33A
-
-//constexpr mpptParams_t MPPTPARAMS = mpptParams_t{
-//	.debug = false,
-////	.vin_min = 0.33*31,  // 1/3 module * 31V
-//	.vin_min = 0.2*31,  // 20% * Vmodule
-//	.vin_max = 1*53,  // 1 module * 53V
-//	.vout_min = 38,
-//	.vout_max = 58,
-//	.nr_pv_modules = 1,
-//	.nr_bypassDiodes_search_per_interval = 1
-//};
-
-
-constexpr unsigned int MPPT_FREQ = DC_CTRL_FREQ_MPPT/2;  // one cycle stabilisation, one cycle MPPT calculation
-constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 10*60;  // 10 minutes
-constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 2*60;  // 2 minutes when power drops
-//constexpr unsigned int INTERVAL_GLOB_MPPT_REGULAR_SEC = 60;  // 1 minute
-//constexpr unsigned int INTERVAL_GLOB_MPPT_TRIG_EVENT_SEC = 30;  // 30 sec when power drops
-
-constexpr unsigned int MPPT_DUTY_ABSMAX = DEF_MPPT_DUTY_ABSMAX;
-constexpr unsigned int MPPT_DUTY_MIN_BOOTSTRAP = 0;  // High side has isolated supply and no bootstrap capacitor
-
-// shutdown parameters for PV booster stage. current is used, because power is affected by AC 100Hz ripple and phase shifted Vdc measurement
-//constexpr uint16_t PV_LOW_CURRENT_mA = 80;  // if PV netto input current into DC bus is lower, switchoff counter is increased
-//constexpr uint16_t PV_LOW_CURRENT_SEC = 1;  // switch of after low power for this amount of seconds
-//constexpr uint16_t PV_WAIT_SEC = 5*60;  // wait this amount of seconds until booster stage is started again; max 21 minutes
-//debug
-constexpr uint16_t PV_LOW_CURRENT_mA = 40;  // 40mA*50V = 2W
-constexpr uint16_t PV_LOW_CURRENT_SEC = 10;
-constexpr uint16_t PV_WAIT_SEC = 1*30;
-//constexpr uint16_t PV_LOW_POWER = 2;  todo use dc current because power is affected by AC 100Hz ripple
-//constexpr uint16_t PV_LOW_POWER_SEC = 5;
-//constexpr uint16_t PV_WAIT_SEC = 20;
-
-
 volatile uint16_t v_dc_FBboost_sincfilt_100mV;
 volatile uint16_t v_dc_FBboost_filt50Hz_100mV;
 volatile uint16_t v_dc_bus_100mV;
@@ -107,7 +43,7 @@ volatile bool mppt_calc_request;
 volatile bool mppt_calc_complete;
 volatile bool bat_protect_calc_request;
 
-MPPTracker mppTracker(MPPTPARAMS, PVMODULE);
+MPPTracker mppTracker(PVMODULE, MPPTPARAM, GMPPTPARAM);
 
 volatile enum stateDC_t stateDC = INIT_DC;
 volatile enum dcdc_mode_t dcdc_mode;
@@ -244,7 +180,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 		// todo: delay of sigma delta processing caused lagging Vdc meas when 100Hz ripple occurs -> use voltage estimator or extra Vdc meas
 		v_dc_filt50Hz = (float)v_dc_FBboost_filt50Hz_100mV/10.0;
-		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/MPPT_DUTY_ABSMAX);
+		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/DEF_MPPT_DUTY_ABSMAX);
 		i_pv_filt50Hz = p_dc_filt50Hz/v_pv_filt50Hz;
 
 		p_dc_filt50Hz = p_dc_sum/CYCLES_cnt20kHz_20ms;
@@ -487,10 +423,10 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  	  }
 	  }
 
-	  int16_t dutyB1 = MPPT_DUTY_ABSMAX - dutyLS1;
+	  int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX - dutyLS1;
 
-	  if (dutyB1 > ((int)MPPT_DUTY_ABSMAX-MIN_PULSE)) {
-		  dutyB1 = MPPT_DUTY_ABSMAX;
+	  if (dutyB1 > ((int)DEF_MPPT_DUTY_ABSMAX-MIN_PULSE)) {
+		  dutyB1 = DEF_MPPT_DUTY_ABSMAX;
 	  } else if (dutyB1 < MIN_PULSE){
 		  dutyB1 = 0;
 	  }

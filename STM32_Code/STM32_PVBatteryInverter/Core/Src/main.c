@@ -39,7 +39,7 @@
 #include "power_controller.h"
 #include "battery.h"
 #include <sml/sml_crc16.h>
-#include <hybridinverter_modbus.h>
+#include <modbus_hybridinverter.h>
 
 
 // todo
@@ -355,7 +355,7 @@ void calc_and_wait(uint32_t delay)
 
 				// receive commands from external energy management system
 //#define RX_MAX_CMD_LEN (sizeof("p_bat_chg_max65535\n")+5)
-#define RX_MAX_CMD_LEN (sizeof(modbus_param_rw_t)+8)
+#define RX_MAX_CMD_LEN (sizeof(modbus_reg_rw_t)+8)
 				uint8_t rx_buf[RX_MAX_CMD_LEN];
 
 				for (uint16_t i = 0; i < 10; i++) {
