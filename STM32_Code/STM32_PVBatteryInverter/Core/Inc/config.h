@@ -13,14 +13,14 @@
 #define E_VDC_MAX_FB_BOOST_100mV 374*10   // worst case for battery if BMS fails: 384V / 96cells = 4.0V
 #define E_VDC_MAX_FB_GRID_100mV 374*10   // worst case for battery if BMS fails: 404V / 96cells = 4.208V
 
-//#define E_IAC_MAX_10mA (7.3 * 100)  // 1200W÷230V×sqrt(2) amplitude
-//#define E_IAC_MAX_10mA (10 * 100)  // 1625W÷230V×sqrt(2) amplitude
-
 #define E_I_AC_RMS_MAX_CNT 10  // 10 samples @ 20kHz -> 500us
-#define E_I_AC_RMS_MAX_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
-#define E_I_AC_PULSE_MAX_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
+//#define E_I_AC_RMS_MAX_AMP_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+//#define E_I_AC_PULSE_MAX_AMP_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
+#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
 
 #define PERMIL_V_DFFW_MIN  200  // 20% grid voltage direct feedforward, 80% PLL
+//#define PERMIL_V_DFFW_MIN  500  // 50% grid voltage direct feedforward, 50% PLL; Test at 31Vac trafo did not cause LCL oscillation
 #define PERMIL_V_DFFW_MAX  500  // 50% maximum in case of high current due to distorted grid
 #define PERMIL_V_DFFW_INCR 60  // 60 equals 6% per control cycle -> 60% in 500µs
 #define PERMIL_V_DFFW_DECR 1  // 1 equals 0.1% per control cycle; @70% direct feedforward, it takes 600*50µs=30ms to come back to 10%

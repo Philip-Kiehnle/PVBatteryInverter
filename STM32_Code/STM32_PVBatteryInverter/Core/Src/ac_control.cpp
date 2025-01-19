@@ -413,6 +413,15 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 					i_ac_ref_amp_10mA--;
 				}
 
+				// V3: ramp: max decent per 50Hz period: 20kHz/50Hz * 1mA = 0.4A -> 6.5kW/sec, but no DC current improvement
+//				static int i_ac_ref_amp_1mA = 0;  // todo: reset to i_ac_ref_amp_10mA
+//				if (i_ac_amp_10mA_unclamped > i_ac_ref_amp_10mA && i_ac_ref_amp_10mA < IAC_AMP_MAX_10mA) {
+//					i_ac_ref_amp_1mA++;
+//				} else if (i_ac_amp_10mA_unclamped < i_ac_ref_amp_10mA && i_ac_ref_amp_10mA > -IAC_AMP_MAX_10mA) {
+//					i_ac_ref_amp_1mA--;
+//				}
+//				i_ac_ref_amp_10mA = i_ac_ref_amp_1mA/10;
+
 #define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
 #if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1 && SYSTEM_HAS_BATTERY == 1
 constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold in 10 minutes and 600mWh buyed
@@ -479,12 +488,12 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 #endif
 
 			// V1: linear inductor model
-			//int16_t v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_amp_10mA)/10;
+			//v_amp_pred_100mV = calc_IacAmp2VacSecAmpDCscale(i_ac_ref_amp_10mA)/10;
 
 			// V2: saturating inductor model; uses LUT with nonlinear inductance or remanence model
-			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_amp_ref_10mA, i_ac_10mA/10)/10;  // i_meas -> audible noise 150Hz:-10dBV 250Hz:-23dBV
+			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_ref_amp_10mA, i_ac_10mA/10)/10;  // i_meas -> audible noise 150Hz:-10dBV 250Hz:-23dBV
 			v_amp_pred_100mV = calc_v_amp_pred(i_ac_ref_amp_10mA, i_ref_10mA/10)/10;  // i_ref -> audible noise 150Hz:-11dBV 250Hz:-26dBV
-
+			//v_amp_pred_100mV = calc_v_amp_pred(i_ac_ref_amp_10mA, (i_ac_10mA+i_ref_10mA)/(2*10)) /10;
 		//}
 		phaseshift_RL = get_IacPhase();
 		//int16_t phase_shiftRL = get_IacPhase()+ (int16_t)(((1<<15)*1.08)/20);
@@ -568,9 +577,9 @@ errorPVBI_t checkACLimits() {
 	}
 
 	static uint8_t cnt_i_ac_rmslimit;  // todo: calculate rms limit based on actual chip temperature
-	if ( i_ac_10mA > E_I_AC_PULSE_MAX_10mA || i_ac_10mA < -E_I_AC_PULSE_MAX_10mA) {
+	if ( i_ac_10mA > E_I_AC_PULSE_MAX_AMP_10mA || i_ac_10mA < -E_I_AC_PULSE_MAX_AMP_10mA) {
 		return EC_I_AC_PULSE_MAX;
-	} else if ( i_ac_10mA > E_I_AC_RMS_MAX_10mA || i_ac_10mA < -E_I_AC_RMS_MAX_10mA) {
+	} else if ( i_ac_10mA > E_I_AC_RMS_MAX_AMP_10mA || i_ac_10mA < -E_I_AC_RMS_MAX_AMP_10mA) {
 		permil_v_dffw = std::clamp(permil_v_dffw+PERMIL_V_DFFW_INCR, PERMIL_V_DFFW_MIN, PERMIL_V_DFFW_MAX);
 
 		if (cnt_i_ac_rmslimit < E_I_AC_RMS_MAX_CNT) {
