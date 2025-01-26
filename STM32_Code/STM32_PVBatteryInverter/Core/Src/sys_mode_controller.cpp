@@ -143,13 +143,17 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			break;
 
 		  case PV2AC:  // EnergyMeter: 29.6W 30.2VA with saturating inductor model
-#ifdef TRAFO_TEST_33V
+#ifndef USE_TRAFO_33V
+#error "USE_TRAFO_33V has to be defined as 0 or 1"
+#endif
+#if USE_TRAFO_33V == 1  // high dc voltage with low voltage trafo; sigmadelta software processing shows >100Vdc at 0Vdc
 			ctrl_ref->v_dc_100mV = (320*10);  // for init of PV DC controller
 			ctrl_ref->mode = VDC_CONTROL;
 #else
 			ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);  // for init of PV DC controller
 			if (stateDC > VOLTAGE_CONTROL) {
-			    ctrl_ref->mode = VDC_VARIABLE_CONTROL;
+			    //ctrl_ref->mode = VDC_VARIABLE_CONTROL;  // increases voltage too much with 2x1kW grid resistance for debugging
+			    ctrl_ref->mode = VDC_CONTROL;
 			} else {
 			    ctrl_ref->mode = VDC_CONTROL;
 			}

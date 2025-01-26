@@ -6,6 +6,12 @@
 #include "common.h"
 #include "gpio.h"
 
+// print name of a definition
+#define STRINGIFY(x) #x
+
+// print number of a definition
+#define STR(X) STRINGIFY(X)  // this makes sure the argument is expanded before converting to string
+
 
 struct _sys_modedesc {
     int  sys_mode;
@@ -46,7 +52,7 @@ struct _sys_errordesc {
 	{ EC_GRID_SYNC_LOST,            "EC_GRID_SYNC_LOST : Grid parameters out of range while connected to grid"},
 	{ EC_V_AC_LOW,                  "EC_V_AC_LOW : AC voltage too low "},
 	{ EC_V_AC_HIGH,                 "EC_V_AC_HIGH : AC voltage too high "},
-	{ EC_FREQ_AC_LOW,               "EC_FREQ_AC_LOW : AC frequency too low "},
+	{ EC_FREQ_AC_LOW,               "EC_FREQ_AC_LOW : AC frequency too low (" STRINGIFY(F_MIN) "=" STR(F_MIN) ")"},
 	{ EC_FREQ_AC_HIGH,              "EC_FREQ_AC_HIGH : AC frequency too high "},
 	{ EC_I_AC_RMS_MAX,              "EC_I_AC_RMS_MAX : AC current exceeded rms max in multiple control periods" },
 	{ EC_I_AC_PULSE_MAX,            "EC_I_AC_PULSE_MAX : AC current exceeded pulse max in one control period" },

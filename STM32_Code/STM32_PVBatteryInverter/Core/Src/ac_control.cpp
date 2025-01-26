@@ -91,6 +91,23 @@ static inline bool check_zero_crossing(int16_t phase)
 	return false;
 }
 
+
+static inline bool check_zero_crossing_contactor_comp(int16_t phase)
+{
+	// V1: contactor closes 5.96ms after zero voltage without compensation
+	// -> wait (10-5.96)/20=0.202 cycles
+	// todo: change phase range from two cycles to one. Then change to 2*0.202=0.404 *INT16_MAX
+	//V2: close is 0.6ms after zero with V1; But with V2 next try, 0.7us before zero. Okay because voltage decreases
+	// wait (10-6.56)/20=0.172 cycles
+	if ( phase > ((0.25+0.172)*INT16_MAX) && phase < ((0.27+0.172)*INT16_MAX) ) {
+		return true;
+	}
+	return false;
+
+	// opening contactor: second bounce 745us after first, third bounce 905us after first, bounce time ~1ms
+}
+
+
 // todo: add controller for stationary accuracy for p_bat_reduction and p_external, e.g. later in code when P is converted to current
 void calc_p_ac(control_ref_t* ctrl_ref)
 {
@@ -221,7 +238,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	} else {
 	  shutdownAC();
 	  acGrid_valid = false;
-	  if (stateAC == GRID_SYNC) {
+	  if (stateAC >= WAIT_CONTACTOR_AC) {
 		  if (vd < VD_MIN_RAW) {
 			set_sys_errorcode(EC_V_AC_LOW);
 		  } else if (vd > VD_MAX_RAW) {
@@ -294,7 +311,10 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 
 	  case WAIT_AC_DC_VOLTAGE:
 		if (   acGrid_valid
-#ifdef TRAFO_TEST_33V
+#ifndef USE_TRAFO_33V
+#error "USE_TRAFO_33V has to be defined as 0 or 1"
+#endif
+#if USE_TRAFO_33V == 1
 			&& v_dc_FBgrid_sincfilt_100mV > 315*10  // no precharge resistors available
 			&& v_dc_FBgrid_sincfilt_100mV > 315*10
 #else
@@ -304,18 +324,27 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 		    && cnt_rel >= 2*AC_CTRL_FREQ)  // wait at least 2 sec to avoid instabilities
 		 {
 			// zero crossing of grid and converter voltage tuning:
+#if USE_TRAFO_33V == 1
 			//pll_set_phaseOffset((1<<15) * +10.05/20);  // i_rms 260-365mA
 			pll_set_phaseOffset((1<<15) * +10.0/20);  // i_rms 130-169mA; grid leading 5;10;13us lagging 6;13;18;28;47us
 			//pll_set_phaseOffset((1<<15) * +9.99/20);  // i_rms 121-147mA  sun/PV input has influence to grid: 260-320mA
 			//pll_set_phaseOffset((1<<15) * +9.98/20);  // i_rms 119-135mA; 209-213mA with sun; grid leading 0;18.1-18.7;41;47us
 			//pll_set_phaseOffset((1<<15) * +9.95/20);  // i_rms 120-138mA
+#else
+			// direct grid
+			//pll_set_phaseOffset((1<<15) * +10.0/20); // with 2x1kW resistance: EnergyMeter ~200VA
+			pll_set_phaseOffset((1<<15) * +9.98/20);  // with 2x1kW resistance: EnergyMeter ~16W ~20VA; without PV 3.2W 11-15VA
+#endif
 			nextState(WAIT_ZERO_CROSSING);
 		}
 		break;
 
 	  case WAIT_ZERO_CROSSING:  // for LCL charge without overshoot
-		if ( check_zero_crossing(phase) ) {
+		if ( check_zero_crossing_contactor_comp(phase) ) {
 			nextState(CLOSE_CONTACTOR_AC);
+		} else if (v_dc_FBgrid_sincfilt_100mV < (v_ac_amp_filt50Hz_100mV-4*10)) {
+			// in case no zerocrossing is detected and dc voltage drops
+			nextState(WAIT_AC_DC_VOLTAGE);
 		}
 		break;
 
@@ -422,7 +451,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 //				}
 //				i_ac_ref_amp_10mA = i_ac_ref_amp_1mA/10;
 
-#define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
+#define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 0
 #if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1 && SYSTEM_HAS_BATTERY == 1
 constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold in 10 minutes and 600mWh buyed
 				// electricity meter stores energy in 100mWh
