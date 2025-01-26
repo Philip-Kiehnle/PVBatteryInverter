@@ -501,7 +501,7 @@ void measVdcFBboost()
 	TIM4->CNT = 0;
 
 	// if sensor sees more than 1V, 90% high increase up to only a single zero in 128cycles, which equals 1.25V
-	if (sigma_delta_re < 32 || sigma_delta_re > 500) {
+	if (sigma_delta_re < 30 || sigma_delta_re > 500) {
 		set_sys_errorcode(EC_V_DC_SENSOR_FB_BOOST);
 	}
 
@@ -577,7 +577,7 @@ void measVdcFBboost()
 //#define V_DC_MAX_FBboost (1+59)  // 68kOhm 450×68÷(450+68)
 //#define V_DC_CALIB_FBboost  995  // per mil for 68kOhm 450×68÷(450+68)
 
-#define V_DC_MAX_FBboost (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.25Vcell*96=408V -> Vadc=1.088V (32edges)
+#define V_DC_MAX_FBboost (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.31Vcell*96=413.8V -> Vadc=1.10V (30edges)
 #define V_DC_CALIB_FBboost  995  // 310.1V is shown as 310.3V
 
 #ifndef E_VDC_MAX_FB_BOOST_100mV

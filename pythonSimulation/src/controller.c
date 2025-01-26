@@ -77,8 +77,8 @@ void pi_step(int32_t x, piController *ctrl)
 
 // Go(s) = 1/C * 1/s * (Kp+Ki/s) * 1/(1+Tsigma*s)
 // symmetric optimum:
-#define a 2.0  // a>1; typical value is 2;
-//#define a 3.0  // a>1; typical value is 2;
+//#define a 2.0  // a>1; typical value is 2;
+#define a 3.0  // a>1; typical value is 2;
 #define VR (CAPACITANCE / (Tsigma*a))
 const int Kp_Vdc = 1.0*VR * (1<<EXTEND_PI_VDC);
 #define Tn (a*a * Tsigma)

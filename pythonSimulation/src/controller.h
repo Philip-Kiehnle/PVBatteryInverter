@@ -14,6 +14,9 @@
 
 #include <stdint.h>
 
+#include "config.h"
+
+
 #define CAPACITANCE (4*390e-6)
 //#define R (0.7074)   // see calc sheet; current is leading but should be lagging to compensate trafo
 // -> using phase LUT
@@ -42,9 +45,18 @@ int32_t get_VIN_ADCR();
 //#define VIN_MAX 35.0
 //#define VIN_MAX_RAW ((1<<ADC_BITS)*VIN_MAX/VIN_ADCR)
 
-//#define VGRID_TRATIO 14  // transformer winding ratio
+#ifndef USE_TRAFO_33V
+#error "USE_TRAFO_33V has to be defined as 0 or 1"
+#endif
+
+#if USE_TRAFO_33V == 1
 #define VGRID_TRATIO 7  // transformer winding ratio
-#define VGRID_AMP 325/VGRID_TRATIO  // todo
+#elif USE_TRAFO_33V == 0
+#define VGRID_TRATIO 1  // no transformer
+#endif
+
+#define VGRID_AMP 325/VGRID_TRATIO
+
 int32_t get_VGRID_TRATIO();
 float get_C();
 
@@ -58,41 +70,38 @@ float get_C();
 int32_t get_VGRID_ADCR();
 #define ADC_BITS_VGRID 12
 
-// for trafo grid 15-30V
+#if USE_TRAFO_33V == 1
+// for trafo grid
 #define VD_MIN_RAW ((1<<ADC_BITS_VGRID)* 0.75 * VGRID_AMP/VGRID_ADCR)
 #define VD_MAX_RAW ((1<<ADC_BITS_VGRID)* 1.2 * VGRID_AMP/VGRID_ADCR)
-
-// for 230V according to VDE-AR-N 4105
-//#define VD_MIN_RAW ((1<<ADC_BITS_VGRID)* 0.85 * VGRID_AMP/VGRID_ADCR)
-//#define VD_MAX_RAW ((1<<ADC_BITS_VGRID)* 1.1 * VGRID_AMP/VGRID_ADCR)
+#else
+// for 230V grid according to VDE-AR-N 4105
+#define VD_MIN_RAW ((1<<ADC_BITS_VGRID)* 0.85 * VGRID_AMP/VGRID_ADCR)
+#define VD_MAX_RAW ((1<<ADC_BITS_VGRID)* 1.1 * VGRID_AMP/VGRID_ADCR)
+#endif
 
 
 #define SCALE_F2WRAW  ((1<<15) -1)
-#define F_MIN 49
 #define W_MIN_RAW F_MIN*SCALE_F2WRAW
-#define F_MAX 51
 #define W_MAX_RAW F_MAX*SCALE_F2WRAW
 
 #define IGRID_ADCR (655)  // current range [-327.68, +327.67] 16bit in 10mA
 //#define IGRID_ADCR 30  // [-15,+15A]; no grid current sensor is used at the moment
 int32_t get_IGRID_ADCR();
 #define ADC_BITS_IGRID 12
+
+// 33V trafo:
 //#define IAC_AMP_MAX 7  //(5 * sqrt(2))
 //#define IAC_AMP_MAX_10mA 2.0*100  // -1.90A to 1.88A 50Hz  95%
 //#define IAC_AMP_MAX_10mA 3.0*100  // to much PV power turnoff at 50Watt ELV Meter
 //#define IAC_AMP_MAX_10mA 4.0*100  // 4Aamp*45V/2=90W    -4.33A to 4.30A 50Hz  107%  -> 3.6A with inductorLUT, heat-up 4.0A 30samples clipping Vbat=48.0 Vgrid_peak=45.8V
-#define IAC_AMP_MAX_10mA 5.0*100  // -6.00A to 6.00A 50Hz -> 6Aamp*45V/2=135W   120% inductor saturation
+//#define IAC_AMP_MAX_10mA 5.0*100  // -6.00A to 6.00A 50Hz -> 6Aamp*45V/2=135W   120% inductor saturation
 //#define IAC_AMP_MAX_10mA 5.2*100   // -6.43A to 6.48A   6.46/5.2 = 124%
 //#define IAC_AMP_MAX_10mA 6.0*100   // -8.14A to 8.20A    8.17/6= 136%   -> 4.9A with inductorLUT Pbat 125W
 //#define IAC_AMP_MAX_10mA 8.0*100  // -8.16 to 8.2A with inductor LUT; noise from inductors
 
-
-// old:
-//#define IAC_AMP_MAX_10mA 6.0*100  // 6Aamp*45V/2=135W -> 3.3Aamp  -> 3.66A Vdc 47.0-49.0V
-//#define IAC_AMP_MAX_10mA 8.0*100  // 8Aamp*45V/2=180W -> 5.2Aamp Vdc limited  4.59A
-//#define IAC_AMP_MAX_RAW ((1<<ADC_BITS_IGRID) * IAC_AMP_MAX/IGRID_ADCR)
-//#define I_REF_AMP_MIN 0.4
-//#define I_REF_AMP_MIN_RAW ((1<<ADC_BITS_IGRID) * I_REF_AMP_MIN/IGRID_ADCR)
+// 230V grid:
+#define IAC_AMP_MAX_10mA 2.0*100  // stable with 2x1kW series resistance
 
 
 typedef struct {

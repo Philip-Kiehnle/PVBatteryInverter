@@ -48,12 +48,12 @@ T_sim = 1.0  # sec
 t = np.arange(0, T_sim, T)
 arg = 2*np.pi*t
 arg_offset = 0*1*np.pi
-TRAFO_RATIO = 7
+TRAFO_RATIO = 1
 v_grid = 325/TRAFO_RATIO * np.sin(fgrid*arg+arg_offset) + 0 * np.sin(3*fgrid*arg+arg_offset) + 0 * np.sin(5*fgrid*arg+arg_offset)
 
 N = len(v_grid)
 
-#v_grid[int(0.5*N):int(0.7*N)] *= 0.3  # voltage sag
+v_grid[int(0.5*N):int(0.7*N)] *= 0.3  # voltage sag
 #v_grid_meas = v_grid  # no measurement error
 #v_grid_meas = v_grid + 10  # 10V offset in measurement
 v_grid_meas = np.random.normal(v_grid,0.4) + 0.1  # offset + noise in measurement
@@ -126,8 +126,8 @@ for i, v in enumerate(v_grid_meas):
 ##################################
 ## voltage & current controller ##
 ##################################
-Vdc0 = 50
-Vdc_ref = 50.0
+Vdc0 = 350
+Vdc_ref = 350.0
 Ipv = 2.0  # constant PV current; ToDo: implement PV LUT
 sourceDC = src_load.sourceDC(T=T, V0=Vdc0)
 v_dc = Vdc0 * np.ones(N)
@@ -155,7 +155,8 @@ L=[10.2e-3]
 L_nonlinear = i_corr_L
 L_nonlinear[:,1] *= L
 
-R=[0.6978]
+#R=[0.6978]
+R=[0.8428] #define R (0.8428)
 # R_nonlinear = i_corr_R
 # R_nonlinear[:,1] *= R
 
@@ -252,7 +253,7 @@ ax1.plot(t, v_grid_meas, label='v_grid_meas')
 ax1.plot(t, v_grid_estim, label='v_grid_estim')
 # ax1.plot(t, vab_pll[0], label='va_pll')
 # ax1.plot(t, vab_pll[1], label='vb_pll')
-# ax1.plot(t, vdq_pll[0], label='vd_pll')
+ax1.plot(t, vdq_pll[0], label='vd_pll')
 # ax1.plot(t, vdq_pll[1], label='vq_pll')
 ax1.plot(t, v_pred, label='v_pred')
 ax1.plot(t, v_dc, label='v_dc')
