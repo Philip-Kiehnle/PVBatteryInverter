@@ -257,9 +257,9 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	int16_t phase = pll_singlephase_step(v_ac_raw);
 #else
 	acGrid_valid = true;
-	v_ac_amp_filt50Hz_100mV = 45*10;
+	v_ac_amp_filt50Hz_100mV = VGRID_AMP*10;
 	static int16_t phase;
-	phase += SHRT_MAX/(50*8);
+	phase += SHRT_MAX/(AC_CTRL_FREQ/50);  // generate 50Hz
 #endif //DEBUG_OUTPUT_CURRENT
 
 	if (get_sys_errorcode() != EC_NO_ERROR ) {

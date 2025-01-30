@@ -45,17 +45,6 @@ int32_t get_VIN_ADCR();
 //#define VIN_MAX 35.0
 //#define VIN_MAX_RAW ((1<<ADC_BITS)*VIN_MAX/VIN_ADCR)
 
-#ifndef USE_TRAFO_33V
-#error "USE_TRAFO_33V has to be defined as 0 or 1"
-#endif
-
-#if USE_TRAFO_33V == 1
-#define VGRID_TRATIO 7  // transformer winding ratio
-#elif USE_TRAFO_33V == 0
-#define VGRID_TRATIO 1  // no transformer
-#endif
-
-#define VGRID_AMP 325/VGRID_TRATIO
 
 int32_t get_VGRID_TRATIO();
 float get_C();
