@@ -333,7 +333,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 #else
 			// direct grid
 			//pll_set_phaseOffset((1<<15) * +10.0/20); // with 2x1kW resistance: EnergyMeter ~200VA
-			pll_set_phaseOffset((1<<15) * +9.98/20);  // with 2x1kW resistance: EnergyMeter ~16W ~20VA; without PV 3.2W 11-15VA
+			pll_set_phaseOffset((1<<15) * +9.98/20);  // with 2x1kW resistance: EnergyMeter ~16W ~20VA; without PV 3.2W 11-15VA; direct AC no PV: 2.6-5.2W, 80VA
 #endif
 			nextState(WAIT_ZERO_CROSSING);
 		}
