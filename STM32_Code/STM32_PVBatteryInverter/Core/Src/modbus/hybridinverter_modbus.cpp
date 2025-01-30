@@ -4,6 +4,7 @@
 #include "config_pv.h"
 #include "mpptracker.hpp"
 #include "dc_control.h"
+#include "fan_control.h"
 #include <common.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +17,7 @@ extern          "C"
 modbus_reg_rw_t modbus_reg_rw = {
 	// General
 	.cmd = CMD_INVALID,
+	.fan_test = 0,
 
 	// PV related
 	.temperature_outdoor_celsius = 10,  // used to calculate PV start voltage
@@ -91,6 +93,9 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 				bal_state |= get_battery_balancingState(12*id_stack + i) << i;
 			}
 			return bal_state;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, fan_state)/2) {
+			return fan_control_get_state();
 		}
 
 	// read and write registers
@@ -131,6 +136,8 @@ uint16_t mbus_hybridinverter_write(uint32_t la, uint16_t value)
 			if (v_bal_mV >= 3600 && v_bal_mV <= 4200) {
 				battery_set_balancing(0b1111, v_bal_mV);  // all CSCs
 			}
+		} else if (addr == offsetof(modbus_reg_rw_t, fan_test)/2) {
+			fan_control_test(regs[addr]);
 		}
 	}
 

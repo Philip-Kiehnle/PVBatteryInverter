@@ -34,12 +34,14 @@ void contactorAC(bool state)
 
 void contactorBattery(bool state)
 {
-	// Bat2DCboost -> Now used for negative battery contactor. Only connected to BatterySupervisor.
+#if IS_BATTERY_SUPERVISOR_PCB == 1
+	// Bat2DCboost -> Now used for negative battery contactor in BatterySupervisor. On Main Control PCB, pin is used for fan control.
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOC->BSRR = (1<<13);
 	} else {
 		GPIOC->BRR = (1<<13);
 	}
+#endif // IS_BATTERY_SUPERVISOR_PCB == 1
 
 	// Bat2Inverter -> Now used for positive battery contactor. Only connected to PVBatteryInverter.
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
@@ -56,5 +58,15 @@ void bmsPower(bool state)
 		GPIOC->BSRR = (1<<0);
 	} else {
 		GPIOC->BRR = (1<<0);
+	}
+}
+
+void fanAC(bool state)
+{
+	// Pin name in KiCAD: Bat2DCboost
+	if ( state ) {
+		GPIOC->BSRR = (1<<13);
+	} else {
+		GPIOC->BRR = (1<<13);
 	}
 }

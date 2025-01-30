@@ -14,6 +14,7 @@ typedef enum {CMD_INVALID, CMD_INVERTER_OFF, CMD_INVERTER_ON, CMD_INVERTER_RESET
 typedef struct {
 	// General
 	uint16_t cmd;
+	uint16_t fan_test;
 
 	// PV related
 	uint16_t temperature_outdoor_celsius;  // used to calculate PV start voltage
@@ -40,6 +41,7 @@ typedef struct {
 
 
 typedef struct {
+	uint16_t fan_state;
 	uint16_t bat_cell_v_mV[96];
 	uint16_t bat_cell_balancing[8];
 } modbus_reg_ro_t;
