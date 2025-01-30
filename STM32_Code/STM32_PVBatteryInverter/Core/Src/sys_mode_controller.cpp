@@ -5,6 +5,7 @@
 #include "sys_mode_controller.h"
 #include "ac_control.h"
 #include "dc_control.h"
+#include "fan_control.h"
 #include "electricity_meter.h"
 
 #include "battery.h"
@@ -133,6 +134,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 	p_bat_chg_max = std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
 #endif //SYSTEM_HAS_BATTERY
 	static uint32_t cnt_1Hz_chargeDC;
+
+	fan_control_ac(cnt_1Hz, get_p_ac_filt50Hz());
 
 	switch (sys_mode) {
 		  case OFF:

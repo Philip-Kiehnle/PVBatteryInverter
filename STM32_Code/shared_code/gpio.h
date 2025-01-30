@@ -13,6 +13,7 @@ void gatedriverAC(bool state);
 void contactorAC(bool state);
 void contactorBattery(bool state);
 void bmsPower(bool state);
+void fanAC(bool state);
 
 #ifdef __cplusplus
 }

@@ -37,9 +37,9 @@
 
 #define E_I_AC_RMS_MAX_CNT 10  // 10 samples @ 20kHz -> 500us
 //#define E_I_AC_RMS_MAX_AMP_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
-//#define E_I_AC_PULSE_MAX_AMP_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
+#define E_I_AC_PULSE_MAX_AMP_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
 #define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
-#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
+//#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
 
 #define PERMIL_V_DFFW_MIN  200  // 20% grid voltage direct feedforward, 80% PLL
 //#define PERMIL_V_DFFW_MIN  500  // 50% grid voltage direct feedforward, 50% PLL; Test at 31Vac trafo did not cause LCL oscillation
@@ -57,6 +57,18 @@
 #define P_AC_MAX (210)  // 210W minimum for energy packet controller
 #define P_BAT_MIN_CHARGE 2
 #define P_MIN_PV2AC 10
+
+/***************/
+/* Fan control */
+/***************/
+//#define FAN_P_AC_START 1200
+//#define FAN_P_AC_STOP 1000
+//#define FAN_RUNTIME_MINIMUM_SEC 30
+
+#define FAN_P_AC_START 300
+#define FAN_P_AC_STOP 200
+#define FAN_RUNTIME_MINIMUM_SEC 15
+
 
 // 20kHz PWM, 20kHz controlfreq -> repetition counter = 1
 // 20kHz / ((1+1)/2) = 20kHz
