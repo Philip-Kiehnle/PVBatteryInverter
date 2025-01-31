@@ -10,8 +10,11 @@ import numpy as np
 
 
 d = np.dtype([
-('v_dc', 'u2'),
-('v_dc_modulator_100mV', 'u2')
+('duty', 'u2'),
+('v_dc_modulator_100mV', 'u2'),
+('v_ac_100mV', 'i2'),
+('i_ac_10mA', 'i2'),
+('i_ac_ref_amp_10mA', 'i2'),
 ])
 
 # b int8
@@ -21,7 +24,7 @@ d = np.dtype([
 # i uint32
 # I uint32
 # f float32
-fast_monitor_vars_t = "HH"
+fast_monitor_vars_t = "HHhhh"
 struct_size = struct.calcsize(fast_monitor_vars_t)
 
 for name in d.names:
@@ -45,6 +48,9 @@ def ser_read_exact(ser, size):
     return packet
 
 def start_fast_monitor_mode(ser):
+    if ser.read(1):
+        ser.write('d'.encode())  # stop active monitor mode
+        ser.readall()
     ser.write('f'.encode())  # start fast monitor mode
     magic_bytes = b'Fast monitor TRIG\n'
     line = ser.readline()
@@ -68,7 +74,7 @@ if len(sys.argv) != 2:
 
 #signal.signal(signal.SIGINT, signal_handler)
 
-ser = serial.Serial(sys.argv[1], 115200, timeout=2)
+ser = serial.Serial(sys.argv[1], 115200, timeout=1)
 start_fast_monitor_mode(ser)
 
 packet = ser_read_exact(ser, FAST_MON_BYTES)
@@ -78,15 +84,17 @@ for i in range(FAST_MON_FRAMES):
     vars[i] = struct.unpack_from(fast_monitor_vars_t,packet[i*struct_size:(i+1)*struct_size])
 
 
-plot_ax('v_dc', 0.1)
+plot_ax('duty', 0.1)
 plot_ax('v_dc_modulator_100mV', 0.1)
+plot_ax('v_ac_100mV', 0.1)
 
 
 ax2 = ax1.twinx()
 ax2._get_lines.prop_cycler = ax1._get_lines.prop_cycler
 curr_ax = ax2
 
-#plot_ax('p_dc_filt50Hz')
+plot_ax('i_ac_10mA', 0.01)
+plot_ax('i_ac_ref_amp_10mA', 0.01)
 
 ax1.legend(loc='upper left')
 ax2.legend(loc='upper right')

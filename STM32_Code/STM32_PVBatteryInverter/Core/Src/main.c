@@ -153,7 +153,6 @@ static void FDCAN_Config(void);
 void uartSend(char* ptr, int len)
 {
     HAL_UART_Transmit(huart_debug, (uint8_t *)ptr,len, 10);
-
 }
 
 void uSendInt(int value)
@@ -895,7 +894,7 @@ int main(void)
 
 	// UART RX
 	uint8_t rx_buf = 0;
-	HAL_UART_Receive(huart_debug, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode
+	HAL_UART_Receive(huart_debug, &rx_buf, 1, 1);  // todo: watchdog is triggered if this line missing in monitor mode; seems fixed by enabling uart interrupt
 
 	if (uart_input_text) {
 		if (rx_buf == 'p') {
@@ -904,13 +903,15 @@ int main(void)
 		} else if (rx_buf == 'd') {
 			uSend("Print DISABLE\n");
 			uart_output_text = false;
+			monitoring_binary_en = false;
 		} else if (rx_buf == 'm') {
 			uSend("Monitoring ENABLE\n");
 			monitoring_binary_en = true;
 			uart_output_text = false;
-			uart_input_text = false;
+			//uart_input_text = false;
 		} else if (rx_buf == 'f') {
 			uSend("Fast monitor TRIG\n");
+			monitoring_binary_en = false;
 			fast_mon_vars_trig = true;
 			uart_output_text = false;
 //		} else if (rx_buf == 'c') {
@@ -1714,13 +1715,13 @@ static void MX_DMA_Init(void)
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
   /* DMA1_Channel4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }

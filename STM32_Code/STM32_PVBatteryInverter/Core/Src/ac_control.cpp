@@ -584,8 +584,11 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 		if (frame_nr < FAST_MON_FRAMES) {
 			//fast_monitor_vars[frame_nr].v_dc = v_dc_FBgrid_sincfilt_100mV;
 			//fast_monitor_vars[frame_nr].v_dc = delta_v_10mV;
-			fast_monitor_vars[frame_nr].v_dc = duty;
+			fast_monitor_vars[frame_nr].duty = duty;
 			fast_monitor_vars[frame_nr].v_dc_modulator_100mV = v_dc_modulator_100mV;
+			fast_monitor_vars[frame_nr].v_ac_100mV = v_ac_100mV;
+			fast_monitor_vars[frame_nr].i_ac_10mA = i_ac_10mA;
+			fast_monitor_vars[frame_nr].i_ac_ref_amp_10mA = debug_i_ac_ref_amp_10mA;
 			frame_nr++;
 		}
 	}

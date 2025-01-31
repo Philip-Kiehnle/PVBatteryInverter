@@ -22,14 +22,15 @@ def signal_handler(sig, frame):
 
 def ser_read_exact(ser, size):
     bytesAvail = ser.inWaiting()
-    while bytesAvail < size:
+    start = time.time()
+    while bytesAvail < size and time.time() < start+2:
         bytesAvail = ser.inWaiting()
     packet = ser.read(size)
     return packet
 
 def start_monitor_mode(ser):
 
-    # test if monitor mode already running
+    print("Check if monitor mode is active...")
     packet = ser_read_exact(ser, 2*PACKET_LEN) # search in two packets
     if search_header(packet) >=0:
         print("sync to ongoing stream...")
