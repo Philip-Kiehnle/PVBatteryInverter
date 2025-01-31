@@ -1946,8 +1946,8 @@
     (uuid 9e2dff6d-4f9a-47d5-a5b5-6c4d768ff9cc)
   )
 
-  (text_box "ToDo for PCB Version 2:\n\nPA5 FBgrid_Vdc_data not 5V tolerant!\nswap LED1 and LED2 silkscreen\nAMC3330 place 1nF 1206 close to pins (swap with 100nF)\nEmergency Button: add filter Cap 2.2nF * 40kOhm = 88us\nProtection Diode for IRLM2502 between 12V and BMS_GND. E.g. SS26 or STPS2200U (used in prototype)\nadd 10nF for both overtemp signals\n5V undervoltage detection circuit, see .ods file\nR113 is shorted for fan control. Fan does not need diode, because no overvoltage has been measured during shutdown."
-    (at 137.16 59.055 0) (size 65.405 35.56)
+  (text_box "ToDo for PCB Version 2:\n\nPA5 FBgrid_Vdc_data not 5V tolerant!\nswap LED1 and LED2 silkscreen\nAMC3330 place 1nF 1206 close to pins (swap with 100nF)\nEmergency Button: add filter Cap 2.2nF * 40kOhm = 88us\nProtection Diode for IRLM2502 between 12V and BMS_GND. E.g. SS26 or STPS2200U (used in prototype)\nadd 10nF for both overtemp signals\n5V undervoltage detection circuit, see .ods file\nR113 is shorted for fan control. Fan does not need diode, because no overvoltage has been measured during shutdown.\nadded 330pF between AMC3330_P and N close to microcontroller\nadded 10nF to i_ac measurement 1/(2*PI*220*(2.2n+10n)=59.3kHz\nadded 100nF to i_pv measurement 1/(2*PI*220*(2.2n+10n)=7.08kHz"
+    (at 137.16 59.055 0) (size 65.405 42.545)
     (stroke (width 0) (type default))
     (fill (type none))
     (effects (font (size 1.27 1.27) (thickness 0.254) bold) (justify left top))

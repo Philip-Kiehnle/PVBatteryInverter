@@ -74,15 +74,30 @@ if len(sys.argv) != 2:
 
 #signal.signal(signal.SIGINT, signal_handler)
 
-ser = serial.Serial(sys.argv[1], 115200, timeout=1)
-start_fast_monitor_mode(ser)
+if sys.argv[1].find('/dev/tty') != -1:
+    ser = serial.Serial(sys.argv[1], 115200, timeout=1)
+    start_fast_monitor_mode(ser)
 
-packet = ser_read_exact(ser, FAST_MON_BYTES)
-ser.close()
+    packet = ser_read_exact(ser, FAST_MON_BYTES)
+    ser.close()
 
-for i in range(FAST_MON_FRAMES):
-    vars[i] = struct.unpack_from(fast_monitor_vars_t,packet[i*struct_size:(i+1)*struct_size])
+    with open('monitor_vars_fast.bin', 'wb') as file:
+        file.write(packet)
 
+    for i in range(FAST_MON_FRAMES):
+        vars[i] = struct.unpack_from(fast_monitor_vars_t, packet[i*struct_size:(i+1)*struct_size])
+
+else:
+    with open(sys.argv[1], 'rb') as file:
+        for i in range(FAST_MON_FRAMES):
+            vars[i] = struct.unpack_from(fast_monitor_vars_t, file.read(struct_size))
+
+value = np.clip(0.1*vars['v_ac_100mV'], -5000, 5000)
+print(f'v_ac_100mV min={min(value):.3f} avg={sum(value)/FAST_MON_FRAMES:.3f} max={max(value):.3f} ')
+value = np.clip(0.01*vars['i_ac_10mA'], -5000, 5000)
+print(f'i_ac_10mA  min={min(value):.3f} avg={sum(value)/FAST_MON_FRAMES:.3f} max={max(value):.3f} ')
+value = np.clip(0.01*vars['i_ac_ref_amp_10mA'], -5000, 5000)
+print(f'i_ac_ref_amp_10mA  min={min(value):.3f} avg={sum(value)/FAST_MON_FRAMES:.3f} max={max(value):.3f} ')
 
 plot_ax('duty', 0.1)
 plot_ax('v_dc_modulator_100mV', 0.1)
