@@ -39,8 +39,11 @@ typedef struct {
 } __attribute__((__packed__)) monitor_packet_t;
 
 typedef struct {
-	uint16_t v_dc;
+	uint16_t duty;
 	uint16_t v_dc_modulator_100mV;
+	int16_t v_ac_100mV;
+	int16_t i_ac_10mA;
+	int16_t i_ac_ref_amp_10mA;
  } __attribute__((__packed__)) fast_monitor_vars_t;
 
 
