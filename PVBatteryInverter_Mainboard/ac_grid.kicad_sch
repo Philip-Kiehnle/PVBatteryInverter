@@ -2455,7 +2455,7 @@
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 58000afa-22f9-4af6-b614-20d7ac51b5e4)
   )
-  (text "20A Version; Vref_ADC=3.3V; single ended; negative Current:\nVout=2.175V + I*90mV/A\nV(2kW;-12.3Aamp)=1.068V\n(2.175-1.068)÷3.3×2^12=1374LSB\n->9mA resolution -> 2.1W\n-> negative current up to (3.3-2.175)/0.09=12.5A"
+  (text "20A Version; Vref_ADC=3.3V; single ended; negative Current:\nVout=2.175V + I*90mV/A\nV(2kW;-12.3Aamp)=1.068V\n(2.175-1.068)÷3.3×2^12=1374LSB\n->9mA resolution -> 2.1W\n-> negative current up to (3.3-2.175)/0.09=12.5A\n\n=>50A version used, see DCcurrent_sense.kicad_sch"
     (at 179.07 68.58 0)
     (effects (font (size 1.27 1.27) (thickness 0.254) bold) (justify left bottom))
     (uuid 58a84237-851f-494b-98f0-da96fea00080)

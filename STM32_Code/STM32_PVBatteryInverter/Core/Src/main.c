@@ -386,80 +386,110 @@ void calc_and_wait(uint32_t delay)
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
-	checkErrors();
-#if 1
-	static uint32_t blankingCnt = 0;
-
-	if (blankingCnt > 240) {  // dont check sigmadelta data during startup for 240/20kHz/3ADCs = 4ms
-		errorPVBI_t limitErr = checkDCLimits();
-		if (limitErr != EC_NO_ERROR) {
-			shutdownAll();
-			set_sys_errorcode(limitErr);
-		}
-		limitErr = checkACLimits();
-		if (limitErr != EC_NO_ERROR) {
-			shutdownAll();  // todo shutdown AC only
-			set_sys_errorcode(limitErr);
-		}
-	} else {
-		blankingCnt++;
-	}
-
 	//static volatile uint16_t vdc_sinc_mix_100mV;
 	static volatile uint16_t cnt20kHz_20ms = 0;
 
-	// two channels -> called twice
-    if (hadc == &hadc1) {
+	/************************************/
+	/* Highest priority: Grid control	*/
+	/* 	execution rate: 20kHz			*/
+	/************************************/
 
-    	static uint8_t cnt_ac = 1;
-    	cnt_ac++;
+	// ADC1: two channels, Vac and i_ac
+	// HRTIM1 triggers ADC once per period and DMA calls this callback if ADC1ConvertedData[2] is full
+	// Thus, both channels in ADC1ConvertedData are updated in every call.
+	if (hadc == &hadc1) {
+		DEBUG_ISR GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4  T1
+		// With 4xOversampling: 4.3us-0.44us=3.9us after mid of PWM period (see documentation/img folder)
+		// With 8xOversampling: 7.0us-0.44us=6.6us after mid of PWM period -> 25-6.6=18.4us for calculation
 
-    	if (cnt_ac >= 2) {  // this section runs in X us with -O2
-    		cnt_ac = 0;
-			measVdcFBgrid();
+		// start ADC2 conversion, because ADC1 conversions are complete here and can't be disturbed by ADC2
+		LL_ADC_REG_StartConversion(hadc2.Instance);
+
+//		if (fast_mon_vars_trig) {
+//			if (frame_nr < FAST_MON_FRAMES) {
+//				fast_monitor_vars[frame_nr].v_ac_100mV = ADC1ConvertedData[0];
+//				fast_monitor_vars[frame_nr].i_ac_10mA = ADC1ConvertedData[1];
+//				fast_monitor_vars[frame_nr].i_ac_ref_amp_10mA = ADC2ConvertedData[0]/16;
+//				frame_nr++;
+//			}
+//		}
+
+		measVdcFBgrid();  // if runtime becomes critical, run this line after ac dutycycle calculation
 
 #define V_AC_CALIB_OFFSET 1979
 #define V_AC_CALIB_GAIN_PER_MIL 989
 
-			int v_ac_raw_no_calib = ADC1ConvertedData[0];
-			int16_t v_ac_raw = ((v_ac_raw_no_calib-V_AC_CALIB_OFFSET)*V_AC_CALIB_GAIN_PER_MIL)/1000;
+		int v_ac_raw_no_calib = ADC1ConvertedData[0];
+		int16_t v_ac_raw = ((v_ac_raw_no_calib-V_AC_CALIB_OFFSET)*V_AC_CALIB_GAIN_PER_MIL)/1000;
 
-			//debug_v_ac_100mV = acControl_RAW_to_100mV(v_ac_raw);
+		//debug_v_ac_100mV = acControl_RAW_to_100mV(v_ac_raw);
 
-			uint16_t i_ac_raw = ADC1ConvertedData[1];
-			// Lowpass filter for Ig
+		uint16_t i_ac_raw = ADC1ConvertedData[1];
+		// Lowpass filter for Ig
 //			static uint16_t Ig_prev[3] = {0};
 //			uint16_t Ig_filt = lowpass4(i_ac_raw, Ig_prev);
-			//debug_Ig_raw_filt = Ig_filt;
+		//debug_Ig_raw_filt = Ig_filt;
 
-			uint16_t v_dc_FBboost_sincfilt_100mV = get_v_dc_FBboost_sincfilt_100mV();
-			uint16_t v_dc_FBboost_filt50Hz_100mV = get_v_dc_FBboost_filt50Hz_100mV();
-			int16_t duty = acControlStep(cnt20kHz_20ms, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_dc_FBboost_filt50Hz_100mV, v_ac_raw, i_ac_raw);
-
-			// debug AC fullbridge
+		uint16_t v_dc_FBboost_sincfilt_100mV = get_v_dc_FBboost_sincfilt_100mV();
+		uint16_t v_dc_FBboost_filt50Hz_100mV = get_v_dc_FBboost_filt50Hz_100mV();
+		int16_t duty = acControlStep(cnt20kHz_20ms, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_dc_FBboost_filt50Hz_100mV, v_ac_raw, i_ac_raw);
+//duty = 150;  // fixed duty for timing alignment test
+		// debug AC fullbridge
 //			int16_t duty = 4250;
 //			gatedriverAC(1);
 
-			// set the PWM duty cycle value (into a 'shadow register')
-			__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
+		// set the PWM duty cycle value (into a 'shadow register')
+		__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
 
-			// copy the PWM duty cycle value from the 'shadow register' to the 'active register' -> done by hardware
-			//HAL_HRTIM_SoftwareUpdate(&hhrtim1, HRTIM_TIMERUPDATE_A);
-    	}
-    }
+		// copy the PWM duty cycle value from the 'shadow register' to the 'active register' -> done by hardware
+		//HAL_HRTIM_SoftwareUpdate(&hhrtim1, HRTIM_TIMERUPDATE_A);
+		DEBUG_ISR GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4  T2: max18.2us after T1 (during meas of T2-T3 ~17.0us)
+
+		/****************************************************/
+		/* Lower priority: regular error checking			*/
+		/* 	current errors are checked by analog watchdog 	*/
+		/* 	execution rate: 40kHz							*/
+		/* 	runtime in normal operation: ~?us				*/
+		/* 	runtime in error case: ~?us						*/
+		/****************************************************/
+		checkErrors();
+		static uint32_t blankingCnt = 0;
+
+		if (blankingCnt > 240) {  // dont check sigmadelta data during startup for 240/20kHz/3ADCs = 4ms
+			errorPVBI_t limitErr = checkDCLimits();
+			if (limitErr != EC_NO_ERROR) {
+				shutdownAll();
+				set_sys_errorcode(limitErr);
+			}
+			limitErr = checkACLimits();
+			if (limitErr != EC_NO_ERROR) {
+				shutdownAll();  // todo shutdown AC only
+				set_sys_errorcode(limitErr);
+			}
+		} else {
+			blankingCnt++;
+		}
 
 
-    if (hadc == &hadc2) {
-	// called with f=40kHz when repetition counter = 0 -> for double current sense
-	// called with f=20kHz when repetition counter = 1 -> for single current sense or hardware oversampling
-	//
-	// In interleaved DCDC booster with diodes, discontinuous current can occur -> Sampling the whole period is necessary
-	// fadc = 170MHz/4 = 42.5MHz
-	// cycles = 2.5+12.5 = 15
-	// fsample = 42.5MHz/15 = 2.833Msamples/s
-	// oversampling 128 -> 22.135kHz
-	// todo: 22kHz vs 20kHz : no exact average current, but robust for MPPT and much better in discontinuous mode than double sample
-		//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
+		/********************************************/
+		/* Lowest priority: DC stage control		*/
+		/* 	DC voltage regulation and MPP tracking	*/
+		/* 	runtime: ~?us							*/
+		/********************************************/
+
+		// 128x oversampling takes 128x(2.5+12.5) @ 170/4=42.5MHz -> 45.18us
+		//if (hadc == &hadc2) {  // we take the most recent conversion of ADC2; timing alignment is not critical
+		// called with f=40kHz when repetition counter = 0 -> for double current sense
+		// called with f=20kHz when repetition counter = 1 -> for single current sense or hardware oversampling
+		//
+		// In interleaved DCDC booster with diodes, discontinuous current can occur -> Sampling the whole period is necessary
+		// fadc = 170MHz/4 = 42.5MHz
+		// cycles = 2.5+12.5 = 15
+		// fsample = 42.5MHz/15 = 2.833Msamples/s
+		// oversampling 128 -> 22.135kHz
+		// todo: 22kHz vs 20kHz : no exact average current, but robust for MPPT and much better in discontinuous mode than double sample
+		//	update: reduced analog filter BW to 7kHz, discontinuous current should be filtered already in the analog domain
+		DEBUG_ISR GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4  T3: ~19.1us after T1
 
 		measVdcFBboost();
 
@@ -513,9 +543,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
 
-		//GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
+		DEBUG_ISR GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4  T4: ~27.2us after T1
     }
-#endif
 }
 
 /* USER CODE END 0 */
@@ -1011,8 +1040,12 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_HRTIM_TRG1;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc1.Init.DMAContinuousRequests = ENABLE;
-  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-  hadc1.Init.OversamplingMode = DISABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  hadc1.Init.OversamplingMode = ENABLE;
+  hadc1.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_8;
+  hadc1.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_3;
+  hadc1.Init.Oversampling.TriggeredMode = ADC_TRIGGEREDMODE_SINGLE_TRIGGER;
+  hadc1.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -1085,10 +1118,10 @@ static void MX_ADC2_Init(void)
   hadc2.Init.ContinuousConvMode = DISABLE;
   hadc2.Init.NbrOfConversion = 1;
   hadc2.Init.DiscontinuousConvMode = DISABLE;
-  hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_TRGO;
-  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc2.Init.DMAContinuousRequests = ENABLE;
-  hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc2.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
   hadc2.Init.OversamplingMode = ENABLE;
   hadc2.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_128;
   hadc2.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_3;
@@ -1255,7 +1288,7 @@ static void MX_HRTIM1_Init(void)
     Error_Handler();
   }
   if (HAL_HRTIM_RollOverModeConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_TIM_FEROM_BOTH|HRTIM_TIM_BMROM_BOTH
-                              |HRTIM_TIM_ADROM_BOTH|HRTIM_TIM_OUTROM_BOTH
+                              |HRTIM_TIM_ADROM_CREST|HRTIM_TIM_OUTROM_BOTH
                               |HRTIM_TIM_ROM_BOTH) != HAL_OK)
   {
     Error_Handler();
@@ -1745,7 +1778,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_0|GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15|GPIO_PIN_0
+                          |GPIO_PIN_4, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
@@ -1754,8 +1788,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_14
                           |GPIO_PIN_7, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : PC13 PC14 PC0 PC4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_0|GPIO_PIN_4;
+  /*Configure GPIO pins : PC13 PC14 PC15 PC0
+                           PC4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15|GPIO_PIN_0
+                          |GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
