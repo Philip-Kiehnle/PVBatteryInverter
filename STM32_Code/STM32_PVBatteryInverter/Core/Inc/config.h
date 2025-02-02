@@ -79,7 +79,7 @@
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // 2.301897321 -> 23mA per LSB
 
-#define IAC_OFFSET_RAW 2629
+#define IAC_OFFSET_RAW 2631  // 2629: +60mA  2631: 0mA
 #define IAC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IAC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IAC_RAW_TO_10mA (IAC_mV_per_LSB * 100.0/IAC_mV_per_A)  // 2.301897321 -> 23mA per LSB
