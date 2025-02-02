@@ -423,10 +423,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	//static volatile uint16_t vdc_sinc_mix_100mV;
 	static volatile uint16_t cnt20kHz_20ms = 0;
 
-	/************************************/
-	/* Highest priority: Grid control	*/
-	/* 	execution rate: 20kHz			*/
-	/************************************/
+	/********************************************************/
+	/* Highest priority: Grid control						*/
+	/* 	execution rate: 20kHz								*/
+	/* 	runtime: max18.4us									*/
+	/*  max possible runtime without compare unit 3 change: */
+	/*  25-5.1=19.9us										*/
+	/********************************************************/
 
 	// ADC1: two channels, Vac and i_ac
 	// HRTIM1 triggers ADC once per period and DMA calls this callback if ADC1ConvertedData[2] is full
@@ -483,8 +486,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		/* Lower priority: regular error checking			*/
 		/* 	current errors are checked by analog watchdog 	*/
 		/* 	execution rate: 40kHz							*/
-		/* 	runtime in normal operation: ~?us				*/
-		/* 	runtime in error case: ~?us						*/
+		/* 	runtime in normal operation: ~2.1us				*/
+		/* 	runtime in error case: ~3.1us					*/
 		/****************************************************/
 		checkErrors();
 		static uint32_t blankingCnt = 0;
@@ -508,7 +511,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		/********************************************/
 		/* Lowest priority: DC stage control		*/
 		/* 	DC voltage regulation and MPP tracking	*/
-		/* 	runtime: ~?us							*/
+		/* 	runtime: ~5.8 to 8.9us					*/
 		/********************************************/
 
 		// 128x oversampling takes 128x(2.5+12.5) @ 170/4=42.5MHz -> 45.18us
@@ -697,6 +700,14 @@ int main(void)
     /* PWM Generation Error */
     Error_Handler();
   }
+
+  // Shift ADC trigger for phase correct ADC sampling
+  // ADC oversample 8x need to be shifted 4x (15/42.5MHz) = 1.41176us
+  // one up-down PWM period counts 2x8500 in 50us
+  // 1.41176us/50us * (2*8500) = 480
+  // 8500-480=8020  // Set this value in GUI compare unit 3, then ISR starts execution 5.1us after CNT_MAX (period)
+  // Without the extra compare unit (using period of TimerA for ADC trigger) is takes 6.6us until DMA triggers the HAL_ADC_ConvCpltCallback
+
   if (   HAL_HRTIM_WaveformCounterStart(&hhrtim1, HRTIM_TIMERID_TIMER_A) != HAL_OK)
   {
     /* PWM Generation Error */
@@ -1313,7 +1324,7 @@ static void MX_HRTIM1_Init(void)
     Error_Handler();
   }
   pADCTriggerCfg.UpdateSource = HRTIM_ADCTRIGGERUPDATE_TIMER_A;
-  pADCTriggerCfg.Trigger = HRTIM_ADCTRIGGEREVENT13_TIMERA_PERIOD;
+  pADCTriggerCfg.Trigger = HRTIM_ADCTRIGGEREVENT13_TIMERA_CMP3;
   if (HAL_HRTIM_ADCTriggerConfig(&hhrtim1, HRTIM_ADCTRIGGER_1, &pADCTriggerCfg) != HAL_OK)
   {
     Error_Handler();
@@ -1331,6 +1342,7 @@ static void MX_HRTIM1_Init(void)
     Error_Handler();
   }
   pTimerCtl.UpDownMode = HRTIM_TIMERUPDOWNMODE_UPDOWN;
+  pTimerCtl.GreaterCMP3 = HRTIM_TIMERGTCMP3_EQUAL;
   pTimerCtl.GreaterCMP1 = HRTIM_TIMERGTCMP1_EQUAL;
   pTimerCtl.DualChannelDacEnable = HRTIM_TIMER_DCDE_DISABLED;
   if (HAL_HRTIM_WaveformTimerControl(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, &pTimerCtl) != HAL_OK)
@@ -1372,6 +1384,11 @@ static void MX_HRTIM1_Init(void)
   }
   pCompareCfg.CompareValue = 4250;
   if (HAL_HRTIM_WaveformCompareConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, &pCompareCfg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  pCompareCfg.CompareValue = 8020;
+  if (HAL_HRTIM_WaveformCompareConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, &pCompareCfg) != HAL_OK)
   {
     Error_Handler();
   }

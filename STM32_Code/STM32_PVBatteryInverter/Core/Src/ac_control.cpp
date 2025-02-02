@@ -131,7 +131,7 @@ void calc_p_ac(control_ref_t* ctrl_ref)
 
 int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v_dc_FBboost_sincfilt_100mV, uint16_t v_dc_FBboost_filt50Hz_100mV, int16_t v_ac_raw, uint16_t i_ac_raw)
 {
-	DEBUG_ISR GPIOC->BSRR = (1<<15);  // set Testpin TP202 PC15
+	//DEBUG_ISR GPIOC->BSRR = (1<<15);  // set Testpin TP202 PC15; pin operation takes some extra time
 	static int16_t duty = 0;
 	static uint32_t cnt_pll_locked = 0;
 
@@ -589,7 +589,7 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 		}
 	}
 
-	DEBUG_ISR GPIOC->BRR = (1<<15);  // reset Testpin TP202 PC15
+	//DEBUG_ISR GPIOC->BRR = (1<<15);  // reset Testpin TP202 PC15; pin operation takes some extra time
 	// from function enter to here
 	// with -O3 and delta_v float calculation 25.58us
 	// with -O3 and delta_v fixp calculation  19.08us  with -O2 19.14us
