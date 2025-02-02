@@ -384,6 +384,40 @@ void calc_and_wait(uint32_t delay)
 }
 
 
+// +-50A sensor range with 3.3V ADC:
+// −62.1A to +32.1A
+// analog watchdog: (dont use filtering in AWD1 because it does not work with sequence mode (scan conversion))
+// oversampling is enabled (8xOSR; 3bit shift -> 4-(log2(8)/3 -1) = 4bit shift down
+#define I_AC_AWD_THRESHOLD_HIGH ((E_I_AC_PULSE_MAX_AMP_10mA/IAC_RAW_TO_10mA + IAC_OFFSET_RAW)/16)
+#define I_AC_AWD_THRESHOLD_LOW ((-E_I_AC_PULSE_MAX_AMP_10mA/IAC_RAW_TO_10mA + IAC_OFFSET_RAW)/16)
+// for test
+//#define I_AC_AWD_THRESHOLD_HIGH 208  // +16.0Ampere -> 1600/IAC_RAW_TO_10mA + 2632 = 3327 /16
+//#define I_AC_AWD_THRESHOLD_LOW 121  // -16.0Ampere -> -1600/IAC_RAW_TO_10mA + 2632 = 1937 /16
+//#define I_AC_AWD_THRESHOLD_HIGH 167  // +1.0Ampere -> 100/IAC_RAW_TO_10mA + 2632 = 2675 /16
+//#define I_AC_AWD_THRESHOLD_LOW 162  // -1.0Ampere -> -100/IAC_RAW_TO_10mA + 2632 = 2589 /16
+void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
+{
+	shutdownAll();
+	set_sys_errorcode(EC_I_AC_PULSE_MAX);
+}
+
+
+void configure_analog_watchdog()
+{
+	/* Set ADC analog watchdog channels to be monitored */
+	LL_ADC_SetAnalogWDMonitChannels(ADC1, LL_ADC_AWD1, LL_ADC_AWD_CHANNEL_7_REG);
+
+	/* Set ADC analog watchdog thresholds */
+	LL_ADC_ConfigAnalogWDThresholds(ADC1, LL_ADC_AWD1, I_AC_AWD_THRESHOLD_HIGH, I_AC_AWD_THRESHOLD_LOW);
+
+	/*## Configuration of ADC interruptions ####################################*/
+	// ADC1_2 interrupts are enabled in GUI
+	/* Enable ADC analog watchdog 1 interruption */
+	LL_ADC_EnableIT_AWD1(ADC1);
+	LL_ADC_ClearFlag_AWD1(ADC1);
+}
+
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
 	//static volatile uint16_t vdc_sinc_mix_100mV;
@@ -594,6 +628,9 @@ int main(void)
   MX_COMP2_Init();
   /* USER CODE BEGIN 2 */
 
+  /* Configure the overcurrent watchdog */
+  configure_analog_watchdog();
+
   /* Configure the FDCAN peripheral */
   FDCAN_Config();  // CAN2 is connected to Battery Cell Stack Controller CAN Bus
 
@@ -696,6 +733,19 @@ int main(void)
   uSend(__TIME__);
   uSend("\n");
   GPIOB->BSRR = (1<<0);  // disable red LED
+
+#define I_AC_AWD_THRESHOLD_to_10mA(x) ((x*16-IAC_OFFSET_RAW)*IAC_RAW_TO_10mA)
+  uSend("I_AC analog watchdog config:\n");
+  uSend(" high: ");
+  uSendInt(I_AC_AWD_THRESHOLD_HIGH);
+  uSend(" = ");
+  uSend_10m(I_AC_AWD_THRESHOLD_to_10mA(I_AC_AWD_THRESHOLD_HIGH));
+  uSend(" A\n");
+  uSend(" low:  ");
+  uSendInt(I_AC_AWD_THRESHOLD_LOW);
+  uSend(" = ");
+  uSend_10m(I_AC_AWD_THRESHOLD_to_10mA(I_AC_AWD_THRESHOLD_LOW));
+  uSend(" A\n\n");
 
   /*## Check if the system has resumed from IWDG reset ####################*/
   if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != 0x00u)
@@ -1032,7 +1082,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.GainCompensation = 0;
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 2;

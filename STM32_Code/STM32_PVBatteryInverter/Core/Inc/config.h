@@ -43,6 +43,8 @@
 #define E_I_AC_PULSE_MAX_AMP_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
 #define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
 //#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
+#define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
+#define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
 #define PERMIL_V_DFFW_MIN  200  // 20% grid voltage direct feedforward, 80% PLL
 //#define PERMIL_V_DFFW_MIN  500  // 50% grid voltage direct feedforward, 50% PLL; Test at 31Vac trafo did not cause LCL oscillation
@@ -51,9 +53,6 @@
 #define PERMIL_V_DFFW_DECR 1  // 1 equals 0.1% per control cycle; @70% direct feedforward, it takes 600*50µs=30ms to come back to 10%
 // always 50% has higher inductor sound
 // always 80% has even higher inductor sound
-
-#define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
-#define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
 //#define P_AC_MAX ((5*32)/1.41) //113W  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
@@ -72,6 +71,23 @@
 #define FAN_P_AC_STOP 200
 #define FAN_RUNTIME_MINIMUM_SEC 15
 
+/*******************/
+/* Current sensors */
+/*******************/
+#define IDC_OFFSET_RAW 2632  // 2635->-60mA
+#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
+#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
+#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // 2.301897321 -> 23mA per LSB
+
+#define IAC_OFFSET_RAW 2629
+#define IAC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
+#define IAC_mV_per_A 35 // current sensor datasheet 35mV/A
+#define IAC_RAW_TO_10mA (IAC_mV_per_LSB * 100.0/IAC_mV_per_A)  // 2.301897321 -> 23mA per LSB
+
+
+/*******/
+/* PWM */
+/*******/
 
 // 20kHz PWM, 20kHz controlfreq -> repetition counter = 1
 // 20kHz / ((1+1)/2) = 20kHz
