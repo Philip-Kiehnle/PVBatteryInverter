@@ -138,10 +138,6 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	bool acGrid_valid = false;
 
 	// Grid current
-#define IAC_OFFSET_RAW 2629
-#define IAC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
-#define IAC_mV_per_A 35 // current sensor datasheet 35mV/A
-#define IAC_RAW_TO_10mA (IAC_mV_per_LSB * 100.0/IAC_mV_per_A)
 	i_ac_10mA = (i_ac_raw-IAC_OFFSET_RAW) * IAC_RAW_TO_10mA;
 
 	// Grid voltage
