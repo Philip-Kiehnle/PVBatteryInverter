@@ -453,7 +453,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 		measVdcFBgrid();  // if runtime becomes critical, run this line after ac dutycycle calculation
 
-#define V_AC_CALIB_OFFSET 1979
+//#define V_AC_CALIB_OFFSET 1979 // Vin=0V offset=0.13V; Vin=313Vsine offset=0.87V
+#define V_AC_CALIB_OFFSET 1982 // Vin=0V offset=-0.41V; Vin=313Vsine offset=0.1V
 #define V_AC_CALIB_GAIN_PER_MIL 989
 
 		int v_ac_raw_no_calib = ADC1ConvertedData[0];

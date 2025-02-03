@@ -328,8 +328,15 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 			//pll_set_phaseOffset((1<<15) * +9.95/20);  // i_rms 120-138mA
 #else
 			// direct grid
+			// 10us deviation means voltage difference of 325*sin(2*pi*50Hz*10us) = 1.02V ; (2pi*50HZ*2mH) -> 1V/0.6A = 1.6A
 			//pll_set_phaseOffset((1<<15) * +10.0/20); // with 2x1kW resistance: EnergyMeter ~200VA
-			pll_set_phaseOffset((1<<15) * +9.98/20);  // with 2x1kW resistance: EnergyMeter ~16W ~20VA; without PV 3.2W 11-15VA; direct AC no PV: 2.6-5.2W, 80VA
+			//pll_set_phaseOffset((1<<15) * +9.99/20);  // no 25kHZ ringing without FFWD but +-2A i_ac
+			//pll_set_phaseOffset((1<<15) * +9.98/20);  // with 2x1kW resistance: EnergyMeter ~16W ~20VA; without PV 3.2W 11-15VA; direct AC no PV: 2.6-5.2W, 80VA; 75W-Emu: ~70VA 24kHz Oscillation with 20%FFW; 0%FFD 200VA +-1.8A
+			//pll_set_phaseOffset((1<<15) * +9.96/20);  // +-1.3A i_ac 170VA
+			//pll_set_phaseOffset((1<<15) * +9.95/20);  // +-0.91A i_ac Osci i_rms_cyc= 305mA i_mean_cyc=52mA; 70VA CONTROL_PERIOD
+			pll_set_phaseOffset((1<<15) * +9.9477/20);  // +-0.80A i_ac Osci i_rms_cyc= 276mA i_mean_cyc=13mA; 69VA CONTROL_PERIOD + 1.28us group delay of analog filter + 1.02us delay of AMC3330 -> second test 73VA 4.4-6W
+			//pll_set_phaseOffset((1<<15) * +9.9467/20);  // +-0.80A i_ac Osci i_rms_cyc= 315mA i_mean_cyc=-17mA; 72VA CONTROL_PERIOD + 1.28us group delay of analog filter + 2.02us delay of AMC3330
+			//pll_set_phaseOffset((1<<15) * +9.94/20);  // +-0.80A i_ac Osci i_rms_cyc= 320mA i_mean_cyc=-10mA; 73VA
 #endif
 			nextState(WAIT_ZERO_CROSSING);
 		}

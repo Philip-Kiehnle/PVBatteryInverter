@@ -174,7 +174,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			   ) {
 				ctrl_ref->mode = VDC_CONTROL;
 #if SYSTEM_HAS_BATTERY == 1
-				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
+				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;  // todo: check this line
 #else
 				ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);
 #endif //SYSTEM_HAS_BATTERY
