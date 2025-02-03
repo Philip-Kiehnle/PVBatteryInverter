@@ -46,9 +46,12 @@
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
 #define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
 
-#define PERMIL_V_DFFW_MIN  200  // 20% grid voltage direct feedforward, 80% PLL
+// todo: check if feedforward still causes i_ac 500mA 24kHz oscillation
+#define PERMIL_V_DFFW_MIN  0  // 0% grid voltage direct feedforward, 100% PLL
+//#define PERMIL_V_DFFW_MIN  200  // 20% grid voltage direct feedforward, 80% PLL; causes 25kHz 500mA i_ac when phase is not calibrated
 //#define PERMIL_V_DFFW_MIN  500  // 50% grid voltage direct feedforward, 50% PLL; Test at 31Vac trafo did not cause LCL oscillation
-#define PERMIL_V_DFFW_MAX  500  // 50% maximum in case of high current due to distorted grid
+//#define PERMIL_V_DFFW_MAX  500  // 50% maximum in case of high current due to distorted grid
+#define PERMIL_V_DFFW_MAX  0
 #define PERMIL_V_DFFW_INCR 60  // 60 equals 6% per control cycle -> 60% in 500µs
 #define PERMIL_V_DFFW_DECR 1  // 1 equals 0.1% per control cycle; @70% direct feedforward, it takes 600*50µs=30ms to come back to 10%
 // always 50% has higher inductor sound

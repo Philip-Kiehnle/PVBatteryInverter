@@ -20,6 +20,11 @@
 //const int L_EXT = L * (1<<EXTEND);
 //const int R_EXT = R * (1<<EXTEND);
 
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 int32_t get_VGRID_TRATIO()
 {
 	return VGRID_TRATIO;
@@ -50,6 +55,9 @@ int32_t get_IGRID_ADCR()
 	return IGRID_ADCR;
 }
 
+// DONT use V1
+// V1: Problem in saturation when previous proportional value is clamped.
+//     The output does adverse things when input changes, because x is subtracted but was never added to y.
 // generic PI controller:
 // tustin approximation: s = 2/T * (z-1)/(z+1)
 // y(k) = y(k-1) + Kp * (x(k)-x(k-1)) + Ki * T/2 * (x(k)+x(k-1))
@@ -62,6 +70,41 @@ void pi_step(int32_t x, piController *ctrl)
 	} else if (ctrl->y < ctrl->y_min) {
 		ctrl->y = ctrl->y_min;
 	}
+	ctrl->x_prev = x;
+}
+
+// V2: Fixes adverse control action of V1 during saturation by omitting the subtraction of Kp*x_prev
+// uses Tustin as well
+// Clamping vs Back calculation:
+// "Back calculation basically is a relict of past times, when sampling times have been large,
+// logical circuits have been expensive and analogue implementations of Kb were superior to clamping circuits.
+// So under the condition that the sampling time is >10 times larger than the systems time constant,
+// clamping is most likely the better and easier choice in most cases."
+void piClamp_step(int32_t x, piControllerClamp *ctrl)
+{
+	int32_t kp_x = ctrl->Kp * x;
+	int32_t ki_x = ctrl->q * (x + ctrl->x_prev);  // q = Ki*T/2
+
+	ctrl->y = kp_x + ctrl->integrator + ki_x;
+
+	// output and integrator saturation
+	// This implementation respects the proportional part and clamps integrator to lower value.
+	// Thus providing fast recovery.
+	if (ctrl->y > ctrl->y_max) {
+		ctrl->y = ctrl->y_max;
+		// check how much of ki_x was needed to reach saturation
+		if(x > 0) {
+			ki_x = max(0, ctrl->y_max - (kp_x+ctrl->integrator));  // todo: what happens if integrator is negative
+		}
+	} else if (ctrl->y < ctrl->y_min) {
+		ctrl->y = ctrl->y_min;
+		// check how much of ki_x was needed to reach saturation
+		if(x < 0) {
+			ki_x = min(0, ctrl->y_min - (kp_x+ctrl->integrator));  // todo: what happens if integrator is negative
+		}
+	}
+
+	ctrl->integrator += ki_x;
 	ctrl->x_prev = x;
 }
 
@@ -114,6 +157,7 @@ int cx[3] = { 	(1<<EXTEND_BITS)*	(Kp + (4*Ki*TA*wc)/(pow(TA*w0,2) + 4*wc*TA + 4)
 int cy[2] = {	(1<<EXTEND_BITS)*  (-(2*pow(TA*w0,2) - 8)/(pow(TA*w0,2) + 4*wc*TA + 4)),
 				(1<<EXTEND_BITS)*	(1 - (2*pow(TA*w0,2) + 8)/(pow(TA*w0,2) + 4*wc*TA + 4))
 };
+#undef Kp
 
 // V2: https://imperix.com/doc/implementation/proportional-resonant-controller
 int a1 = (1<<EXTEND_BITS)* (4*Ki*TA*wc);
@@ -335,6 +379,19 @@ int16_t step_pi_Vdc2IacAmp(int32_t vdc_ref, int32_t vdc)
 	pi_step((vdc-vdc_ref), &piCtrl);  // no ripple comp
 
 	return (piCtrl.y>>EXTEND_PI_VDC);
+}
+
+piControllerClamp piCtrlClamp = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0, .integrator=0,  // PV to grid
+//piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .y_max=0, .x_prev=0, .integrator=0,  // Grid to battery
+//piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0, .integrator=0,  // bidi
+								.Kp=sqrt(2)*Kp_Vdc,
+								.q=sqrt(2)*(Ki_Vdc*T/2) };
+
+int16_t step_piClamp_Vdc2IacAmp(int32_t vdc_ref, int32_t vdc)
+{
+	piClamp_step((vdc-vdc_ref), &piCtrlClamp);  // no ripple comp
+
+	return (piCtrlClamp.y>>EXTEND_PI_VDC);
 }
 
 int16_t step_pi_Vdc2IacAmp_volt_comp(int32_t vdc_ref, int32_t vdc, int16_t phase, int16_t v_ac_amp)

@@ -166,6 +166,7 @@ R=[0.8428] #define R (0.8428)
 loadRL = src_load.loadRL(L=L_nonlinear, R=R, T=T, model=L_model.LINEAR_SAT)  # nonlinear (saturating) inductor model
 #loadRL = src_load.loadRL(L=L_nonlinear, R=R, T=T, model=L_model.REMANENT)  # remanent inductor model
 i_ref = 3 * np.sin(fgrid*arg+arg_offset)
+i_ref_amp = np.zeros(N)
 v_pred = np.zeros(N)
 i_grid = np.zeros(N)
 
@@ -183,11 +184,13 @@ GRID = True
 for i in range(len(v_grid)-1):
     if pll_locked:
         if 1:  # voltage and current control
-            i_ref_amp_10mA = ctrl.step_pi_Vdc2IacAmp( int( 100*Vdc_ref), int( 100*v_dc[i]))
+            #i_ref_amp_10mA = ctrl.step_pi_Vdc2IacAmp( int( 100*Vdc_ref), int( 100*v_dc[i]))
+            i_ref_amp_10mA = ctrl.step_piClamp_Vdc2IacAmp( int( 100*Vdc_ref), int( 100*v_dc[i]))
 #            i_ref_amp_10mA = ctrl.step_pi_Vdc2IacAmp_volt_comp( int(100*Vdc_ref), int(100*v_dc[i]), int(phi_pll[i]*SCALE_PHASE2RAW), int(100*vac_sec))
 #            i_ref_amp = ctrl.step_pi_Vdc2IacAmp_charge_comp( int( SCALE_VIN2ADCRAW*Vdc_ref), int( SCALE_VIN2ADCRAW*v_dc[i]),
 #                                                             int( SCALE_VIN2ADCRAW*vac_sec ), int( SCALE_VIN2ADCRAW*i_ref[i] ) ) / SCALE_I2ADCRAW
             print("Vdc_ref={:.02f} v_dc={:.02f} i_ref_amp={:.03f}".format(Vdc_ref, v_dc[i], i_ref_amp_10mA/100))
+            i_ref_amp[i+1] = i_ref_amp_10mA/100
             i_ref[i+1] = i_ref_amp_10mA/100 * np.cos(phi_pll[i+1])
 
             if 0:  # with current sensor
@@ -267,6 +270,7 @@ ax2._get_lines.prop_cycler = ax1._get_lines.prop_cycler
 ax2.plot(t, phi_pll, label='phi_pll')
 ax2.plot(t, freq_pll, label='freq_pll')
 
+ax2.plot(t, i_ref_amp, label='i_ref_amp')
 ax2.plot(t, i_ref, label='i_ref')
 ax2.plot(t, i_grid, label='i_grid')
 ax2.plot(t, i_dc, label='i_dc')

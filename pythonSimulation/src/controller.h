@@ -103,8 +103,20 @@ typedef struct {
 } piController;
 
 
+typedef struct {
+	int32_t y;
+	int32_t y_min;
+	int32_t y_max;
+	int32_t x_prev;
+	int32_t integrator;
+	int32_t Kp;
+	int32_t q;  // (Ki*T/2)
+} piControllerClamp;
+
+
 extern piController piCtrl;
 void pi_step(int32_t x, piController *ctrl);
+void piClamp_step(int32_t x, piControllerClamp *ctrl);
 int pr_step(int x);
 
 int16_t calc_IacAmp2VacSecAmpDCscale(int32_t i_amp);

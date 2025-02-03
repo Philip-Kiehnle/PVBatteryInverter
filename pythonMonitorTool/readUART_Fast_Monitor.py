@@ -99,7 +99,7 @@ print(f'i_ac_10mA  min={min(value):.3f} avg={sum(value)/FAST_MON_FRAMES:.3f} max
 value = np.clip(0.01*vars['i_ac_ref_amp_10mA'], -5000, 5000)
 print(f'i_ac_ref_amp_10mA  min={min(value):.3f} avg={sum(value)/FAST_MON_FRAMES:.3f} max={max(value):.3f} ')
 
-plot_ax('duty', 0.1)
+#plot_ax('duty', 1)
 plot_ax('v_dc_modulator_100mV', 0.1)
 plot_ax('v_ac_100mV', 0.1)
 
