@@ -42,8 +42,20 @@ typedef struct {
 
 typedef struct {
 	uint16_t fan_state;
+
+	// battery related: last 8 elements of batteryStatus_t
+	uint16_t bat_soc_10mPercent;
+	uint16_t bat_voltage_100mV;
+	int16_t bat_power_W;
+	uint16_t bat_p_charge_max;
+	uint16_t bat_p_discharge_max;
+	uint16_t bat_minVcell_mV;
+	uint16_t bat_maxVcell_mV;
+	uint16_t bat_minTemp_maxTemp;  // [minTemp; maxTemp]
+
 	uint16_t bat_cell_v_mV[96];
 	uint16_t bat_cell_balancing[8];
+	uint16_t bat_cell_temperature[4*14];
 } modbus_reg_ro_t;
 
 #ifdef __cplusplus
