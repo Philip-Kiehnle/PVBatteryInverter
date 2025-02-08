@@ -2,7 +2,8 @@
 #define INC_CONFIG_H
 
 //#define SYS_MODE HYBRID_PCC_SENSOR
-#define SYS_MODE PV2AC
+//#define SYS_MODE PV2AC
+#define SYS_MODE PV2BAT
 
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
@@ -77,7 +78,7 @@
 /*******************/
 /* Current sensors */
 /*******************/
-#define IDC_OFFSET_RAW 2632  // 2635->-60mA
+#define IDC_OFFSET_RAW 2629  // 2635->-60mA  2632:~0mA at room temperature -87mA at 3°C
 #define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // 2.301897321 -> 23mA per LSB

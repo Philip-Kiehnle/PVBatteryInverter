@@ -77,11 +77,52 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 	if (la >= OFFSET && la < OFFSET+sizeof(modbus_reg_ro_t)/2) {
 		int addr = la-OFFSET;
 
+		// single registers:
+
+		if (addr == offsetof(modbus_reg_ro_t, bat_soc_10mPercent)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->soc_percent*100;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_voltage_100mV)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->voltage_100mV;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_power_W)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->power_W;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_p_charge_max)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->p_charge_max;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_p_discharge_max)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->p_discharge_max;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_minVcell_mV)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->minVcell_mV;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_maxVcell_mV)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->maxVcell_mV;
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_minTemp_maxTemp)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return (battery->maxTemp<<8 | battery->minTemp);
+		}
+
+
+		// multiple registers:
+
 		constexpr uint16_t REG_START_bat_cell_v_mV = offsetof(modbus_reg_ro_t, bat_cell_v_mV)/2;
 		constexpr uint16_t REG_END_bat_cell_v_mV = REG_START_bat_cell_v_mV + sizeof(modbus_reg_ro_t::bat_cell_v_mV)/2;
 
 		constexpr uint16_t REG_START_bat_cell_balancing = offsetof(modbus_reg_ro_t, bat_cell_balancing)/2;
 		constexpr uint16_t REG_END_bat_cell_balancing = REG_START_bat_cell_balancing + sizeof(modbus_reg_ro_t::bat_cell_balancing)/2;
+
+		constexpr uint16_t REG_START_bat_cell_temperature = offsetof(modbus_reg_ro_t, bat_cell_temperature)/2;
+		constexpr uint16_t REG_END_bat_cell_temperature = REG_START_bat_cell_temperature + sizeof(modbus_reg_ro_t::bat_cell_temperature)/2;
 
 		if (addr >= REG_START_bat_cell_v_mV && addr < REG_END_bat_cell_v_mV) {
 			return get_battery_vCell_mV(addr-REG_START_bat_cell_v_mV);
@@ -93,6 +134,9 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 				bal_state |= get_battery_balancingState(12*id_stack + i) << i;
 			}
 			return bal_state;
+
+		} else if (addr >= REG_START_bat_cell_temperature&& addr < REG_END_bat_cell_temperature) {
+			return get_battery_temperature(addr-REG_START_bat_cell_temperature);
 
 		} else if (addr == offsetof(modbus_reg_ro_t, fan_state)/2) {
 			return fan_control_get_state();
@@ -121,6 +165,10 @@ uint16_t mbus_hybridinverter_write(uint32_t la, uint16_t value)
 
 		uint16_t* regs = (uint16_t*)&modbus_reg_rw;
 		regs[addr] = value;
+
+		// Some registers do not need and extra command and only have to be written,
+		// e.g. p_bat_chg_max_W
+		// But some registers require extra actions:
 
 		if (addr == offsetof(modbus_reg_rw_t, p_ac_soft_W)/2) {
 			modbus_p_ac_soft_update = true;

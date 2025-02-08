@@ -44,8 +44,8 @@ constexpr GMPPT_parameter_t GMPPTPARAM = GMPPT_parameter_t{
 //constexpr uint16_t PV_LOW_CURRENT_SEC = 1;  // switch of after low power for this amount of seconds
 //constexpr uint16_t PV_WAIT_SEC = 5*60;  // wait this amount of seconds until booster stage is started again; max 21 minutes
 //debug
-constexpr uint16_t PV_LOW_CURRENT_mA = 40;  // 40mA*50V = 2W
-constexpr uint16_t PV_LOW_CURRENT_SEC = 10;
+constexpr uint16_t PV_LOW_CURRENT_mA = 20;  // 20mA*350V = 7W
+constexpr uint16_t PV_LOW_CURRENT_SEC = 30;
 constexpr uint16_t PV_WAIT_SEC = 1*30;
 //constexpr uint16_t PV_LOW_POWER = 2;  todo use dc current because power is affected by AC 100Hz ripple
 //constexpr uint16_t PV_LOW_POWER_SEC = 5;

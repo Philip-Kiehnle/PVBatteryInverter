@@ -531,11 +531,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 		measVdcFBboost();
 
-#define IDC_OFFSET_RAW 2632  // 2635->-60mA
-#define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
-#define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
-#define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)
-
 #define CNT_I_DC_AVG 16  // +3bit in hardware
 		int16_t i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
 
