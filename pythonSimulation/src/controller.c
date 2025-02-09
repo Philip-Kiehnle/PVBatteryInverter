@@ -367,9 +367,9 @@ int16_t calc_v_amp_pred(int32_t i_amp, int32_t i_ac_100mA)
 
 
 // scale i_dc to i_ac_rms to i_ac_amp
-piController piCtrl = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // PV to grid
+//piController piCtrl = { .y=0, .y_min=0, .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // PV to grid
 //piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_RAW*(1<<EXTEND_PI_VDC), .y_max=0, .x_prev=0,  // Grid to battery
-//piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // bidi
+piController piCtrl = { .y=0, .y_min=-IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .y_max=IAC_AMP_MAX_10mA*(1<<EXTEND_PI_VDC), .x_prev=0,  // bidi
 								.c1=sqrt(2)*(Ki_Vdc*T/2 + Kp_Vdc),
 								.c2=sqrt(2)*(Ki_Vdc*T/2 - Kp_Vdc) };
 

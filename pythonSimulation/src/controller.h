@@ -90,7 +90,8 @@ int32_t get_IGRID_ADCR();
 //#define IAC_AMP_MAX_10mA 8.0*100  // -8.16 to 8.2A with inductor LUT; noise from inductors
 
 // 230V grid:
-#define IAC_AMP_MAX_10mA 2.0*100  // stable with 2x1kW series resistance
+//#define IAC_AMP_MAX_10mA 2.0*100
+#define IAC_AMP_MAX_10mA 3.0*100  // 325*3/2=488W
 
 
 typedef struct {

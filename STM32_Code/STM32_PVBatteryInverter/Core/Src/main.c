@@ -795,14 +795,14 @@ int main(void)
 
 		calc_and_wait(250);  //ms
 
-#if SYSTEM_HAS_BATTERY == 1
-		const batteryStatus_t* battery = get_batteryStatus();
-#endif //SYSTEM_HAS_BATTERY
-
 #if 0  // debug print battery info
 		/************************/
 		/* print battery status */
 		/************************/
+
+#if SYSTEM_HAS_BATTERY == 1
+		const batteryStatus_t* battery = get_batteryStatus();
+#endif //SYSTEM_HAS_BATTERY
 
 		uSend("\nBatteryStatus\n");
 
