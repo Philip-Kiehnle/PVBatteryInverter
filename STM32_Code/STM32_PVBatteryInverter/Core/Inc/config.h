@@ -1,9 +1,9 @@
 #ifndef INC_CONFIG_H
 #define INC_CONFIG_H
 
-//#define SYS_MODE HYBRID_PCC_SENSOR
+#define SYS_MODE HYBRID_PCC_SENSOR
 //#define SYS_MODE PV2AC
-#define SYS_MODE PV2BAT
+//#define SYS_MODE PV2BAT
 
 #define COMM_READ_ELECTRICITY_METER 1  // listen for smart meter data and send inverterdata after reception
 #define SYSTEM_HAS_BATTERY 1
@@ -60,7 +60,8 @@
 
 #define P_AC_MIN 0 // feed into grid only -> no AC2BAT for now
 //#define P_AC_MAX ((5*32)/1.41) //113W  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
-#define P_AC_MAX (210)  // 210W minimum for energy packet controller
+//#define P_AC_MAX (210)  // 210W minimum for energy packet controller
+#define P_AC_MAX (460)  // 460W for 2A Fuse
 #define P_BAT_MIN_CHARGE 2
 #define P_MIN_PV2AC 10
 
