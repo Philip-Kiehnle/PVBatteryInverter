@@ -107,9 +107,13 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 			const batteryStatus_t* battery = get_batteryStatus();
 			return battery->maxVcell_mV;
 
-		} else if (addr == offsetof(modbus_reg_ro_t, bat_minTemp_maxTemp)/2) {
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_minTempCell_maxTempCell)/2) {
 			const batteryStatus_t* battery = get_batteryStatus();
-			return (battery->maxTemp<<8 | battery->minTemp);
+			return (battery->maxTempCell<<8 | battery->minTempCell);
+
+		} else if (addr == offsetof(modbus_reg_ro_t, bat_maxTempPCB)/2) {
+			const batteryStatus_t* battery = get_batteryStatus();
+			return battery->maxTempPCB;
 		}
 
 
@@ -124,6 +128,9 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 		constexpr uint16_t REG_START_bat_cell_temperature = offsetof(modbus_reg_ro_t, bat_cell_temperature)/2;
 		constexpr uint16_t REG_END_bat_cell_temperature = REG_START_bat_cell_temperature + sizeof(modbus_reg_ro_t::bat_cell_temperature)/2;
 
+		constexpr uint16_t REG_START_bat_PCB_temperature = offsetof(modbus_reg_ro_t, bat_PCB_temperature)/2;
+		constexpr uint16_t REG_END_bat_PCB_temperature = REG_START_bat_PCB_temperature + sizeof(modbus_reg_ro_t::bat_PCB_temperature)/2;
+
 		if (addr >= REG_START_bat_cell_v_mV && addr < REG_END_bat_cell_v_mV) {
 			return get_battery_vCell_mV(addr-REG_START_bat_cell_v_mV);
 
@@ -136,7 +143,10 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 			return bal_state;
 
 		} else if (addr >= REG_START_bat_cell_temperature&& addr < REG_END_bat_cell_temperature) {
-			return get_battery_temperature(addr-REG_START_bat_cell_temperature);
+			return get_battery_cell_temperature(addr-REG_START_bat_cell_temperature);
+
+		} else if (addr >= REG_START_bat_PCB_temperature&& addr < REG_END_bat_PCB_temperature) {
+			return get_battery_PCB_temperature(addr-REG_START_bat_PCB_temperature);
 
 		} else if (addr == offsetof(modbus_reg_ro_t, fan_state)/2) {
 			return fan_control_get_state();

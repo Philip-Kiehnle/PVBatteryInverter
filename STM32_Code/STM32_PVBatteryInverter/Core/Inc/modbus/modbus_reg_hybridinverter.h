@@ -51,11 +51,13 @@ typedef struct {
 	uint16_t bat_p_discharge_max;
 	uint16_t bat_minVcell_mV;
 	uint16_t bat_maxVcell_mV;
-	uint16_t bat_minTemp_maxTemp;  // [minTemp; maxTemp]
+	uint16_t bat_minTempCell_maxTempCell;  // [minTemp; maxTemp]
+	uint16_t bat_maxTempPCB;
 
 	uint16_t bat_cell_v_mV[96];
 	uint16_t bat_cell_balancing[8];
-	uint16_t bat_cell_temperature[4*14];
+	uint16_t bat_cell_temperature[4*12];
+	uint16_t bat_PCB_temperature[4*2];
 } modbus_reg_ro_t;
 
 #ifdef __cplusplus

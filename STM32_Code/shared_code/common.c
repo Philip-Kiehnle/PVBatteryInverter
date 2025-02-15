@@ -66,8 +66,9 @@ struct _sys_errordesc {
 	{ EC_BATTERY_I_CHARGE_PULSE_MAX,    "EC_BATTERY_I_CHARGE_PULSE_MAX : Max pulse charge current exceeded" },
 	{ EC_BATTERY_I_DISCHARGE_RMS_MAX,   "EC_BATTERY_I_DISCHARGE_RMS_MAX : Max rms discharge current exceeded" },
 	{ EC_BATTERY_I_DISCHARGE_PULSE_MAX, "EC_BATTERY_I_DISCHARGE_PULSE_MAX : Max pulse discharge current exceeded" },
-	{ EC_BATTERY_TEMPERATURE_MIN,       "EC_BATTERY_TEMPERATURE_MIN : Battery temperature below minimum" },
-	{ EC_BATTERY_TEMPERATURE_MAX,       "EC_BATTERY_TEMPERATURE_MAX : Battery temperature above maximum" },
+	{ EC_BATTERY_TEMPERATURE_CELL_MIN,  "EC_BATTERY_TEMPERATURE_CELL_MIN : Battery cell temperature below minimum" },
+	{ EC_BATTERY_TEMPERATURE_CELL_MAX,  "EC_BATTERY_TEMPERATURE_CELL_MAX : Battery cell temperature above maximum" },
+	{ EC_BATTERY_TEMPERATURE_PCB_MAX,   "EC_BATTERY_TEMPERATURE_PCB_MAX : Battery PCB temperature above maximum. Check Mosfet or balancing resistors." },
 	{ EC_BATTERY_OTHER,                 "EC_BATTERY_OTHER : Other BMS error, see BMS registers" },
 };
 

@@ -22,10 +22,12 @@ constexpr BatteryParameter_t BATTERY = {
 	.V_CELL_MAX_PROTECT_mV      = 4100,  // Battery_Supervisor: 4200mV
 	.I_CHARGE_MAX    = 6.0,  // Battery_Supervisor: softlimit 8A, ADC watchdog 10A
 	.I_DISCHARGE_MAX = 6.0,  // Battery_Supervisor: softlimit 8A, ADC watchdog 10A
-	.T_CELL_MIN_ERR  = 1,  // Battery_Supervisor: 0°C
-	.T_CELL_MIN_WARN = 2,
-	.T_CELL_MAX_WARN = 45,
-	.T_CELL_MAX_ERR  = 49,  // Battery_Supervisor: 50°C
+	.T_CELL_MIN_ERR  = -2,  // Battery_Supervisor: -5°C
+	.T_CELL_MIN_WARN = 0,
+	.T_CELL_MAX_WARN = 46,
+	.T_CELL_MAX_ERR  = 48,  // Battery_Supervisor: 50°C
+	.T_PCB_MAX_WARN = 56,
+	.T_PCB_MAX_ERR  = 58,  // Battery_Supervisor: 60°C
 	// For Kalman filter:
 	.REST_TIME = 400,  // s
 	.R0 = 0.02,  // internal resistance R0 of parallel cells
