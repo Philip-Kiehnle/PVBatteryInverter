@@ -19,10 +19,12 @@ constexpr BatteryParameter_t BATTERY = {
 	.V_CELL_MAX_PROTECT_mV      = 4200,
 	.I_CHARGE_MAX    = 8.0,  // ADC watchdog 10A
 	.I_DISCHARGE_MAX = 8.0,  // ADC watchdog 10A
-	.T_CELL_MIN_ERR  = 0,
-	.T_CELL_MIN_WARN = 2,
-	.T_CELL_MAX_WARN = 49,
+	.T_CELL_MIN_ERR  = -5,
+	.T_CELL_MIN_WARN = -3,
+	.T_CELL_MAX_WARN = 48,
 	.T_CELL_MAX_ERR  = 50,
+	.T_PCB_MAX_WARN = 58,
+	.T_PCB_MAX_ERR  = 60,
 };
 
 constexpr uint16_t V_CELL_IMBALANCE_INFO_mV = 250;

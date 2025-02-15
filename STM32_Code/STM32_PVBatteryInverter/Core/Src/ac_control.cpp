@@ -121,7 +121,8 @@ void calc_p_ac(control_ref_t* ctrl_ref)
 			) {
 			ctrl_ref->p_ac_rms = std::max(ctrl_ref->p_ac_external, p_default);
 		} else {
-			ctrl_ref->p_ac_rms = ctrl_ref->p_ac_external;
+			// if Ppcc=-200W but want to charge -300W, limit to -200W
+			ctrl_ref->p_ac_rms = std::clamp(ctrl_ref->p_ac_external, ctrl_ref->p_pcc, (int16_t)P_AC_MAX);
 		}
 	} else {
 		ctrl_ref->p_ac_rms = p_default;

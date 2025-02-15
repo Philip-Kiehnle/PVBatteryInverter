@@ -68,13 +68,10 @@
 /***************/
 /* Fan control */
 /***************/
-//#define FAN_P_AC_START 1200
-//#define FAN_P_AC_STOP 1000
-//#define FAN_RUNTIME_MINIMUM_SEC 30
+#define FAN_P_AC_START 1200
+#define FAN_P_AC_STOP 1000
+#define FAN_RUNTIME_MINIMUM_SEC 30
 
-#define FAN_P_AC_START 300
-#define FAN_P_AC_STOP 200
-#define FAN_RUNTIME_MINIMUM_SEC 15
 
 /*******************/
 /* Current sensors */

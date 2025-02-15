@@ -169,7 +169,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 #if SYSTEM_HAS_BATTERY == 1
 			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100))  // more feedin required and battery not empty
 					 || (ctrl_ref->p_pcc < -50 && battery->soc_percent < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
-				 && !bms.tempWarn()
+				 && !bms.warn_temperature()
 #endif //SYSTEM_HAS_BATTERY
 			   ) {
 				ctrl_ref->mode = VDC_CONTROL;
@@ -246,7 +246,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							&& (   (battery->soc_percent > 10          // enough energy for feedin
 								    && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+80)
 								    && (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50))  // feedin required; filter 1 second spikes from freezer motor start
-							    || bms.tempWarn()                      // hot or cold battery -> PV2AC
+							    || bms.warn_temperature()              // hot or cold battery -> PV2AC
 							    || battery_almost_full()               // or battery charge power has to be reduced
 							    || p_bat_50Hz >= p_bat_chg_max         // or battery charge power is large and has to be reduced
 							    || ctrl_ref->ext_ctrl_mode != EXT_OFF  // or external control
@@ -278,7 +278,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						}
 
 						// check if battery should be disconnected (variable Vdc -> higher efficiency)
-						if ( (bms.tempWarn())
+						if ( (bms.warn_temperature())
 							 || ( (ctrl_ref->p_pcc < -50 || electricity_meter_get_status() == EL_METER_CONN_ERR)  // other PV inverters produce enough for household or PCC sensor fail
 							      && (battery->power_W > P_MIN_PV2AC)  // minimum charging power to compensate switching loss for AC bridge
 							      && battery_full()
@@ -290,7 +290,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required
 						} else if ( battery_connected()
 									&& (  battery_empty()
-									    || bms.tempHighWarn()
+									    || bms.warn_temperature_cell_high()  // if battery hot, use PV2AC mode
 									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
 									   )
 						   ) {

@@ -33,9 +33,15 @@ const uint16_t get_battery_nr_series_cells()
 }
 
 
-const int8_t get_battery_temperature(uint8_t nr)
+const int8_t get_battery_cell_temperature(uint8_t nr)
 {
-	return bms.cellStack.temperature[nr];
+	return bms.cellStack.temperature_cell[nr];
+}
+
+
+const int8_t get_battery_PCB_temperature(uint8_t nr)
+{
+	return bms.cellStack.temperature_PCB[nr];
 }
 
 
@@ -139,11 +145,14 @@ static void check_bat_error()
 	} else if (bms.fault_i_discharge_max()) {
 		set_sys_errorcode(EC_BATTERY_I_DISCHARGE_RMS_MAX);
 
-	} else if (bms.fault_temperature_min()) {
-		set_sys_errorcode(EC_BATTERY_TEMPERATURE_MIN);
+	} else if (bms.fault_temperature_cell_min()) {
+		set_sys_errorcode(EC_BATTERY_TEMPERATURE_CELL_MIN);
 
-	} else if (bms.fault_temperature_max()) {
-		set_sys_errorcode(EC_BATTERY_TEMPERATURE_MAX);
+	} else if (bms.fault_temperature_cell_max()) {
+		set_sys_errorcode(EC_BATTERY_TEMPERATURE_CELL_MAX);
+
+	} else if (bms.fault_temperature_PCB_max()) {
+		set_sys_errorcode(EC_BATTERY_TEMPERATURE_PCB_MAX);
 
 	} else if (bms.fault_other()) {
 		set_sys_errorcode(EC_BATTERY_OTHER);

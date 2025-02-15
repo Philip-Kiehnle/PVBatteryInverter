@@ -606,7 +606,7 @@ int main(void)
 				uSend(" ");
 			uSendInt(c+1);
 			uSend(" ");
-			uSendInt(get_battery_temperature(c));
+			uSendInt(get_battery_cell_temperature(c));
 			uSend("\n");
 		}
 
@@ -699,9 +699,9 @@ int main(void)
 			uSend("\n");
 
 			uSend("Tmin");
-			uSendInt(battery->minTemp);
+			uSendInt(battery->minTempCell);
 			uSend("  Tmax");
-			uSendInt(battery->maxTemp);
+			uSendInt(battery->maxTempCell);
 			uSend("\n");
 #endif //SYSTEM_HAS_BATTERY
 
