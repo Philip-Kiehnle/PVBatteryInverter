@@ -1,9 +1,6 @@
 #ifndef PICtrl_H
 #define PICtrl_H
 
-//#include <stdlib.h>
-//#include <unistd.h>
-
 
 class PICtrl
 {
@@ -14,8 +11,9 @@ private:
 // y(k) = y(k-1) + x(k) * (Ki*T/2 + Kp) + x(k-1) * (Ki*T/2 - Kp)
 
     float x_prev;
-    float c1;
-    float c2;
+    float integrator;
+    float Kp;
+    float q;  // q = Ki*T/2
 
     float y_min;
     float y_max;

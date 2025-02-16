@@ -95,7 +95,7 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 
 	modbus_reg_rw.cmd = CMD_INVALID;  // reset to invalid command
 
-	int16_t p_ac_unclamped = 0;
+	static int16_t p_ac_unclamped = 0;
 
 	if (modbus_p_ac_soft_update) {
 		p_ac_unclamped = modbus_reg_rw.p_ac_soft_W;
