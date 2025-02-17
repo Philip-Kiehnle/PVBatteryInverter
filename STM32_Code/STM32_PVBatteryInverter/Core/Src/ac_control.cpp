@@ -116,14 +116,21 @@ void calc_p_ac(control_ref_t* ctrl_ref)
 	if (ctrl_ref->ext_ctrl_mode == EXT_AC_HARD) {
 		ctrl_ref->p_ac_rms = ctrl_ref->p_ac_external;  // risk of BMS action; useful for BMS test
 	} else if (ctrl_ref->ext_ctrl_mode == EXT_AC_SOFT) {
-		if (    ctrl_ref->p_ac_pccCtrl > 0  // ignore power setpoints smaller than grid consumption
-		     || get_p_ac_bat_chg_reduction()  // handle high PV input; todo GRID2BAT interrupts grid current at Pbat~=60W
-			) {
-			ctrl_ref->p_ac_rms = std::max(ctrl_ref->p_ac_external, p_default);
-		} else {
-			// if Ppcc=-200W but want to charge -300W, limit to -200W
-			ctrl_ref->p_ac_rms = std::clamp(ctrl_ref->p_ac_external, ctrl_ref->p_pcc, (int16_t)P_AC_MAX);
-		}
+		// Avoid grid consumption in EXT_AC_SOFT mode
+		// and take into account, that battery may need charge power reduction.
+		// -> Use the sum of the PI controllers. Values are >=0
+		int16_t p_ac_rms = p_default;
+
+		// The controller outputs of PCC and Pbat_reduction are limited to P_AC_MAX,
+		// so p_ac_external has to be clamped in a way that p_ac_rms can reach the limits [-P_AC_MAX;P_AC_MAX]
+		// -> clamp the opposite direction
+		int16_t p_ac_external_clamped = std::clamp(ctrl_ref->p_ac_external, (int16_t)(-P_AC_MAX+ctrl_ref->p_ac_pccCtrl), (int16_t)P_AC_MAX);
+		p_ac_external_clamped = std::clamp(p_ac_external_clamped, (int16_t)(-P_AC_MAX+get_p_ac_bat_chg_reduction()), (int16_t)P_AC_MAX);
+		// todo battery discharge reduction
+		p_ac_rms += p_ac_external_clamped;
+
+		ctrl_ref->p_ac_rms = p_ac_rms;
+
 	} else {
 		ctrl_ref->p_ac_rms = p_default;
 	}
@@ -434,7 +441,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 			  case PAC_CONTROL:
 			  {
 				// use power reference from power controller
-				int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;
+				//int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;  // P_ref=460W Pelv=400W
+				int i_ac_amp_10mA_unclamped = 115 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;  // P_ref=460W Pelv=
 
 				// V1: clamp
 				//i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
