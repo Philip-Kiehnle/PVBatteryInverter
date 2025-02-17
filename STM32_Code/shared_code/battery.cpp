@@ -1,6 +1,8 @@
 
 #include <algorithm>
 
+#include <modbus_hybridinverter.h>
+
 #include "dc_control.h"
 #include "battery.h"
 #include "config_battery.h"
@@ -93,28 +95,28 @@ const bool battery_empty()
 {
 	bool cell_imbalance_flag =    (bms.batteryStatus.minVcell_mV < BATTERY.V_CELL_NOM_mV)
 			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_WARN_mV);
-	return (bms.batteryStatus.soc_percent <= 1 || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV || cell_imbalance_flag);
+	return (bms.batteryStatus.soc_percent <= std::clamp(modbus_reg_rw.soc_min_protect_percent, (uint16_t)1, (uint16_t)90) || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV || cell_imbalance_flag);
 }
 
 const bool battery_almost_empty()
 {
 	bool cell_imbalance_flag =    (bms.batteryStatus.minVcell_mV < BATTERY.V_CELL_NOM_mV)
 			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_INFO_mV);
-	return (bms.batteryStatus.soc_percent <= 8 || bms.batteryStatus.minVcell_mV <= (BATTERY.V_CELL_MIN_PROTECT_mV+BATTERY.V_CELL_MIN_POWER_REDUCE_mV)/2 || cell_imbalance_flag);
+	return (bms.batteryStatus.soc_percent <= std::clamp((uint16_t)(modbus_reg_rw.soc_min_protect_percent+5), (uint16_t)1, (uint16_t)90) || bms.batteryStatus.minVcell_mV <= (BATTERY.V_CELL_MIN_PROTECT_mV+BATTERY.V_CELL_MIN_POWER_REDUCE_mV)/2 || cell_imbalance_flag);
 }
 
 const bool battery_almost_full()
 {
 	bool cell_imbalance_flag =    (bms.batteryStatus.minVcell_mV > BATTERY.V_CELL_NOM_mV && bms.batteryStatus.maxVcell_mV > BATTERY.V_CELL_NOM_mV)
 			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_INFO_mV);
-	return (bms.batteryStatus.soc_percent == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_POWER_REDUCE_mV || cell_imbalance_flag);
+	return (bms.batteryStatus.soc_percent == std::clamp((uint16_t)(modbus_reg_rw.soc_max_protect_percent-1), (uint16_t)10, (uint16_t)100)  || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_POWER_REDUCE_mV || cell_imbalance_flag);
 }
 
 const bool battery_full()
 {
 	bool cell_imbalance_flag =    (bms.batteryStatus.maxVcell_mV > BATTERY.V_CELL_NOM_mV)
 			                   && ((bms.batteryStatus.maxVcell_mV - bms.batteryStatus.minVcell_mV) > V_CELL_IMBALANCE_WARN_mV);
-	return (bms.batteryStatus.soc_percent == 100 || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_PROTECT_mV || cell_imbalance_flag);
+	return (bms.batteryStatus.soc_percent == std::clamp(modbus_reg_rw.soc_max_protect_percent, (uint16_t)10, (uint16_t)100) || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_PROTECT_mV || cell_imbalance_flag);
 }
 
 

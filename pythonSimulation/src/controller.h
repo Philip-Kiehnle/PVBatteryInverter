@@ -91,8 +91,8 @@ int32_t get_IGRID_ADCR();
 
 // 230V grid:
 //#define IAC_AMP_MAX_10mA 2.0*100
-#define IAC_AMP_MAX_10mA 3.0*100  // 325*3/2=488W
-
+//#define IAC_AMP_MAX_10mA 3.0*100  // 325*3/2=488W max 400W because of inductor parameter missmatch
+#define IAC_AMP_MAX_10mA 3.5*100  // 325*3.5/2=567W should provide 460W
 
 typedef struct {
 	int32_t y;
