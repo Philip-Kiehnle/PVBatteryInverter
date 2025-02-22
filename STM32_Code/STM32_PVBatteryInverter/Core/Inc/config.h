@@ -13,9 +13,9 @@
 //ISR runtime measurement using testpin TP202(PC15) and TP201(PC4)
 #define DEBUG_ISR if(0)  // 0: no pin toggling  1: enable pin toggling. Increases runtime and maybe ADC noise.
 
-#define VDC_MAX_MPPT_100mV 360*10  // 360V / 96cells = 3.75V
-#define E_VDC_MAX_FB_BOOST_100mV 374*10   // worst case for battery if BMS fails: 384V / 96cells = 4.0V
-#define E_VDC_MAX_FB_GRID_100mV 374*10   // worst case for battery if BMS fails: 404V / 96cells = 4.208V
+#define VDC_MAX_MPPT_100mV 400*10        // 400V / 96cells = 4.167V
+#define E_VDC_MAX_FB_BOOST_100mV 404*10  // worst case for battery if BMS fails: 404V / 96cells = 4.208V
+#define E_VDC_MAX_FB_GRID_100mV 404*10   // worst case for battery if BMS fails: 404V / 96cells = 4.208V
 
 /***********/
 /* AC grid */

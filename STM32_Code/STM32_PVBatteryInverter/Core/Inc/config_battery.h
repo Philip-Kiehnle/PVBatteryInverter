@@ -13,25 +13,29 @@ constexpr BatteryParameter_t BATTERY = {
 	.PARALLEL_CELLS = 3,
 	.R_SINGLE_CELL_mOHM = (59+1),  // internal resistance of single cell and the corresponding part of cell connector; worst cell
 	.CAPACITY_Ah = 12,  // 12 instead of 18 because of aging
-	.ETA_CHG = 0.99,
-	.ETA_DISCHG = 1.0,
+	.I_CHARGE_MAX    = 3.0,  // Battery_Supervisor: softlimit 8A, ADC watchdog 10A
+	.I_DISCHARGE_MAX = 4.0,  // Battery_Supervisor: softlimit 8A, ADC watchdog 10A
 	.V_CELL_NOM_mV              = 3700,
 	.V_CELL_MIN_PROTECT_mV      = 3200,  // Battery_Supervisor: 3050mV
 	.V_CELL_MIN_POWER_REDUCE_mV = 3400,
-	.V_CELL_MAX_POWER_REDUCE_mV = 3900,
-	.V_CELL_MAX_PROTECT_mV      = 4100,  // Battery_Supervisor: 4200mV
-	.I_CHARGE_MAX    = 6.0,  // Battery_Supervisor: softlimit 8A, ADC watchdog 10A
-	.I_DISCHARGE_MAX = 6.0,  // Battery_Supervisor: softlimit 8A, ADC watchdog 10A
+	.V_CELL_MAX_POWER_REDUCE_mV = 4100,
+	.V_CELL_MAX_PROTECT_mV      = 4150,  // Battery_Supervisor: 4200mV
 	.T_CELL_MIN_ERR  = -2,  // Battery_Supervisor: -5°C
 	.T_CELL_MIN_WARN = 0,
 	.T_CELL_MAX_WARN = 46,
 	.T_CELL_MAX_ERR  = 48,  // Battery_Supervisor: 50°C
 	.T_PCB_MAX_WARN = 56,
 	.T_PCB_MAX_ERR  = 58,  // Battery_Supervisor: 60°C
-	// For Kalman filter:
-	.REST_TIME = 400,  // s
-	.R0 = 0.02,  // internal resistance R0 of parallel cells
 };
+
+constexpr KalmanParameter_t KALMAN = {
+	.ETA_CHG = 0.99,
+	.ETA_DISCHG = 1.0,
+	.R0 = ((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS,  // internal resistance R0 of parallel cells for simple model
+	.SIGMA_V_CELL = 0.04,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm
+	.SIGMA_I_BAT = 0.02,  // 20mA standard deviation of current sensor
+};
+
 
 constexpr uint16_t V_CELL_IMBALANCE_INFO_mV = 180;
 constexpr uint16_t V_CELL_IMBALANCE_WARN_mV = 200;
