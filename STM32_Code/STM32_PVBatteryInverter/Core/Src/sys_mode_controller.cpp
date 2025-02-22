@@ -26,7 +26,7 @@ extern volatile uint32_t cntErr_1Hz;
 
 
 #if SYSTEM_HAS_BATTERY == 1
-STW_mBMS bms(0, 1.0, BATTERY);
+STW_mBMS bms(0, 1.0, BATTERY, KALMAN);
 //ETI_DualBMS bms(15, 1.0, BATTERY);  // BMS address=15
 #endif
 
