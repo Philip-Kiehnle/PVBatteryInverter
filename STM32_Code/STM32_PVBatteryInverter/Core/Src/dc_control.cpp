@@ -46,7 +46,9 @@ volatile bool bat_protect_calc_request;
 MPPTracker mppTracker(PVMODULE, MPPTPARAM, GMPPTPARAM);
 
 volatile enum stateDC_t stateDC = INIT_DC;
-volatile enum dcdc_mode_t dcdc_mode;
+
+constexpr enum dcdc_mode_t DEFAULT_DCDC_MODE = DCDC_HB2;
+volatile enum dcdc_mode_t dcdc_mode = DEFAULT_DCDC_MODE;
 
 static volatile uint32_t cnt_rel = 0;
 
@@ -414,7 +416,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		  cnt_interleaved_mode = 0;
 	  }
 
-	  static dcdc_mode_t hb_prev;
+	  static dcdc_mode_t hb_prev = DEFAULT_DCDC_MODE;
 
 	  // no discontinuous mode can occur, because of high currents
 	  if ( i_pv_filt50Hz > 5.0 ) {

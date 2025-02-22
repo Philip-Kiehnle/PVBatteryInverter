@@ -291,6 +291,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						} else if ( battery_connected()
 									&& (  battery_empty()
 									    || bms.warn_temperature_cell_high()  // if battery hot, use PV2AC mode
+									    || battery->voltage_100mV < get_v_ac_amp_filt50Hz_100mV()  // if battery voltage is lower than grid voltage
 									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
 									   )
 						   ) {

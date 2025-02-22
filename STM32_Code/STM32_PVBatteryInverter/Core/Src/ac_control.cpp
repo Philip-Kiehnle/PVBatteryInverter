@@ -26,6 +26,7 @@
 
 
 volatile uint16_t v_dc_FBgrid_sincfilt_100mV;
+volatile int16_t v_ac_amp_filt50Hz_100mV;
 volatile int16_t i_ac_10mA;
 volatile int16_t p_ac_filt50Hz;
 volatile int16_t p_ac_filt1minute;
@@ -43,6 +44,12 @@ static int16_t permil_v_dffw = PERMIL_V_DFFW_MIN;  // per mil of direct voltage 
 static uint32_t cnt_rel = 0;
 
 static int cnt_intr = 0;  // for sigma_delta processing
+
+
+const int16_t get_v_ac_amp_filt50Hz_100mV()
+{
+	return v_ac_amp_filt50Hz_100mV;
+}
 
 
 const int16_t get_p_ac_filt50Hz()
@@ -156,7 +163,6 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	debug_v_ac_rms_100mV = v_ac_rms_100mV;
 
 	//static int16_t v_ac_rms_filt50Hz_100mV = 0;
-	static int16_t v_ac_amp_filt50Hz_100mV = 0;
 	static int32_t v_ac_amp_sum = 0;
 	v_ac_amp_sum += v_ac_amp_100mV;
 

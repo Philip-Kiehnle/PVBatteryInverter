@@ -34,6 +34,7 @@ constexpr KalmanParameter_t KALMAN = {
 	.R0 = ((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS,  // internal resistance R0 of parallel cells for simple model
 	.SIGMA_V_CELL = 0.04,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm
 	.SIGMA_I_BAT = 0.02,  // 20mA standard deviation of current sensor
+	.SIGMA_R0 = 0.01,    // 10mOhm
 };
 
 

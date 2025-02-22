@@ -265,7 +265,7 @@ bool async_battery_communication()
 		) {
 			if (bms.get_summary() == BMS_OK) {
 #if IS_BATTERY_SUPERVISOR_PCB != 1  // supervisor does not need SoC
-				bms.estimateSoC();
+				bms.estimateSoC();  // estimator has dt=1sec, so call it every second
 #endif
 				check_bat_error();
 				bat_comm_fail_cnt = 0;

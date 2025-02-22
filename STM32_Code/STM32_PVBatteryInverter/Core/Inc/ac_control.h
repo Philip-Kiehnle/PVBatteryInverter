@@ -25,6 +25,7 @@ extern "C" {
 extern volatile uint16_t debug_v_dc_FBgrid_sincfilt_100mV;
 
 void measVdcFBgrid();
+const int16_t get_v_ac_amp_filt50Hz_100mV();
 const int16_t get_p_ac_filt50Hz();
 const int16_t get_p_ac_filt1minute();
 errorPVBI_t checkACLimits();
