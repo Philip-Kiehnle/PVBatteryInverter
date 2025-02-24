@@ -47,7 +47,7 @@ MPPTracker mppTracker(PVMODULE, MPPTPARAM, GMPPTPARAM);
 
 volatile enum stateDC_t stateDC = INIT_DC;
 
-constexpr enum dcdc_mode_t DEFAULT_DCDC_MODE = DCDC_HB2;
+constexpr enum dcdc_mode_t DEFAULT_DCDC_MODE = DCDC_HB1;
 volatile enum dcdc_mode_t dcdc_mode = DEFAULT_DCDC_MODE;
 
 static volatile uint32_t cnt_rel = 0;
@@ -274,7 +274,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			&& pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
 		) {
 			dutyLS1 = 0;
-			piCtrl.y = 0;
+			piCtrl.reset();
 			nextState(VOLTAGE_CONTROL);
 		}
 		break;
