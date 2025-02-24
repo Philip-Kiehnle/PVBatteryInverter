@@ -21,6 +21,7 @@ private:
 
 public:
     PICtrl(float T, float kp, float ki);
+    void reset();
     void step(float x, float y_min, float y_max);
 
     float y;

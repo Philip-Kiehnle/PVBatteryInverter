@@ -551,6 +551,14 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 		int16_t dutyHS = dcControlStep(cnt20kHz_20ms, ctrl_ref.v_dc_100mV, i_dc_filt_10mA);
 
+		// Never allow high boost ratio without smooth change of dutycycle or protection via current sensor.
+		// Input capacitor can deliver high currents!
+		// Todo: smooth change of dutycycle. Including previous state of Gatedriver EN signal
+#define DEF_DC_BOOST_DUTY_HS_MIN (0.8*DEF_MPPT_DUTY_ABSMAX)  // limited boost ratio of 1.25 (e.g. 288V to 360V) limits current to <12A with Vin=325V
+		if (dutyHS < DEF_DC_BOOST_DUTY_HS_MIN) {
+			dutyHS = DEF_DC_BOOST_DUTY_HS_MIN;
+		}
+
 		int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
 		int16_t dutyB2 = DEF_MPPT_DUTY_ABSMAX;  // Highside switch on
 

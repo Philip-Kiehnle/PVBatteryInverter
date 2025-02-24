@@ -9,6 +9,14 @@ PICtrl::PICtrl(float T, float kp, float ki)
     q = ki*T/2;
 }
 
+
+void PICtrl::reset()
+{
+	x_prev = 0;
+	integrator = 0;
+}
+
+
 void PICtrl::step(float x, float y_min, float y_max)
 {
 	float kp_x = Kp * x;
