@@ -236,12 +236,6 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 		monitoring_request = true;
 
-		if (sys_mode_needs_battery) {
-			bmsPower(1);
-		} else {
-			bmsPower(0);
-		}
-
 		// todo: delay of sigma delta processing caused lagging Vdc meas when 100Hz ripple occurs -> use voltage estimator or extra Vdc meas
 		v_dc_filt50Hz = (float)v_dc_FBboost_filt50Hz_100mV/10.0;
 		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/DEF_MPPT_DUTY_ABSMAX);
@@ -299,7 +293,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 #if SYSTEM_HAS_BATTERY == 1
 			const batteryStatus_t* battery = get_batteryStatus();
-			if (    sys_mode_needs_battery
+			if (    sys_mode_needs_battery  // is true only if v_dc > v_bat_min_protect
 				&& v_dc_filt50Hz*10 > (battery->voltage_100mV-VDC_TOLERANCE_100mV)
 				&& v_dc_filt50Hz*10 < (battery->voltage_100mV+VDC_TOLERANCE_100mV)
 				){
