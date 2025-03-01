@@ -3,6 +3,7 @@
 
 #include <modbus_hybridinverter.h>
 
+#include "gpio.h"
 #include "dc_control.h"
 #include "battery.h"
 #include "config_battery.h"
@@ -217,6 +218,7 @@ bool async_battery_communication()
 		rate_limit = true;
 		switch (stateBattery_next) {
 		  case BMS_OFF__BAT_OFF:
+			  bmsPower(0);  // for batteries with supply voltage control
 			  if (bms.batteryOff(0b01) == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_OFF;
 				  bat_connected = false;
@@ -230,6 +232,7 @@ bool async_battery_communication()
 
 		  case BMS_ON__BAT_ON:
 		  {
+			  bmsPower(1);  // for batteries with supply voltage control
 			  BMS_StatusTypeDef status = bms.batteryOn(0b01);
 			  if (status == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_ON;
@@ -241,6 +244,7 @@ bool async_battery_communication()
 
 		  case BMS_ON__BAT_OFF:
 		  default:
+			  bmsPower(1);  // for batteries with supply voltage control
 			  if (bms.batteryOff(0b01) == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_OFF;
 				  bat_connected = false;

@@ -19,12 +19,28 @@ FDCAN_TxHeaderTypeDef TxHeader;
 
 void can_bus_stop(uint8_t fifo_nr)
 {
-	sFilterConfig.FilterIndex = fifo_nr;
-	sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE;
-	if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
-		Error_Handler();
+	// filter 0-7 : used for FIFO0
+	if (fifo_nr == 0) {
+		for (uint8_t i=0; i<8; i++) {
+			sFilterConfig.FilterIndex = i;
+			sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE;
+			if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
+				Error_Handler();
+			}
+		}
+
+	// filter 8-15 : used for FIFO1
+	} else {
+		for (uint8_t i=8; i<16; i++) {
+			sFilterConfig.FilterIndex = i;
+			sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE;
+			if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
+				Error_Handler();
+			}
+		}
 	}
 }
+
 
 // message ID is written to id
 // return pointer to data or null in case of error
@@ -80,23 +96,27 @@ bool addTxMsg_8byte(uint32_t id, uint8_t* tx_data)
 }
 
 
-void can_bus_set_filter(uint8_t fifo_nr, uint32_t filter_type, uint32_t filter_id1, uint32_t filter_id2)
+void can_bus_set_filter(uint8_t fifo_nr, uint8_t filter_index, uint32_t filter_type, uint32_t filter_id1, uint32_t filter_id2)
 {
 	/* Configure Rx filter */
 	sFilterConfig.IdType = FDCAN_STANDARD_ID;
-	if(fifo_nr == 0) {
-		sFilterConfig.FilterIndex = 0;
-		sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-	} else {
-		sFilterConfig.FilterIndex = 1;
-		sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
-	}
-
+	sFilterConfig.FilterIndex = filter_index;
+	sFilterConfig.FilterConfig = (fifo_nr == 0) ? FDCAN_FILTER_TO_RXFIFO0 : FDCAN_FILTER_TO_RXFIFO1;
 	sFilterConfig.FilterType = filter_type;
 	sFilterConfig.FilterID1 = filter_id1;
 	sFilterConfig.FilterID2 = filter_id2;
 	if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
 	{
+		Error_Handler();
+	}
+}
+
+
+void can_bus_disable_filter(uint8_t filter_index)
+{
+	sFilterConfig.FilterIndex = filter_index;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE;
+	if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 }

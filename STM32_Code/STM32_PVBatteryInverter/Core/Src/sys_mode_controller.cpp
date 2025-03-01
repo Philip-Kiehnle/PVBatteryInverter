@@ -47,7 +47,6 @@ static inline void nextMode(enum mode_t next_mode)
 {
 	if (next_mode == PV2AC || next_mode == OFF) {
 		contactorBattery(0);
-		bmsPower(0);
 		sys_mode_needs_battery = false;
 #if SYSTEM_HAS_BATTERY == 1
 		battery_state_request(BAT_OFF);
@@ -231,7 +230,11 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
 		    }
 
-			if (ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10 && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10) {
+			if (   ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10
+			    && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10
+			    && get_v_dc_FBboost_filt50Hz_100mV() > bms.V_MIN_PROTECT*10
+			    && get_v_dc_FBboost_filt50Hz_100mV() < bms.V_MAX_PROTECT*10
+			) {
 				// battery charging
 				sys_mode_needs_battery = true;
 				cnt_1Hz_chargeDC = cnt_1Hz;
