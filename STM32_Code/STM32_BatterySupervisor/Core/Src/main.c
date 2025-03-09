@@ -574,10 +574,8 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	checkErrors();
-	if (get_sys_mode() != OFF) GPIOB->BRR = (1<<1);  // enable green LED
 	calc_and_wait(250);  //ms
 	calc_and_wait(250);  //ms
-	GPIOB->BSRR = (1<<1);  // disable green LED
 	calc_and_wait(250);  //ms
 
 	sys_mode_ctrl_step(&ctrl_ref);
@@ -1027,7 +1025,7 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Init.DataSyncJumpWidth = 1;
   hfdcan2.Init.DataTimeSeg1 = 1;
   hfdcan2.Init.DataTimeSeg2 = 1;
-  hfdcan2.Init.StdFiltersNbr = 2;
+  hfdcan2.Init.StdFiltersNbr = 10;
   hfdcan2.Init.ExtFiltersNbr = 0;
   hfdcan2.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   if (HAL_FDCAN_Init(&hfdcan2) != HAL_OK)
