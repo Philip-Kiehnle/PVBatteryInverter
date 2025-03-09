@@ -37,9 +37,11 @@ void contactorBattery(bool state)
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 	// Bat2DCboost -> Now used for negative battery contactor in BatterySupervisor. On Main Control PCB, pin is used for fan control.
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
-		GPIOC->BSRR = (1<<13);
+		GPIOC->BSRR = (1<<13);  // enable contactor
+		GPIOB->BRR = (1<<1);  // enable green LED
 	} else {
-		GPIOC->BRR = (1<<13);
+		GPIOC->BRR = (1<<13);  // disable contactor
+		GPIOB->BSRR = (1<<1);  // disable green LED
 	}
 #endif // IS_BATTERY_SUPERVISOR_PCB == 1
 
