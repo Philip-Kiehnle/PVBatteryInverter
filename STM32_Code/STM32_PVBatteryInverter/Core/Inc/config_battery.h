@@ -22,8 +22,8 @@ constexpr BatteryParameter_t BATTERY = {
 	.V_CELL_MAX_PROTECT_mV      = 4150,  // Battery_Supervisor: 4200mV
 	.T_CELL_MIN_ERR  = -2,  // Battery_Supervisor: -5°C
 	.T_CELL_MIN_WARN = 0,
-	.T_CELL_MAX_WARN = 46,
-	.T_CELL_MAX_ERR  = 48,  // Battery_Supervisor: 50°C
+	.T_CELL_MAX_WARN = 44,
+	.T_CELL_MAX_ERR  = 46,  // Battery_Supervisor: 50°C
 	.T_PCB_MAX_WARN = 56,
 	.T_PCB_MAX_ERR  = 58,  // Battery_Supervisor: 60°C
 };

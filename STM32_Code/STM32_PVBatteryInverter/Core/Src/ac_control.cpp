@@ -149,6 +149,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	//DEBUG_ISR GPIOC->BSRR = (1<<15);  // set Testpin TP202 PC15; pin operation takes some extra time
 	static int16_t duty = 0;
 	static uint32_t cnt_pll_locked = 0;
+	static uint32_t low_power_mode_cnt = 0;
 
 	bool acGrid_valid = false;
 
@@ -285,9 +286,24 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	static int p_ac_sum_mW;  // max +-5.3kW
 	p_ac_sum_mW += p_ac_mW;
 
+	static uint16_t i_ac_amp_gain = 115;
+
 	if (cnt20kHz_20ms == 0) {
 		p_ac_filt50Hz = p_ac_sum_mW/CYCLES_cnt20kHz_20ms/1000;
+
+		// only relevant for PAC_CONTROL for now:
+		// 70% to 130% gain to compensate for inductor model missmatch and grid harmonics
+		if (low_power_mode_cnt == 0) {  // skip if energy packet controller disabled the gate signals
+			if (   (p_ac_filt50Hz > ctrl_ref.p_ac_rms && ctrl_ref.p_ac_rms > 0)  // feedin is positive: 500 but want 460 -> reduce gain
+			    || (p_ac_filt50Hz < ctrl_ref.p_ac_rms && ctrl_ref.p_ac_rms < 0)  // consumption is negative: -500 but want -460 -> reduce gain
+			) {
+				if (i_ac_amp_gain > 70) i_ac_amp_gain--;
+			} else {
+				if (i_ac_amp_gain < 130) i_ac_amp_gain++;
+			}
+		}
 		p_ac_sum_mW = 0;
+
 	} else if (cnt20kHz_20ms == 1) {
 
 		static uint16_t cnt50Hz_1min;
@@ -448,7 +464,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 			  {
 				// use power reference from power controller
 				//int i_ac_amp_10mA_unclamped = 100 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;  // P_ref=460W Pelv=400W
-				int i_ac_amp_10mA_unclamped = 115 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;  // P_ref=460W Pelv=
+				//int i_ac_amp_10mA_unclamped = 115 * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;  // Pelv (energy meter) shows wide range during 24hours
+				int i_ac_amp_10mA_unclamped = i_ac_amp_gain * (2*ctrl_ref.p_ac_rms*10) / v_ac_amp_filt50Hz_100mV;  // variable gain
 
 				// V1: clamp
 				//i_ac_amp_10mA = std::clamp(i_ac_amp_10mA_unclamped, -(int)IAC_AMP_MAX_10mA, (int)IAC_AMP_MAX_10mA);
@@ -475,7 +492,6 @@ constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold
 				// electricity meter stores energy in 100mWh
 				//-> in 1 sec, 100mWh/1sec=360W offset can be tolerated
 				// if feedin is included, 720Ws can be tolerated -> todo
-				static uint32_t low_power_mode_cnt = 0;
 
 				if (    ((ctrl_ref.p_ac_rms <= 50 && get_p_dc_filt50Hz() < 40) || ctrl_ref.p_ac_rms <= 20) // reduce number of switching events during PV production
 					 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)
