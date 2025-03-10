@@ -402,6 +402,9 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 //	Ploss_2HB = 2 * 65mOhm * 2,0A^2 + 2*1W = 0.52W+2W = 2,52W     (/4 -> 0.63W each GaN)
 //	-> more loss in interleaved mode
 
+// reduced by 0.5A to take into account the increased lifetime and
+// the smoother DC output current causes less loss in battery and AC stage
+
 	  static uint16_t cnt_interleaved_mode = 0;
 
 	  if (dcdc_mode == DCDC_INTERLEAVED) {
@@ -413,11 +416,11 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  static dcdc_mode_t hb_prev = DEFAULT_DCDC_MODE;
 
 	  // no discontinuous mode can occur, because of high currents
-	  if ( i_pv_filt50Hz > 5.0 ) {
+	  if ( i_pv_filt50Hz > 4.5 ) {
 		  if (dcdc_mode != DCDC_INTERLEAVED) {
 			  dcdc_mode = DCDC_INTERLEAVED;
 		  }
-	  } else if ( (i_pv_filt50Hz < 4.0) && (cnt_interleaved_mode >= 1.0*DC_CTRL_FREQ) ) {  // min 1sec in interleaved mode
+	  } else if ( (i_pv_filt50Hz < 3.5) && (cnt_interleaved_mode >= 1.0*DC_CTRL_FREQ) ) {  // min 1sec in interleaved mode
 		  if (dcdc_mode != DCDC_HB1 && dcdc_mode != DCDC_HB2) {
 			  if ( hb_prev == DCDC_HB1 ) {  // equal distribution between both halfbridges
 				  dcdc_mode = DCDC_HB2;
