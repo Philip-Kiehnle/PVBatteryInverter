@@ -549,7 +549,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 			}
 		}
 
-		int16_t dutyHS = dcControlStep(cnt20kHz_20ms, ctrl_ref.v_dc_100mV, i_dc_filt_10mA);
+		int16_t dutyHS = dcControlStep(cnt20kHz_20ms, ctrl_ref.v_dc_100mV, i_dc_filt_10mA, ctrl_ref.ext_dc_lock);
 
 		// Never allow high boost ratio without smooth change of dutycycle or protection via current sensor.
 		// Input capacitor can deliver high currents!

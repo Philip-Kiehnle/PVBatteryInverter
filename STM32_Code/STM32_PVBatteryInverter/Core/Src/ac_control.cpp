@@ -276,7 +276,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownAC();
 		stateAC = INIT_AC;
-	} else if (ctrl_ref.mode == AC_OFF) {
+	} else if (ctrl_ref.mode == AC_OFF || ctrl_ref.ext_ac_lock != EXT_LOCK_INACTIVE) {
 		gatedriverAC(0);  // get current to zero before contactor action. todo: check
 		stateAC = INIT_AC;
 	}
@@ -329,7 +329,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	  case INIT_AC:
 		shutdownAC();
 		if (get_sys_errorcode() == EC_NO_ERROR ) {
-			if (ctrl_ref.mode != AC_OFF) {
+			if (ctrl_ref.mode != AC_OFF && ctrl_ref.ext_ac_lock == EXT_LOCK_INACTIVE) {
 				nextState(WAIT_AC_DC_VOLTAGE);
 			}
 		}
