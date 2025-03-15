@@ -5,7 +5,7 @@
 #include "common.h"
 
 
-void gatedriverDC(bool state)
+inline void gatedriverDC(bool state)
 {
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<7);  // enable boost gatedriver
@@ -14,7 +14,7 @@ void gatedriverDC(bool state)
 	}
 }
 
-void gatedriverAC(bool state)
+inline void gatedriverAC(bool state)
 {
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<14);  // enable grid FB gatedriver
@@ -23,7 +23,7 @@ void gatedriverAC(bool state)
 	}
 }
 
-void contactorAC(bool state)
+inline void contactorAC(bool state)
 {
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<10);
@@ -32,7 +32,7 @@ void contactorAC(bool state)
 	}
 }
 
-void contactorBattery(bool state)
+inline void contactorBattery(bool state)
 {
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 	// Bat2DCboost -> Now used for negative battery contactor in BatterySupervisor. On Main Control PCB, pin is used for fan control.

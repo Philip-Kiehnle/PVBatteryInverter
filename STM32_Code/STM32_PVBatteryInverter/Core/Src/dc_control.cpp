@@ -177,7 +177,7 @@ static inline void nextState(enum stateDC_t state)
 }
 
 
-int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA)
+int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i_dc_filt_10mA, ext_lock_t ext_dc_lock)
 {
 	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
@@ -215,6 +215,8 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		battery_state_request(BAT_OFF);
 #endif //SYSTEM_HAS_BATTERY
 		nextState(INIT_DC);
+	} else if (ext_dc_lock != EXT_LOCK_INACTIVE) {
+		nextState(WAIT_PV_VOLTAGE);
 	}
 
 	cnt_rel++;
@@ -262,10 +264,11 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	  case WAIT_PV_VOLTAGE:
 	  {
-		gatedriverDC(0);
-		if (   vdc_inRange
-			&& cnt_rel >= 5*DC_CTRL_FREQ  // wait at least 5 sec to avoid instabilities
-			&& pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
+		gatedriverDC(0);  // todo: high loss can occur in GaN reverse conduction with negative gate voltage
+		if (   ext_dc_lock == EXT_LOCK_INACTIVE
+		    && vdc_inRange
+		    && cnt_rel >= 5*DC_CTRL_FREQ  // wait at least 5 sec to avoid instabilities
+		    && pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
 		) {
 			dutyLS1 = 0;
 			piCtrl.reset();

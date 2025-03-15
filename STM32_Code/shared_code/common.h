@@ -41,6 +41,13 @@ typedef enum
 	EXT_AC_HARD,
 } ext_ctrl_mode_t;
 
+typedef enum
+{
+	EXT_LOCK_INACTIVE,
+	EXT_LOCK_SOFT,
+	EXT_LOCK_HARD,
+} ext_lock_t;
+
 typedef struct {
 	ac_ctrl_mode_t mode;
 	uint16_t v_dc_100mV;
@@ -48,6 +55,8 @@ typedef struct {
 	int16_t p_pcc_prev;
 	int16_t p_ac_pccCtrl;  // power from PCC controller
 	ext_ctrl_mode_t ext_ctrl_mode;
+	ext_lock_t ext_ac_lock;
+	ext_lock_t ext_dc_lock;
 	int16_t p_ac_external;
 	int16_t p_ac_rms;  // power for AC control
 } control_ref_t;

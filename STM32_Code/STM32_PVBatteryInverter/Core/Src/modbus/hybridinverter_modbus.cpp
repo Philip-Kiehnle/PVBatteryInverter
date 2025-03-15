@@ -29,11 +29,13 @@ modbus_reg_rw_t modbus_reg_rw = {
 	.interval_glob_mppt_trig_event_sec = 0,
 	.pv_ref_v_100mV = 200*10,
 	.pv_ref_duration_sec = 10,
+	.pv_dc_softlock_duration_minutes = 12*60,
 
 	// battery related
 	.soc_min_protect_percent = 8,
 	.soc_max_protect_percent = 90,
 	.p_bat_chg_max_W = 350*4,
+	//.p_bat_dischg_max_W = 350*4,
 
 	// AC related
 	//ext_ctrl_mode;  // ext_ctrl_mode_t

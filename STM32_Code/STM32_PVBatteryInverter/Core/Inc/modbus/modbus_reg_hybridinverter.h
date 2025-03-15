@@ -9,7 +9,13 @@ extern "C" {
 #include <stdbool.h>
 
 
-typedef enum {CMD_INVALID, CMD_INVERTER_OFF, CMD_INVERTER_ON, CMD_INVERTER_RESET, CMD_P_AC_EXT_OFF} modbus_cmd_t;
+typedef enum {
+	CMD_INVALID,
+	CMD_INVERTER_OFF, CMD_INVERTER_ON, CMD_INVERTER_RESET,
+	CMD_P_AC_EXT_OFF,
+	CMD_AC_LOCK_INACTIVE, CMD_AC_LOCK_SOFT, CMD_AC_LOCK_HARD,  // AC softlock gets disabled by excess PV power
+	CMD_DC_LOCK_INACTIVE, CMD_DC_LOCK_SOFT, CMD_DC_LOCK_HARD,  // DC softlock gets disabled by PV timer set in modbus register
+} modbus_cmd_t;
 
 typedef struct {
 	// General
@@ -26,11 +32,13 @@ typedef struct {
 	uint16_t interval_glob_mppt_trig_event_sec;  // when power drops
 	uint16_t pv_ref_v_100mV;  // keeps pv voltage at a defined level for testing MPPT performance
 	uint16_t pv_ref_duration_sec;  // duration until MPPT takes over again
+	uint16_t pv_dc_softlock_duration_minutes;  // duration until softlock cmd is released automatically
 
 	// battery related
 	uint16_t soc_min_protect_percent;
 	uint16_t soc_max_protect_percent;
 	uint16_t p_bat_chg_max_W;
+	uint16_t p_bat_dischg_max_W;
 	uint16_t bat_cell_v_bal_target_mV;
 
 	// AC related

@@ -17,7 +17,7 @@
 
 
 enum mode_t sys_mode = SYS_MODE;
-bool locked = false;
+bool sys_mode_locked = false;
 static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
 static uint16_t p_bat_chg_max;
 static uint32_t cnt_rel_1Hz;
@@ -55,7 +55,7 @@ static inline void nextMode(enum mode_t next_mode)
 
 	if (sys_mode == OFF) {
 		// stay in OFF mode for 5 minutes to discharge DC bus
-		if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) && !locked) {
+		if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) && !sys_mode_locked) {
 			sys_mode = next_mode;
 			cnt_rel_1Hz = cnt_1Hz;
 		}
@@ -70,26 +70,60 @@ static inline void nextMode(enum mode_t next_mode)
 void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 {
 	static uint32_t cnt_1Hz_prev_ext_cmd;
+	static uint32_t cnt_1Hz_cmd_dc_lock_soft;
 
-	if (modbus_reg_rw.cmd == CMD_INVERTER_RESET) {
-		GPIOB->BRR = (1<<0);  // enable red LED
-		if (get_sys_errorcode() != EC_NO_ERROR) {
-			if (cntErr_1Hz > 120) {  // reset possible after 120 seconds in case of error
+	switch (modbus_reg_rw.cmd) {
+		case CMD_INVERTER_RESET:
+			GPIOB->BRR = (1<<0);  // enable red LED
+			if (get_sys_errorcode() != EC_NO_ERROR) {
+				if (cntErr_1Hz > 120) {  // reset possible after 120 seconds in case of error
+					NVIC_SystemReset();
+				}
+			} else {
+				shutdownAll();  // todo: ETI_DualBMS sends battery off cmd too late
 				NVIC_SystemReset();
 			}
-		} else {
-			shutdownAll();  // todo: battery off sends to late
-			NVIC_SystemReset();
-		}
-	} else if (modbus_reg_rw.cmd == CMD_INVERTER_OFF) {
-		locked = true;
-		shutdownAll();
-		nextMode(OFF);
-	} else if (modbus_reg_rw.cmd == CMD_INVERTER_ON) {
-		locked = false;
+			break;
 
-	} else if (modbus_reg_rw.cmd == CMD_P_AC_EXT_OFF) {
-		ctrl_ref->ext_ctrl_mode = EXT_OFF;
+		case CMD_INVERTER_OFF:
+			sys_mode_locked = true;
+			shutdownAll();
+			nextMode(OFF);
+			break;
+
+		case CMD_INVERTER_ON:
+			sys_mode_locked = false;
+			break;
+
+		case CMD_P_AC_EXT_OFF:
+			ctrl_ref->ext_ctrl_mode = EXT_OFF;
+			break;
+
+		case CMD_AC_LOCK_INACTIVE:
+			ctrl_ref->ext_ac_lock = EXT_LOCK_INACTIVE;
+			break;
+
+		case CMD_AC_LOCK_SOFT:
+			ctrl_ref->ext_ac_lock = EXT_LOCK_SOFT;
+			break;
+
+		case CMD_AC_LOCK_HARD:
+			ctrl_ref->ext_ac_lock = EXT_LOCK_HARD;
+			break;
+
+		case CMD_DC_LOCK_INACTIVE:
+			ctrl_ref->ext_dc_lock = EXT_LOCK_INACTIVE;
+			break;
+
+		case CMD_DC_LOCK_SOFT:
+			ctrl_ref->ext_dc_lock = EXT_LOCK_SOFT;
+			cnt_1Hz_cmd_dc_lock_soft = cnt_1Hz;
+			break;
+
+		case CMD_DC_LOCK_HARD:
+			ctrl_ref->ext_dc_lock = EXT_LOCK_HARD;
+			break;
+
 	}
 
 	modbus_reg_rw.cmd = CMD_INVALID;  // reset to invalid command
@@ -114,6 +148,12 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 
 	if (cnt_1Hz > cnt_1Hz_prev_ext_cmd+60) {  // internal control after 60 sec without command
 		ctrl_ref->ext_ctrl_mode = EXT_OFF;
+	}
+
+	if (   ctrl_ref->ext_dc_lock == EXT_LOCK_SOFT
+	    && cnt_1Hz > (cnt_1Hz_cmd_dc_lock_soft + 60*modbus_reg_rw.pv_dc_softlock_duration_minutes)
+	) {
+		ctrl_ref->ext_dc_lock = EXT_LOCK_INACTIVE;
 	}
 
 	if (ctrl_ref->ext_ctrl_mode == EXT_OFF && sys_mode == HYBRID_REMOTE_CONTROLLED) {
@@ -141,6 +181,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			ctrl_ref->mode = AC_OFF;
 			ctrl_ref->v_dc_100mV = 0;
 			sys_mode_needs_battery = false;
+			shutdownAll();
 			nextMode(SYS_MODE);
 			break;
 
@@ -241,6 +282,13 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 				// todo interval charging at low bat temp to maximise resistive power loss and generate heat
 				int p_bat_50Hz = get_p_dc_filt50Hz() - get_p_ac_filt50Hz();
+
+				if (   ctrl_ref->ext_ac_lock == EXT_LOCK_SOFT  // AC softlock can be disabled by excess PV power
+				    && battery_connected()
+				    && p_bat_50Hz >= p_bat_chg_max  // battery charge power is large and has to be reduced
+				){
+					ctrl_ref->ext_ac_lock = EXT_LOCK_INACTIVE;
+				}
 				static uint16_t cnt_lowPV = 0;
 
 				switch (stateHYBRID_AC) {
