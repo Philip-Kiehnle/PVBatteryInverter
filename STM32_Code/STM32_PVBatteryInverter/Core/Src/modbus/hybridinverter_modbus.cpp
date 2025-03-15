@@ -35,7 +35,7 @@ modbus_reg_rw_t modbus_reg_rw = {
 	.soc_min_protect_percent = 8,
 	.soc_max_protect_percent = 90,
 	.p_bat_chg_max_W = 350*4,
-	//.p_bat_dischg_max_W = 350*4,
+	.p_bat_dischg_max_W = 350*4,
 
 	// AC related
 	//ext_ctrl_mode;  // ext_ctrl_mode_t

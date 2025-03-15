@@ -20,6 +20,7 @@ enum mode_t sys_mode = SYS_MODE;
 bool sys_mode_locked = false;
 static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
 static uint16_t p_bat_chg_max;
+static uint16_t p_bat_dischg_max;
 static uint32_t cnt_rel_1Hz;
 extern volatile uint32_t cnt_1Hz;  // overflow in 136 years
 extern volatile uint32_t cntErr_1Hz;
@@ -34,6 +35,12 @@ STW_mBMS bms(0, 1.0, BATTERY, KALMAN);
 uint16_t get_p_bat_chg_max()
 {
 	return p_bat_chg_max;
+}
+
+
+uint16_t get_p_bat_dischg_max()
+{
+	return p_bat_dischg_max;
 }
 
 
@@ -171,6 +178,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 	const batteryStatus_t* battery = get_batteryStatus();
 	bms.read_current = true;
 	p_bat_chg_max = std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
+	p_bat_dischg_max = std::min(battery->p_discharge_max, modbus_reg_rw.p_bat_dischg_max_W);
 #endif //SYSTEM_HAS_BATTERY
 	static uint32_t cnt_1Hz_chargeDC;
 
