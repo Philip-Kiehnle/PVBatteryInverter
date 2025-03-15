@@ -61,7 +61,9 @@ uint16_t get_p_ac_bat_chg_reduction()
 
 uint16_t get_p_ac_max_dc_lim()
 {
-	return (bms.batteryStatus.p_discharge_max+p_dc_filt50Hz);
+	float p_pv = p_dc_filt50Hz;
+	if (p_pv < 0.0) p_pv = 0.0;  // prevent noise of current sensor
+	return (get_p_bat_dischg_max() + p_pv);
 }
 
 

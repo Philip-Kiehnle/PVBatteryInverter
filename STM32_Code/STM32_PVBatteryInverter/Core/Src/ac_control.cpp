@@ -115,6 +115,15 @@ static inline bool check_zero_crossing_contactor_comp(int16_t phase)
 }
 
 
+uint16_t get_p_ac_max()
+{
+	uint16_t p_ac_max = get_p_ac_max_dc_lim();
+	if (p_ac_max > P_AC_MAX) p_ac_max = P_AC_MAX;
+
+	return p_ac_max;
+}
+
+
 // todo: add controller for stationary accuracy for p_bat_reduction and p_external, e.g. later in code when P is converted to current
 void calc_p_ac(control_ref_t* ctrl_ref)
 {
@@ -122,6 +131,7 @@ void calc_p_ac(control_ref_t* ctrl_ref)
 
 	if (ctrl_ref->ext_ctrl_mode == EXT_AC_HARD) {
 		ctrl_ref->p_ac_rms = ctrl_ref->p_ac_external;  // risk of BMS action; useful for BMS test
+
 	} else if (ctrl_ref->ext_ctrl_mode == EXT_AC_SOFT) {
 		// Avoid grid consumption in EXT_AC_SOFT mode
 		// and take into account, that battery may need charge power reduction.
@@ -131,9 +141,8 @@ void calc_p_ac(control_ref_t* ctrl_ref)
 		// The controller outputs of PCC and Pbat_reduction are limited to P_AC_MAX,
 		// so p_ac_external has to be clamped in a way that p_ac_rms can reach the limits [-P_AC_MAX;P_AC_MAX]
 		// -> clamp the opposite direction
-		int16_t p_ac_external_clamped = std::clamp(ctrl_ref->p_ac_external, (int16_t)(-P_AC_MAX+ctrl_ref->p_ac_pccCtrl), (int16_t)P_AC_MAX);
-		p_ac_external_clamped = std::clamp(p_ac_external_clamped, (int16_t)(-P_AC_MAX+get_p_ac_bat_chg_reduction()), (int16_t)P_AC_MAX);
-		// todo battery discharge reduction
+		int16_t p_ac_external_clamped = std::clamp(ctrl_ref->p_ac_external, (int16_t)(-P_AC_MAX+ctrl_ref->p_ac_pccCtrl), (int16_t)get_p_ac_max());
+		p_ac_external_clamped = std::clamp(p_ac_external_clamped, (int16_t)(-P_AC_MAX+get_p_ac_bat_chg_reduction()), (int16_t)get_p_ac_max());
 		p_ac_rms += p_ac_external_clamped;
 
 		ctrl_ref->p_ac_rms = p_ac_rms;
