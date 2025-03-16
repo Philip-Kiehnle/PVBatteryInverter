@@ -40,9 +40,9 @@
 #define F_MAX 51
 
 #define E_I_AC_RMS_MAX_CNT 10  // 10 samples @ 20kHz -> 500us
-//#define E_I_AC_RMS_MAX_AMP_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+#define E_I_AC_RMS_MAX_AMP_10mA (12.3 * 100)  // 2000W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
 #define E_I_AC_PULSE_MAX_AMP_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
-#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+//#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples -> triggered error even with 460W limit (11.03.2025 18:27)
 //#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
 #define E_I_AC_DC_OFFSET_CYCLES 8  // number of consecutive 50Hz periods for DC current fault
@@ -62,8 +62,8 @@
 //#define P_AC_MAX ((5*32)/1.41) //113W  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
 //#define P_AC_MAX (210)  // 210W minimum for energy packet controller
 #define P_AC_MAX (460)  // 460W for 2A Fuse
-#define P_BAT_MIN_CHARGE 2
-#define P_MIN_PV2AC 10
+#define P_BAT_MIN_CHARGE 12  // BMS 4.7Watt; Final wiring: 6.9W including both contactors
+#define P_MIN_PV2AC 15
 
 /***************/
 /* Fan control */
