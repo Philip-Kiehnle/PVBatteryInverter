@@ -247,18 +247,20 @@ bool async_battery_communication()
 		rate_limit = true;
 		switch (stateBattery_next) {
 		  case BMS_OFF__BAT_OFF:
-			  bmsPower(0);  // for batteries with supply voltage control
+		  {
 			  if (bms.batteryOff(0b01) == BMS_OK) {
 				  stateBattery = BMS_ON__BAT_OFF;
 				  bat_connected = false;
 			  }
-			  if (bms.shipmode(0b00111111) == BMS_OK) {
+			  BMS_StatusTypeDef status = bms.shipmode(0b00111111);
+			  if (status == BMS_OK || status == BMS_INVALID_CMD) {  // some BMS do not support shipmode
 				  stateBattery = BMS_OFF__BAT_OFF;
 				  bat_connected = false;
+				  bmsPower(0);  // for batteries with supply voltage control
 			  }
 			  bms.batteryStatus = {0};
 			  break;
-
+		  }
 		  case BMS_ON__BAT_ON:
 		  {
 			  bmsPower(1);  // for batteries with supply voltage control

@@ -32,7 +32,8 @@ constexpr KalmanParameter_t KALMAN = {
 	.ETA_CHG = 0.99,
 	.ETA_DISCHG = 1.0,
 	.R0 = ((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS /1000,  // internal resistance R0 of parallel cells for simple model
-	.SIGMA_V_CELL = 0.04,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm
+	//.SIGMA_V_CELL = 0.04,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm -> has 1.2% SoC jumps
+	.SIGMA_V_CELL = 0.1,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm; 60mV extra because of simple model
 	.SIGMA_I_BAT = 0.02,  // 20mA standard deviation of current sensor
 	.SIGMA_R0 = 0.01,    // 10mOhm
 };
