@@ -297,7 +297,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				){
 					ctrl_ref->ext_ac_lock = EXT_LOCK_INACTIVE;
 				}
-				static uint16_t cnt_lowPV = 0;
+				static uint32_t cnt_1Hz_lowPV = 0;  // stops counting if PV power is low
+				if (stateHYBRID_AC != HYB_AC_OFF) cnt_1Hz_lowPV = cnt_1Hz;
 
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
@@ -312,19 +313,18 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							   )
 							) {
 								stateHYBRID_AC = HYB_AC_ON;
-								cnt_lowPV = 0;
+								cnt_1Hz_lowPV = cnt_1Hz;
 						// Shutdown of already discharged battery when PV power is low
 						} else if(   battery_connected()
 								  && get_p_dc_filt50Hz() < P_BAT_MIN_CHARGE
 								  && battery_almost_empty()
 								  ) {
-							cnt_lowPV++;
-							if (cnt_lowPV == 500) {  // ~500 seconds, but function call has no defined interval
+							if (cnt_1Hz > (cnt_1Hz_lowPV+240)) {  // 4 minutes
 								nextMode(OFF);
-								cnt_lowPV = 0;
+								cnt_1Hz_lowPV = cnt_1Hz;
 							}
 						} else {
-							cnt_lowPV = 0;
+							cnt_1Hz_lowPV = cnt_1Hz;
 						}
 						break;
 
