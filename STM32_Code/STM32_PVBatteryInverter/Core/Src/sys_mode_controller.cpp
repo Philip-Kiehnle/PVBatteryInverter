@@ -148,6 +148,9 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 		cnt_1Hz_prev_ext_cmd = cnt_1Hz;
 	}
 
+	ctrl_ref->p_ac_low_power_mode_enter = modbus_reg_rw.p_ac_low_power_mode_enter;
+	ctrl_ref->p_ac_low_power_mode_exit = modbus_reg_rw.p_ac_low_power_mode_exit;
+
 	if ( ctrl_ref->ext_ctrl_mode != EXT_OFF && sys_mode != OFF ) {
 		ctrl_ref->p_ac_external = std::clamp(p_ac_unclamped, (int16_t)(-P_AC_MAX), (int16_t)P_AC_MAX);
 		nextMode(HYBRID_REMOTE_CONTROLLED);
