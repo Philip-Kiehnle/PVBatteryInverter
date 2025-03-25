@@ -194,7 +194,7 @@ void battery_state_request(stateBattery_t state)
 {
 	// in case of empty battery, use ship mode and turnoff BMS
 	if (state == BAT_OFF) {
-		if (   bms.batteryStatus.soc_percent > 30
+		if (   bms.batteryStatus.soc_percent > (modbus_reg_rw.soc_min_protect_percent+10)
 		    && get_sys_errorcode() == EC_NO_ERROR
 		) {
 			state = BMS_ON__BAT_OFF;

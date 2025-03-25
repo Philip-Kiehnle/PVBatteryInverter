@@ -53,7 +53,11 @@ enum mode_t get_sys_mode()
 static inline void nextMode(enum mode_t next_mode)
 {
 	if (next_mode == PV2AC || next_mode == OFF) {
-		contactorBattery(0);
+		if (next_mode == OFF) {
+			shutdownAll();
+		} else {
+			contactorBattery(0);
+		}
 		sys_mode_needs_battery = false;
 #if SYSTEM_HAS_BATTERY == 1
 		battery_state_request(BAT_OFF);
