@@ -495,23 +495,26 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 //				}
 //				i_ac_ref_amp_10mA = i_ac_ref_amp_1mA/10;
 
-#define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 0
+#define ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER 1
 #if ENABLE_LOW_POWER_ENERGY_PACKET_CONTROLLER == 1 && SYSTEM_HAS_BATTERY == 1
-constexpr uint16_t P_LOW_POWER_CTRL_REENABLE = 160;  // 200 leads to 400mWh sold in 10 minutes and 600mWh buyed
 				// electricity meter stores energy in 100mWh
 				//-> in 1 sec, 100mWh/1sec=360W offset can be tolerated
 				// if feedin is included, 720Ws can be tolerated -> todo
 
-				if (    ((ctrl_ref.p_ac_rms <= 50 && get_p_dc_filt50Hz() < 40) || ctrl_ref.p_ac_rms <= 20) // reduce number of switching events during PV production
-					 && ctrl_ref.p_pcc <= 10 && (get_p_ac_max_dc_lim() > P_LOW_POWER_CTRL_REENABLE)
+				if (    ctrl_ref.p_ac_rms <= ctrl_ref.p_ac_low_power_mode_enter
+					 && get_p_ac_bat_chg_reduction() <= 40  // avoid low power mode during PV feedin
+					 && ctrl_ref.p_pcc <= 10  // pcc controller has already reduced grid consumption
+					 && get_p_ac_max_dc_lim() > ctrl_ref.p_ac_low_power_mode_exit  // p_pv + p_bat have capability to compensate accumulated energy after return to normal mode
+					 && i_ac_ref_amp_10mA < (2.0*100)  // Irms=1.4A results in 6.3W (9W peak) loss if GaN transistor Vgs=-3V
+					 && i_ac_ref_amp_10mA > (-2.0*100)
 					 && check_zero_crossing(phase)  // turnoff during zero crossing reduces "click" noise in inductor
-					 && ctrl_ref.ext_ctrl_mode == EXT_OFF  // do not use packet mode in case of external power control
+					 && ctrl_ref.ext_ctrl_mode == EXT_OFF  // do not use packet/burst mode in case of external power control
 				) {
 					gatedriverAC(0);
 					low_power_mode_cnt++;
-				} else if (low_power_mode_cnt) {
-					if(    ctrl_ref.p_ac_rms > P_LOW_POWER_CTRL_REENABLE  // 200/50 = 3sec off / 1sec on, depends on power_controller tuning, see calc sheet
-						|| ( low_power_mode_cnt > (AC_CTRL_FREQ*3) && (get_p_ac_max_dc_lim() < P_LOW_POWER_CTRL_REENABLE) )  // en if power controller is limited by reduced battery power
+				} else if (low_power_mode_cnt) {  // low power mode is active if cnt>0
+					if(    ctrl_ref.p_ac_rms > ctrl_ref.p_ac_low_power_mode_exit  // e.g. 200/50 = 3sec off / 1sec on, depends on power_controller tuning, see calc sheet
+						|| ( low_power_mode_cnt > (AC_CTRL_FREQ*3) && (get_p_ac_max_dc_lim() < ctrl_ref.p_ac_low_power_mode_exit) )  // en if power controller is limited by reduced battery power
 						|| ctrl_ref.ext_ctrl_mode != EXT_OFF  // leave packet mode in case of external power control
 					) {
 						gatedriverAC(1);

@@ -59,6 +59,8 @@ typedef struct {
 	ext_lock_t ext_dc_lock;
 	int16_t p_ac_external;
 	int16_t p_ac_rms;  // power for AC control
+	uint16_t p_ac_low_power_mode_enter;
+	uint16_t p_ac_low_power_mode_exit;
 } control_ref_t;
 
 typedef enum
