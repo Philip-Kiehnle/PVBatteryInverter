@@ -60,7 +60,7 @@ static inline void nextMode(enum mode_t next_mode)
 		}
 		sys_mode_needs_battery = false;
 #if SYSTEM_HAS_BATTERY == 1
-		battery_state_request(BAT_OFF);
+		battery_state_request( (next_mode == OFF) ? CMD_BMS_OFF__BAT_OFF : CMD_BAT_OFF );
 #endif //SYSTEM_HAS_BATTERY
 	}
 
