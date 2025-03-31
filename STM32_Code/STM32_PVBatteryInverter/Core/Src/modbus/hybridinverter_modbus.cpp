@@ -34,7 +34,7 @@ modbus_reg_rw_t modbus_reg_rw = {
 	.pv_dc_softlock_duration_minutes = 12*60,
 
 	// battery related
-	.soc_min_protect_percent = 8,
+	.soc_min_protect_percent = 25,  // user can write lower value, but high default value prevents deep discharge
 	.soc_max_protect_percent = 90,
 	.p_bat_chg_max_W = 350*4,
 	.p_bat_dischg_max_W = 350*4,
@@ -179,40 +179,48 @@ uint16_t mbus_hybridinverter_write(uint32_t la, uint16_t value)
 		int addr = la-OFFSET;
 
 		uint16_t* regs = (uint16_t*)&modbus_reg_rw;
-		regs[addr] = value;
 
-		// Some registers do not need an extra command and only have to be written,
-		// e.g. p_bat_chg_max_W
-		// But some registers require extra actions:
+		// Prevent out of range values to be written into modbus registers (accepted but clamped or set to safe value)
+		// Some registers require extra actions
 
-		if (addr == offsetof(modbus_reg_rw_t, p_ac_soft_W)/2) {
-			modbus_p_ac_soft_update = true;
+		if (addr == offsetof(modbus_reg_rw_t, soc_min_protect_percent)/2) {
+			regs[addr] = std::clamp(value, (uint16_t)1, (uint16_t)90);
 
-		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_hard_W)/2) {
-			modbus_p_ac_hard_update = true;
+		} else if (addr == offsetof(modbus_reg_rw_t, soc_max_protect_percent)/2) {
+			regs[addr] = std::clamp(value, (uint16_t)10, (uint16_t)100);
 
-		} else if (addr == offsetof(modbus_reg_rw_t, fan_test)/2) {
-			fan_control_test(regs[addr]);
+		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_low_power_mode_enter)/2) {
+			regs[addr] = std::clamp(value, (uint16_t)0, (uint16_t)500);
 
-
-		// registers with limited range:
+		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_low_power_mode_exit)/2) {
+			regs[addr] = std::clamp(value, (uint16_t)0, (uint16_t)1000);
 
 		} else if (addr == offsetof(modbus_reg_rw_t, pv_ref_v_100mV)/2) {
-			modbus_reg_rw.pv_ref_v_100mV = std::clamp(modbus_reg_rw.pv_ref_v_100mV, (uint16_t)(10*MPPTPARAM.vin_min), (uint16_t)(10*MPPTPARAM.vin_max));
+			regs[addr] = std::clamp(value, (uint16_t)(10*MPPTPARAM.vin_min), (uint16_t)(10*MPPTPARAM.vin_max));
 			mppTracker.set_voltage( ((float)modbus_reg_rw.pv_ref_duration_sec)/10, ((float)modbus_reg_rw.pv_ref_v_100mV)/10, get_v_dc_filt50Hz());
 
 		} else if (addr == offsetof(modbus_reg_rw_t, bat_cell_v_bal_target_mV)/2) {
-			uint16_t v_bal_mV = modbus_reg_rw.bat_cell_v_bal_target_mV;
-			if (v_bal_mV >= BATTERY.V_CELL_MIN_PROTECT_mV && v_bal_mV <= BATTERY.V_CELL_MAX_PROTECT_mV) {
-				battery_set_balancing(0b1111, v_bal_mV);  // all CSCs
-			} else {
-				modbus_reg_rw.bat_cell_v_bal_target_mV = 0;
-			}
-		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_low_power_mode_enter)/2) {
-			modbus_reg_rw.p_ac_low_power_mode_enter = std::clamp(modbus_reg_rw.p_ac_low_power_mode_enter, (uint16_t)0, (uint16_t)500);
+				if (value >= BATTERY.V_CELL_MIN_PROTECT_mV && value <= BATTERY.V_CELL_MAX_PROTECT_mV) {
+					battery_set_balancing(0b1111, value);  // all CSCs
+					modbus_reg_rw.bat_cell_v_bal_target_mV = value;
+				} else {
+					modbus_reg_rw.bat_cell_v_bal_target_mV = UINT16_MAX;
+				}
 
-		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_low_power_mode_exit)/2) {
-			modbus_reg_rw.p_ac_low_power_mode_exit = std::clamp(modbus_reg_rw.p_ac_low_power_mode_exit, (uint16_t)0, (uint16_t)1000);
+		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_soft_W)/2) {
+			modbus_reg_rw.p_ac_soft_W = std::clamp(static_cast<int16_t>(value), (int16_t)-P_AC_MAX, (int16_t)P_AC_MAX);
+			modbus_p_ac_soft_update = true;
+
+		} else if (addr == offsetof(modbus_reg_rw_t, p_ac_hard_W)/2) {
+			modbus_reg_rw.p_ac_hard_W = std::clamp(static_cast<int16_t>(value), (int16_t)-P_AC_MAX, (int16_t)P_AC_MAX);
+			modbus_p_ac_hard_update = true;
+
+		} else if (addr == offsetof(modbus_reg_rw_t, fan_test)/2) {
+			regs[addr] = value;
+			fan_control_test(modbus_reg_rw.fan_test);
+
+		} else {  // all other values are written directly to the modbus register
+			regs[addr] = value;
 		}
 	}
 

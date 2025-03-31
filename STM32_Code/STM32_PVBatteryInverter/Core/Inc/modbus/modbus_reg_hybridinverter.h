@@ -42,8 +42,8 @@ typedef struct {
 	uint16_t bat_cell_v_bal_target_mV;
 
 	// AC related
-	uint16_t p_ac_soft_W;
-	uint16_t p_ac_hard_W;
+	int16_t p_ac_soft_W;
+	int16_t p_ac_hard_W;
 	uint16_t p_ac_low_power_mode_enter;  // value >0 enables LOW_POWER_ENERGY_PACKET_CONTROLLER
 	uint16_t p_ac_low_power_mode_exit;
 } modbus_reg_rw_t;

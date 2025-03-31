@@ -294,7 +294,7 @@ void shutdownAll()
 	contactorAC(0);
 	contactorBattery(0);
 #if SYSTEM_HAS_BATTERY == 1
-	battery_state_request(BAT_OFF);
+	battery_state_request(CMD_BAT_OFF);
 #endif //SYSTEM_HAS_BATTERY
 }
 

@@ -12,7 +12,7 @@
 #include "BatteryManagement/bms_types.h"
 
 
-typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON, BAT_OFF} stateBattery_t;
+typedef enum {BMS_OFF__BAT_OFF, BMS_ON__BAT_OFF, BMS_ON__BAT_ON, CMD_BAT_OFF, CMD_BMS_OFF__BAT_OFF} stateBattery_t;
 
 const bool battery_connected();
 const bool battery_empty();

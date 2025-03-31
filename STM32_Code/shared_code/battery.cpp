@@ -103,7 +103,7 @@ const bool battery_empty()
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 	const float soc_ref = 2.0;
 #else
-	const float soc_ref = std::clamp(modbus_reg_rw.soc_min_protect_percent, (uint16_t)1, (uint16_t)90);
+	const float soc_ref = modbus_reg_rw.soc_min_protect_percent;
 #endif
 	return (bms.batteryStatus.soc_percent <= soc_ref || bms.batteryStatus.minVcell_mV <= BATTERY.V_CELL_MIN_PROTECT_mV || cell_imbalance_flag);
 }
@@ -116,7 +116,7 @@ const bool battery_almost_empty()
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 	const float soc_ref = 5.0;
 #else
-	const float soc_ref = std::clamp((uint16_t)(modbus_reg_rw.soc_min_protect_percent+5), (uint16_t)1, (uint16_t)90);
+	const float soc_ref = modbus_reg_rw.soc_min_protect_percent+5;
 #endif
 	return (bms.batteryStatus.soc_percent <= soc_ref || bms.batteryStatus.minVcell_mV <= (BATTERY.V_CELL_MIN_PROTECT_mV+BATTERY.V_CELL_MIN_POWER_REDUCE_mV)/2 || cell_imbalance_flag);
 }
@@ -129,7 +129,7 @@ const bool battery_almost_full()
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 	const float soc_ref = 98.0;
 #else
-	const float soc_ref = std::clamp((uint16_t)(modbus_reg_rw.soc_max_protect_percent-1), (uint16_t)10, (uint16_t)100);
+	const float soc_ref = modbus_reg_rw.soc_max_protect_percent-1;
 #endif
 	return (bms.batteryStatus.soc_percent >= soc_ref || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_POWER_REDUCE_mV || cell_imbalance_flag);
 }
@@ -142,7 +142,7 @@ const bool battery_full()
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 	const float soc_ref = 100.0;
 #else
-	const float soc_ref = std::clamp(modbus_reg_rw.soc_max_protect_percent, (uint16_t)10, (uint16_t)100);
+	const float soc_ref = modbus_reg_rw.soc_max_protect_percent;
 #endif
 	return (bms.batteryStatus.soc_percent >= soc_ref || bms.batteryStatus.maxVcell_mV >= BATTERY.V_CELL_MAX_PROTECT_mV || cell_imbalance_flag);
 }
@@ -193,9 +193,10 @@ static void check_bat_error()
 void battery_state_request(stateBattery_t state)
 {
 	// in case of empty battery, use ship mode and turnoff BMS
-	if (state == BAT_OFF) {
+	if (state == CMD_BAT_OFF || state == CMD_BMS_OFF__BAT_OFF) {
 		if (   bms.batteryStatus.soc_percent > (modbus_reg_rw.soc_min_protect_percent+10)
 		    && get_sys_errorcode() == EC_NO_ERROR
+		    && state == CMD_BAT_OFF  // BMS can remain on if no explicit shutdown command (CMD_BMS_OFF__BAT_OFF) has been sent
 		) {
 			state = BMS_ON__BAT_OFF;
 		} else {
