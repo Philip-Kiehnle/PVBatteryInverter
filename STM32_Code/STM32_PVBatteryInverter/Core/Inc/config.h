@@ -62,7 +62,8 @@
 //#define P_AC_MAX ((5*32)/1.41) //113W  // todo implement anti windup in power controller regarding IAC_AMP_MAX_10mA
 //#define P_AC_MAX (210)  // 210W minimum for energy packet controller
 //#define P_AC_MAX (460)  // 460W for 2A Fuse
-#define P_AC_MAX (600)
+//#define P_AC_MAX (600)
+#define P_AC_MAX (1000)
 #define P_BAT_MIN_CHARGE 12  // BMS 4.7Watt; Final wiring: 6.9W including both contactors
 #define P_MIN_PV2AC 15
 
