@@ -283,8 +283,8 @@ void calc_and_wait(uint32_t delay)
 // +-50A sensor range with 3.3V ADC:
 // −62.1A to +32.1A
 // analog watchdog set to
-// +10Ampere -> 1000/IDC_RAW_TO_10mA + 2632 = 3066
-// -10Ampere -> -1000/IDC_RAW_TO_10mA + 2632 = 2198
+// +15Ampere -> 1500/IDC_RAW_TO_10mA + 2632 = 3290
+// -15Ampere -> -1500/IDC_RAW_TO_10mA + 2632 = 1974
 void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 {
 	shutdownAll();
@@ -969,8 +969,8 @@ static void MX_ADC2_Init(void)
   AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
   AnalogWDGConfig.Channel = ADC_CHANNEL_11;
   AnalogWDGConfig.ITMode = ENABLE;
-  AnalogWDGConfig.HighThreshold = 3066;
-  AnalogWDGConfig.LowThreshold = 2198;
+  AnalogWDGConfig.HighThreshold = 3290;
+  AnalogWDGConfig.LowThreshold = 1974;
   AnalogWDGConfig.FilteringConfig = ADC_AWD_FILTERING_2SAMPLES;
   if (HAL_ADC_AnalogWDGConfig(&hadc2, &AnalogWDGConfig) != HAL_OK)
   {

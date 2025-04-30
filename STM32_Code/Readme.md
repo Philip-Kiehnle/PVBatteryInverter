@@ -29,6 +29,7 @@ Write with verify and start application:
 ```
 ./stm32flash -b 115200 -w firmware.bin -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1
 ```
+If process is interrupted, the booloader recovers after some minutes and the flash application can be restarted. 
 
 Or flash via Android phone:
 ```

@@ -148,7 +148,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	if (get_sys_errorcode() != EC_NO_ERROR ) {
 		shutdownDC();
 #if SYSTEM_HAS_BATTERY == 1
-		battery_state_request(BAT_OFF);
+		battery_state_request(CMD_BAT_OFF);
 #endif //SYSTEM_HAS_BATTERY
 		nextState(INIT_DC);
 	}
