@@ -31,11 +31,26 @@ constexpr BatteryParameter_t BATTERY = {
 constexpr KalmanParameter_t KALMAN = {
 	.ETA_CHG = 0.99,
 	.ETA_DISCHG = 1.0,
-	.R0 = ((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS /1000,  // internal resistance R0 of parallel cells for simple model
+	//.R0 = ((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS /1000,  // internal resistance R0 of parallel cells for simple model
+	.R0 = 0.5*((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS /1000,  // internal resistance R0 of parallel cells for advanced model
 	//.SIGMA_V_CELL = 0.04,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm -> has 1.2% SoC jumps
 	.SIGMA_V_CELL = 0.1,  // 40mV standard deviation because of 100Hz ripple of single phase inverter; assuming 2A at 20mOhm; 60mV extra because of simple model
 	.SIGMA_I_BAT = 0.02,  // 20mA standard deviation of current sensor
 	.SIGMA_R0 = 0.01,    // 10mOhm
+// For advanced model:
+	.R1 = 0.5*((float)BATTERY.R_SINGLE_CELL_mOHM) / BATTERY.PARALLEL_CELLS /1000,  // internal resistance R1 of parallel cells; paper: 0.72mOhm with 38Ah cell
+	.R2 = 0.0,  // paper: 0.69mOhm with 38Ah cell
+	.TAU1 = 420,     // paper: 36s
+	.TAU2 = 642,    // paper: 642s
+	.GAMMA = 17,    // paper: 17
+	.M = 0.002,  // maximum polarization voltage (half the difference of charge and discharge OCV curves); paper: M(q) LUT
+	.REST_TIME = 400,  // s
+	.SIGMA_R1 = 0.008,   // paper: 0.1mOhm with 38Ah cell
+	.SIGMA_R2 = 0.009,  // paper: 0.35mOhm with 38Ah cell
+	.SIGMA_TAU1 = 200,  // paper: 8s
+	.SIGMA_TAU2 = 200,  // paper: 200s
+	.SIGMA_GAMMA = 10,  // paper: 10
+	.SIGMA_M = 0.005  // paper: 0.2 * M(q)
 };
 
 

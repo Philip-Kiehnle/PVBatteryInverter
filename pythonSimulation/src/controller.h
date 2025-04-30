@@ -94,8 +94,9 @@ int32_t get_IGRID_ADCR();
 //#define IAC_AMP_MAX_10mA 3.0*100  // 325*3/2=488W max 400W because of inductor parameter missmatch
 //#define IAC_AMP_MAX_10mA 3.5*100  // 325*3.5/2=567W should provide 460W -> discharge limited to 380W in some cases (15.3.2025)
 //#define IAC_AMP_MAX_10mA 4.2*100  // 325*4.2/2=683W should provide 460W
-//#define IAC_AMP_MAX_10mA 5.5*100  // 325*5.5/2=894W should provide 600W
-#define IAC_AMP_MAX_10mA 9.2*100  // 325*9.2/2=1495W should provide 1000W
+//#define IAC_AMP_MAX_10mA 5.5*100  // 325*5.5/2=894W should provide 600W  factor 1.49
+//#define IAC_AMP_MAX_10mA 9.2*100  // 325*9.2/2=1495W should provide 1000W  factor 1.5
+#define IAC_AMP_MAX_10mA 12.8*100  // 325*12.8/2=2080W should provide 1500W  factor 1.39
 
 typedef struct {
 	int32_t y;
