@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 
-int power_controller_step(int powerPCC, uint16_t p_ac_max);
+int power_controller_step(int p_pcc_ref, int p_pcc, uint16_t p_ac_max);
 
 
 #ifdef __cplusplus

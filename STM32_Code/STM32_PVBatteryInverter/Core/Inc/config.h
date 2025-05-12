@@ -64,7 +64,8 @@
 //#define P_AC_MAX (460)  // 460W for 2A Fuse
 //#define P_AC_MAX (600)
 //#define P_AC_MAX (1000)
-#define P_AC_MAX (1500)
+//#define P_AC_MAX (1500)
+#define P_AC_MAX (1800)
 #define P_BAT_MIN_CHARGE 12  // BMS 4.7Watt; Final wiring: 6.9W including both contactors
 #define P_MIN_PV2AC 15
 
@@ -79,7 +80,7 @@
 /*******************/
 /* Current sensors */
 /*******************/
-#define IDC_OFFSET_RAW 2629  // 2635->-60mA  2632:~0mA at room temperature -87mA at 3°C
+#define IDC_OFFSET_RAW 2631  // 2635->-60mA  2632:~0mA at room temperature -87mA at 3°C  2629: 49mA at room temperature
 #define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // 2.301897321 -> 23mA per LSB

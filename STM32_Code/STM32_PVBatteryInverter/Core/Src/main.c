@@ -337,7 +337,7 @@ void calc_and_wait(uint32_t delay)
 			ctrl_ref.p_pcc = electricity_meter_get_power();
 #endif //DUMMY_METER
 #if SYSTEM_HAS_BATTERY == 1
-			ctrl_ref.p_ac_pccCtrl = power_controller_step(ctrl_ref.p_pcc, get_p_ac_max());
+			ctrl_ref.p_ac_pccCtrl = power_controller_step(modbus_reg_rw.p_pcc_ref_W, ctrl_ref.p_pcc, get_p_ac_max());
 #endif //SYSTEM_HAS_BATTERY
 		} else if (el_meter_status == EL_METER_CONN_ERR ) {
 			ctrl_ref.p_ac_pccCtrl = 0;
