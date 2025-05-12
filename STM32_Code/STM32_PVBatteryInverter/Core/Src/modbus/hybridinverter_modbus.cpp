@@ -44,6 +44,7 @@ modbus_reg_rw_t modbus_reg_rw = {
 	.p_ac_hard_W = 0,
 	.p_ac_low_power_mode_enter = 90,  // 10.000imp/kWh -> 360Ws per pulse -> 4seconds * 90Watt
 	.p_ac_low_power_mode_exit = 160,
+	.p_pcc_ref_W = -1,  // 1 Watt feed-in
 };
 
 bool modbus_p_ac_soft_update;

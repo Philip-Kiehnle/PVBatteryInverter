@@ -46,6 +46,7 @@ typedef struct {
 	int16_t p_ac_hard_W;
 	uint16_t p_ac_low_power_mode_enter;  // value >0 enables LOW_POWER_ENERGY_PACKET_CONTROLLER
 	uint16_t p_ac_low_power_mode_exit;
+	int16_t p_pcc_ref_W;  // value <0 means export, as in the electricity meter
 } modbus_reg_rw_t;
 
 
