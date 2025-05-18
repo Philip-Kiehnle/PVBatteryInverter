@@ -39,9 +39,9 @@
 #define F_MIN 48
 #define F_MAX 51
 
-#define E_I_AC_RMS_MAX_CNT 10  // 10 samples @ 20kHz -> 500us
-#define E_I_AC_RMS_MAX_AMP_10mA (13.5 * 100)  // 2200W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
-#define E_I_AC_PULSE_MAX_AMP_10mA (16.0 * 100)  // 2600W÷230V×sqrt(2) amplitude for 1 sample
+#define E_I_AC_RMS_MAX_CNT 15  // 15 samples @ 20kHz -> 750µs
+#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+#define E_I_AC_PULSE_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for 1 sample
 //#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples -> triggered error even with 460W limit (11.03.2025 18:27)
 //#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
