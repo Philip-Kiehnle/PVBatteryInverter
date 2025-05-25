@@ -66,8 +66,8 @@
 //#define P_AC_MAX (1000)
 //#define P_AC_MAX (1500)
 #define P_AC_MAX (1800)
-#define P_BAT_MIN_CHARGE 12  // BMS 4.7Watt; Final wiring: 6.9W including both contactors
-#define P_MIN_PV2AC 15
+#define P_BAT_MIN_CHARGE 14  // BMS 4.7Watt; Final wiring: 6.9W including both contactors
+#define P_MIN_PV2AC 18
 
 /***************/
 /* Fan control */

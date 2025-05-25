@@ -310,8 +310,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
-							&& (   (battery->soc_percent > 10          // enough energy for feedin
-								    && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+80)
+							&& (   (!battery_almost_empty()          // enough energy for feedin
 								    && (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50))  // feedin required; filter 1 second spikes from freezer motor start
 							    || bms.warn_temperature()              // hot or cold battery -> PV2AC
 							    || battery_almost_full()               // or battery charge power has to be reduced
@@ -358,7 +357,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 									&& (  battery_empty()
 									    || bms.warn_temperature_cell_high()  // if battery hot, use PV2AC mode
 									    || battery->voltage_100mV < get_v_ac_amp_filt50Hz_100mV()  // if battery voltage is lower than grid voltage
-									    || get_p_ac_max_dc_lim() < 40  // if battery power became low because of heat or low voltage
+									    || get_p_ac_max_dc_lim() < 80  // if battery power became low because of heat or low voltage
 									   )
 						   ) {
 							// prevent system shutdown during sunrise
