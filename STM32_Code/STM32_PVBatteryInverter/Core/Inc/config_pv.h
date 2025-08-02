@@ -23,17 +23,16 @@ constexpr PV_module_t PVMODULE = PV_module_t{
 
 constexpr MPPT_parameter_t MPPTPARAM = MPPT_parameter_t{
 	.debug = false,
-	.vin_min = 62,  // 2 modules * 31V
-	.vin_max = 424,  // 8 modules * 53V
-	.vout_min = 288,  // 96 Li-cells * 3.0
-	.vout_max = 403,  // 96 Li-cells * 4.2
+	.v_pv_min = 62,  // 2 modules * 31V
+	.v_pv_max = 424,  // 8 modules * 53V
+	.i_in_max = 9.0,
+	.p_max = 2800,
 	.nr_pv_modules = 8,
 	.mppt_freq = DC_CTRL_FREQ_MPPT/2,  // one cycle stabilisation, one cycle MPPT calculation
-	.mppt_duty_absmax = DEF_MPPT_DUTY_ABSMAX,
-    .mppt_duty_min_bootstrap = 0  // High side has isolated supply and no bootstrap capacitor
 };
 
 constexpr GMPPT_parameter_t GMPPTPARAM = GMPPT_parameter_t{
+	.enable = false,
 	.nr_bypassDiodes_search_per_interval = 6,
 	.interval_glob_mppt_regular_sec = 10*60,  // 10 minutes
 	.interval_glob_mppt_trig_event_sec = 2*60  // 2 minutes when power drops

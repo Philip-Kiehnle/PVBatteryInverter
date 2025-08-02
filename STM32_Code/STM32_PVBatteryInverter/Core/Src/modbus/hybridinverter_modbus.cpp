@@ -197,8 +197,8 @@ uint16_t mbus_hybridinverter_write(uint32_t la, uint16_t value)
 			regs[addr] = std::clamp(value, (uint16_t)0, (uint16_t)1000);
 
 		} else if (addr == offsetof(modbus_reg_rw_t, pv_ref_v_100mV)/2) {
-			regs[addr] = std::clamp(value, (uint16_t)(10*MPPTPARAM.vin_min), (uint16_t)(10*MPPTPARAM.vin_max));
-			mppTracker.set_voltage( ((float)modbus_reg_rw.pv_ref_duration_sec)/10, ((float)modbus_reg_rw.pv_ref_v_100mV)/10, get_v_dc_filt50Hz());
+			regs[addr] = std::clamp(value, (uint16_t)(10*MPPTPARAM.v_pv_min), (uint16_t)(10*MPPTPARAM.v_pv_max));
+			mppTracker.set_voltage( ((float)modbus_reg_rw.pv_ref_duration_sec)/10, ((float)modbus_reg_rw.pv_ref_v_100mV)/10);
 
 		} else if (addr == offsetof(modbus_reg_rw_t, bat_cell_v_bal_target_mV)/2) {
 				if (value >= BATTERY.V_CELL_MIN_PROTECT_mV && value <= BATTERY.V_CELL_MAX_PROTECT_mV) {
