@@ -87,7 +87,7 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 		case CMD_INVERTER_RESET:
 			GPIOB->BRR = (1<<0);  // enable red LED
 			if (get_sys_errorcode() != EC_NO_ERROR) {
-				if (cntErr_1Hz > 120) {  // reset possible after 120 seconds in case of error
+				if (cntErr_1Hz > 30) {  // reset possible after 30 seconds in case of error
 					NVIC_SystemReset();
 				}
 			} else {
@@ -208,14 +208,22 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			ctrl_ref->v_dc_100mV = (320*10);  // for init of PV DC controller
 			ctrl_ref->mode = VDC_CONTROL;
 #else
-			ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);  // for init of PV DC controller
-			if (stateDC > VOLTAGE_CONTROL) {
-			    //ctrl_ref->mode = VDC_VARIABLE_CONTROL;  // increases voltage too much with 2x1kW grid resistance for debugging
-			    ctrl_ref->mode = VDC_CONTROL;
-			} else {
-			    ctrl_ref->mode = VDC_CONTROL;
+#if SYSTEM_HAS_BATTERY == 1
+			if (battery_connected() == false) {  // wait until battery is disconnected
+#endif //SYSTEM_HAS_BATTERY
+				ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);  // init of PV DC controller
+
+				if (stateDC > VOLTAGE_CONTROL) {
+					ctrl_ref->mode = VDC_VARIABLE_CONTROL;  // increases voltage too much with 2x1kW grid resistance for debugging
+					//ctrl_ref->mode = VDC_CONTROL;
+				} else {
+					ctrl_ref->mode = VDC_CONTROL;
+				}
+#if SYSTEM_HAS_BATTERY == 1
 			}
-#endif
+#endif //SYSTEM_HAS_BATTERY
+
+#endif //USE_TRAFO_33V
 
 			sys_mode_needs_battery = false;
 
@@ -363,6 +371,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							// prevent system shutdown during sunrise
 							//if(time > time_sunrise && time < time_sundown)  // todo PLL-like time estimation for day and night
 							if (get_p_dc_filt50Hz() >= P_MIN_PV2AC) {
+								ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
 								nextMode(PV2AC);
 							} else if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {
 								ctrl_ref->mode = AC_PASSIVE;

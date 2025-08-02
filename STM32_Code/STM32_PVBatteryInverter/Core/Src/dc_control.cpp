@@ -106,7 +106,7 @@ void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 void calc_async_dc_control()
 {
 	if (mppt_calc_request) {
-		mppTracker.step(p_dc_filt50Hz, v_pv_filt50Hz, v_dc_filt50Hz);
+		mppTracker.step(p_dc_filt50Hz, v_pv_filt50Hz);
 		mppt_calc_request = false;
 		mppt_calc_complete = true;
 	}
@@ -242,7 +242,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 		// todo: delay of sigma delta processing caused lagging Vdc meas when 100Hz ripple occurs -> use voltage estimator or extra Vdc meas
 		v_dc_filt50Hz = (float)v_dc_FBboost_filt50Hz_100mV/10.0;
-		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)mppTracker.duty_raw/DEF_MPPT_DUTY_ABSMAX);
+		v_pv_filt50Hz = mppTracker.get_v_pv_ref();
 		i_pv_filt50Hz = p_dc_filt50Hz/v_pv_filt50Hz;
 
 		p_dc_filt50Hz = p_dc_sum/CYCLES_cnt20kHz_20ms;
@@ -283,7 +283,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		gatedriverDC(1);
 
 		if (cnt20kHz_20ms == 0) {
-			constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAM.vin_min/MPPTPARAM.vout_max);
+			constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAM.v_pv_min/(VDC_MAX_MPPT_100mV/10));
 			int16_t err = v_dc_ref_100mV-v_dc_FBboost_sincfilt_100mV;
 			piCtrl.step(err, 0, DEF_MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY);
 			dutyLS1 = piCtrl.y;
@@ -311,7 +311,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			} else {
 #endif //SYSTEM_HAS_BATTERY
 				cnt_rel = 0;
-				mppTracker.duty_raw = dutyLS1;
+				mppTracker.set_voltage(0, v_dc_filt50Hz * (1.0 - (float)dutyLS1/DEF_MPPT_DUTY_ABSMAX));
 				nextState(MPPT);
 #if SYSTEM_HAS_BATTERY == 1
 			}
@@ -324,7 +324,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  case WAIT_CONTACTOR_DC:
 		//if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
 		if (cnt_rel >= 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable. Hangs, if battery not connecting
-			mppTracker.duty_raw = dutyLS1;
+			mppTracker.set_voltage(0, v_dc_filt50Hz * (1.0 - (float)dutyLS1/DEF_MPPT_DUTY_ABSMAX));
 			nextState(MPPT);
 		}
 		break;
@@ -375,7 +375,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			}
 
 			if (mppt_calc_complete) {
-				dutyLS1 = mppTracker.duty_raw;
+				dutyLS1 = (1.0 - v_pv_filt50Hz/v_dc_filt50Hz) * DEF_MPPT_DUTY_ABSMAX;
 				mppt_calc_complete = false;
 			}
 		}

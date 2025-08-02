@@ -1,10 +1,3 @@
-/*
- * sogi_pllFXP.h
- *
- *  Created on: 23.07.2022
- *      Author: philip
- */
-
 #ifndef INC_CONTROLLER_H_
 #define INC_CONTROLLER_H_
 
@@ -97,7 +90,8 @@ int32_t get_IGRID_ADCR();
 //#define IAC_AMP_MAX_10mA 5.5*100  // 325*5.5/2=894W should provide 600W  factor 1.49
 //#define IAC_AMP_MAX_10mA 9.2*100  // 325*9.2/2=1495W should provide 1000W  factor 1.5
 //#define IAC_AMP_MAX_10mA 12.8*100  // 325*12.8/2=2080W should provide 1500W  factor 1.39
-#define IAC_AMP_MAX_10mA 16.5*100  // 325*16.5/2=2681W should provide 1800W  factor 1.49
+//#define IAC_AMP_MAX_10mA 16.5*100  // 325*16.5/2=2681W should provide 1800W  factor 1.49. Sometimes provides ~1630W only (Vdc=364V Vac=236V -> 30V for inductors ~23V required)
+#define IAC_AMP_MAX_10mA 18.3*100  // 325*18.3/2=2974W should provide 2000W  factor 1.49
 
 typedef struct {
 	int32_t y;
