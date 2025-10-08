@@ -1,3 +1,6 @@
 [submodule "submodules/ControllerLib"]
 	path = submodules/ControllerLib
 	url = git@github.com:Philip-Kiehnle/ControllerLib.git
+[submodule "submodules/SmartMeterReader"]
+	path = submodules/SmartMeterReader
+	url = git@github.com:Philip-Kiehnle/SmartMeterReader.git

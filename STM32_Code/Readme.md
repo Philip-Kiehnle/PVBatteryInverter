@@ -33,8 +33,8 @@ If process is interrupted, the booloader recovers after some minutes and the fla
 
 Or flash via Android phone:
 ```
-adb push 'STM32_PVBatteryInverter/Debug/STM32_PVBatteryInverter.bin' /data/local
-adb shell
+adb -e push 'STM32_PVBatteryInverter/Debug/STM32_PVBatteryInverter.bin' /data/local
+adb -e shell
 pkill log-
 /data/local/stm32flash -b 115200 -w /data/local/STM32_PVBatteryInverter.bin  -v -g 0x8008000 -S 0x8008000 /dev/ttyUSB1
 # A reset seems to be necessary after flash process. Direct start does not charge battery.

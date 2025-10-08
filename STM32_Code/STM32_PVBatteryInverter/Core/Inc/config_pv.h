@@ -23,7 +23,7 @@ constexpr PV_module_t PVMODULE = PV_module_t{
 
 constexpr MPPT_parameter_t MPPTPARAM = MPPT_parameter_t{
 	.debug = false,
-	.v_pv_min = 62,  // 2 modules * 31V
+	.v_pv_min = 83,  // 2.67 modules * 31V
 	.v_pv_max = 424,  // 8 modules * 53V
 	.i_in_max = 9.0,
 	.p_max = 2800,

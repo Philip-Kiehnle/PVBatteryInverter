@@ -120,7 +120,7 @@ el_meter_status_t electricity_meter_read(UART_HandleTypeDef* huart)
 
 		if ( *((uint32_t*) rx_buf) == 0x1b1b1b1b) {
 			meterdata_t meterdata = {0};
-			if (parse_sml(rx_buf, EL_METER_RX_BUF_TYP_SIZE, &meterdata) == 1) {
+			if (parse_sml(rx_buf, EL_METER_RX_BUF_TYP_SIZE, ISKRA_MT631, &meterdata) == 1) {
 				pcc_power = meterdata.power;
 				smart_meter_err_cnt = 0;
 				smart_meter_no_comm_cnt = 0;
