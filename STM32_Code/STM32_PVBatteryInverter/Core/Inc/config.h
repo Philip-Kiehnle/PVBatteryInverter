@@ -108,5 +108,7 @@
 
 #define AC_CTRL_FREQ DC_CTRL_FREQ
 
+#define NUM_MPPT_HALFBRIDGES 1
+//#define NUM_MPPT_HALFBRIDGES 2
 
 #endif /* INC_CONFIG_H */

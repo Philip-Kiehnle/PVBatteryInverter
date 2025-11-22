@@ -20,6 +20,7 @@ typedef enum {
 typedef struct {
 	// General
 	uint16_t cmd;
+	uint16_t ext_lock_timer_hours;
 	uint16_t fan_test;
 
 	// PV related

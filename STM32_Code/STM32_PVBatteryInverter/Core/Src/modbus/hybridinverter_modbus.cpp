@@ -19,6 +19,7 @@ extern          "C"
 modbus_reg_rw_t modbus_reg_rw = {
 	// General
 	.cmd = CMD_INVALID,
+	.ext_lock_timer_hours = 5,
 	.fan_test = 0,
 
 	// PV related
@@ -148,10 +149,10 @@ uint16_t mbus_hybridinverter_read(uint32_t la)
 			}
 			return bal_state;
 
-		} else if (addr >= REG_START_bat_cell_temperature&& addr < REG_END_bat_cell_temperature) {
+		} else if (addr >= REG_START_bat_cell_temperature && addr < REG_END_bat_cell_temperature) {
 			return get_battery_cell_temperature(addr-REG_START_bat_cell_temperature);
 
-		} else if (addr >= REG_START_bat_PCB_temperature&& addr < REG_END_bat_PCB_temperature) {
+		} else if (addr >= REG_START_bat_PCB_temperature && addr < REG_END_bat_PCB_temperature) {
 			return get_battery_PCB_temperature(addr-REG_START_bat_PCB_temperature);
 
 		} else if (addr == offsetof(modbus_reg_ro_t, fan_state)/2) {
@@ -184,7 +185,10 @@ uint16_t mbus_hybridinverter_write(uint32_t la, uint16_t value)
 		// Prevent out of range values to be written into modbus registers (accepted but clamped or set to safe value)
 		// Some registers require extra actions
 
-		if (addr == offsetof(modbus_reg_rw_t, soc_min_protect_percent)/2) {
+		if (addr == offsetof(modbus_reg_rw_t, ext_lock_timer_hours)/2) {
+			regs[addr] = value;
+
+		} else if (addr == offsetof(modbus_reg_rw_t, soc_min_protect_percent)/2) {
 			regs[addr] = std::clamp(value, (uint16_t)1, (uint16_t)90);
 
 		} else if (addr == offsetof(modbus_reg_rw_t, soc_max_protect_percent)/2) {

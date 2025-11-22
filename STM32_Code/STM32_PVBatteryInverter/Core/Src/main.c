@@ -294,7 +294,7 @@ void shutdownAll()
 	contactorAC(0);
 	contactorBattery(0);
 #if SYSTEM_HAS_BATTERY == 1
-	battery_state_request(CMD_BAT_OFF);
+	battery_state_request(CMD_BAT_OFF);  // todo: check CMD_BMS_OFF__BAT_OFF
 #endif //SYSTEM_HAS_BATTERY
 }
 
@@ -553,6 +553,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		// Input capacitor can deliver high currents!
 		// Todo: smooth change of dutycycle. Including previous state of Gatedriver EN signal
 #define DEF_DC_BOOST_DUTY_HS_MIN (0.8*DEF_MPPT_DUTY_ABSMAX)  // limited boost ratio of 1.25 (e.g. 288V to 360V) limits current to <12A with Vin=325V
+//#define DEF_DC_BOOST_DUTY_HS_MIN (0.75*DEF_MPPT_DUTY_ABSMAX)  // limited boost ratio of 1.33 (e.g. 270V to 360V)
 		if (dutyHS < DEF_DC_BOOST_DUTY_HS_MIN) {
 			dutyHS = DEF_DC_BOOST_DUTY_HS_MIN;
 		}
@@ -566,7 +567,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 				break;
 
 			case DCDC_HB2:
+#if NUM_MPPT_HALFBRIDGES == 1
+				dutyB1 = dutyHS;
+#else
 				dutyB2 = dutyHS;
+#endif
 				break;
 
 			case DCDC_INTERLEAVED:

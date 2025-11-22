@@ -17,7 +17,6 @@
 
 
 enum mode_t sys_mode = SYS_MODE;
-bool sys_mode_locked = false;
 static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
 static uint16_t p_bat_chg_max;
 static uint16_t p_bat_dischg_max;
@@ -52,8 +51,8 @@ enum mode_t get_sys_mode()
 
 static inline void nextMode(enum mode_t next_mode)
 {
-	if (next_mode == PV2AC || next_mode == OFF) {
-		if (next_mode == OFF) {
+	if (next_mode == PV2AC || next_mode == OFF || next_mode == OFF_EXT_LOCK_TIMER) {
+		if (next_mode == OFF || next_mode == OFF_EXT_LOCK_TIMER) {
 			shutdownAll();
 		} else {
 			contactorBattery(0);
@@ -66,7 +65,7 @@ static inline void nextMode(enum mode_t next_mode)
 
 	if (sys_mode == OFF) {
 		// stay in OFF mode for 5 minutes to discharge DC bus
-		if ( cnt_1Hz > (cnt_rel_1Hz+(5*60)) && !sys_mode_locked) {
+		if ( cnt_1Hz > (cnt_rel_1Hz+(5*60))) {
 			sys_mode = next_mode;
 			cnt_rel_1Hz = cnt_1Hz;
 		}
@@ -97,13 +96,22 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 			break;
 
 		case CMD_INVERTER_OFF:
-			sys_mode_locked = true;
+			// Contactor wear out protection: Vdc=350V Vac=325V L=6mH
+			// 2000W equals 12A peak current
+			// during discharging: dt=L*dI/(325V+350V)=0.1ms  which is faster than contactor
+			// during charging:    dt=L*dI/(350V-325V)=2.88ms which is slower than contactor -> bring current to zero first
+			ctrl_ref->mode = AC_PASSIVE;
+			ctrl_ref->ext_dc_lock = EXT_LOCK_SOFT;
+			HAL_Delay(3);  //ms
 			shutdownAll();
-			nextMode(OFF);
+			nextMode(OFF_EXT_LOCK_TIMER);
 			break;
 
 		case CMD_INVERTER_ON:
-			sys_mode_locked = false;
+			if (sys_mode == OFF_EXT_LOCK_TIMER) {
+				nextMode(OFF);  // ensure minimum DC bus discharge time, which is provided by OFF mode
+			}
+			ctrl_ref->ext_dc_lock = EXT_LOCK_INACTIVE;
 			break;
 
 		case CMD_P_AC_EXT_OFF:
@@ -115,10 +123,14 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 			break;
 
 		case CMD_AC_LOCK_SOFT:
+			ctrl_ref->mode = AC_PASSIVE;  // todo: check if mode is set back to meaningful value
+			HAL_Delay(3);  //ms
 			ctrl_ref->ext_ac_lock = EXT_LOCK_SOFT;
 			break;
 
 		case CMD_AC_LOCK_HARD:
+			ctrl_ref->mode = AC_PASSIVE;  // todo: check if mode is set back to meaningful value
+			HAL_Delay(3);  //ms
 			ctrl_ref->ext_ac_lock = EXT_LOCK_HARD;
 			break;
 
@@ -183,6 +195,10 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 {
 #if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
+	static float battery_assumed_soc_percent = 50;  // keeps the last known SoC in case the BMS is turned off, which resets the batteryStatus
+	if (battery->soc_percent != 0) {
+		battery_assumed_soc_percent = battery->soc_percent;
+	}
 	bms.read_current = true;
 	p_bat_chg_max = std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
 	p_bat_dischg_max = std::min(battery->p_discharge_max, modbus_reg_rw.p_bat_dischg_max_W);
@@ -198,6 +214,16 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			sys_mode_needs_battery = false;
 			shutdownAll();
 			nextMode(SYS_MODE);
+			break;
+
+		  case OFF_EXT_LOCK_TIMER:
+			ctrl_ref->mode = AC_OFF;
+			ctrl_ref->v_dc_100mV = 0;
+			sys_mode_needs_battery = false;
+
+			if (cnt_1Hz > (cnt_rel_1Hz + 3600*modbus_reg_rw.ext_lock_timer_hours)) {
+				nextMode(OFF);  // ensure minimum DC bus discharge time, which is provided by OFF mode
+			}
 			break;
 
 		  case PV2AC:  // EnergyMeter: 29.6W 30.2VA with saturating inductor model
@@ -230,7 +256,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
 #if SYSTEM_HAS_BATTERY == 1
-			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery->minVcell_mV > (BATTERY.V_CELL_MIN_POWER_REDUCE_mV+100))  // more feedin required and battery not empty
+			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery_assumed_soc_percent > (modbus_reg_rw.soc_min_protect_percent+5))  // more feedin required and battery not empty
 					 || (ctrl_ref->p_pcc < -50 && battery->soc_percent < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
 				 && !bms.warn_temperature()
 #endif //SYSTEM_HAS_BATTERY
@@ -288,7 +314,12 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
-					battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
+					if (   (ctrl_ref->p_pcc > 20 && ctrl_ref->p_pcc_prev > 20)  // feedin required; filter 1 second spikes from freezer motor start
+					    && (battery_assumed_soc_percent < (modbus_reg_rw.soc_min_protect_percent+2))) {
+						nextMode(PV2AC);
+					} else {
+						battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
+					}
 				}
 		    } else {
 				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
@@ -331,6 +362,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						// Shutdown of already discharged battery when PV power is low
 						} else if(   battery_connected()
 								  && get_p_dc_filt50Hz() < P_BAT_MIN_CHARGE
+								  // && battery->power_W < P_BAT_MIN_CHARGE  // todo: check why bat power has 14W offset
 								  && battery_almost_empty()
 								  ) {
 							if (cnt_1Hz > (cnt_1Hz_lowPV+240)) {  // 4 minutes

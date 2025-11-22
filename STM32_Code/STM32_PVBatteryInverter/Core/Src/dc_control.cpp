@@ -223,14 +223,14 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 	cnt_rel++;
 
-	static uint32_t v_dc_sum;
+	static uint32_t v_dc_sum_100mV;
 	static int32_t i_dc_sum_10mA;
 	static int16_t i_dc_filt50Hz_mA;  // +-32A max
 	static float p_dc_sum;
 	static uint16_t pv_probe_timer50Hz = (PV_WAIT_SEC-1)*50;  // speedup first start
 
 	p_dc_sum += (v_dc_FBboost_sincfilt_100mV * i_dc_filt_10mA)/1000.0;
-	v_dc_sum += v_dc_FBboost_sincfilt_100mV;
+	v_dc_sum_100mV += v_dc_FBboost_sincfilt_100mV;
 	i_dc_sum_10mA += i_dc_filt_10mA;
 
 	if (cnt20kHz_20ms == 0) {
@@ -240,20 +240,22 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 		monitoring_request = true;
 
-		// todo: delay of sigma delta processing caused lagging Vdc meas when 100Hz ripple occurs -> use voltage estimator or extra Vdc meas
+		v_dc_FBboost_filt50Hz_100mV = v_dc_sum_100mV/CYCLES_cnt20kHz_20ms;
+		debug_v_dc_FBboost_sincfilt_100mV = v_dc_FBboost_filt50Hz_100mV;
+		v_dc_sum_100mV = 0;
+
 		v_dc_filt50Hz = (float)v_dc_FBboost_filt50Hz_100mV/10.0;
-		v_pv_filt50Hz = mppTracker.get_v_pv_ref();
-		i_pv_filt50Hz = p_dc_filt50Hz/v_pv_filt50Hz;
+		//v_pv_filt50Hz = mppTracker.get_v_pv_ref();  // very noisy because it is based on calculated v_pv in MPPT algorithm in MPPT Version 2
+		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)dutyLS1/DEF_MPPT_DUTY_ABSMAX);
 
 		p_dc_filt50Hz = p_dc_sum/CYCLES_cnt20kHz_20ms;
 		p_dc_sum = 0;
 
+		i_pv_filt50Hz = p_dc_filt50Hz/v_pv_filt50Hz;  // only used for DCDC interleaved mode decision
+
 		i_dc_filt50Hz_mA = i_dc_sum_10mA/(CYCLES_cnt20kHz_20ms/10);
 		i_dc_sum_10mA = 0;
 
-		v_dc_FBboost_filt50Hz_100mV = v_dc_sum/CYCLES_cnt20kHz_20ms;
-		debug_v_dc_FBboost_sincfilt_100mV = v_dc_FBboost_filt50Hz_100mV;
-		v_dc_sum = 0;
 	} else if (cnt20kHz_20ms == 1) {  // at 0 MPPT is calculated
 		bat_protect_calc_request = true;
 	}
@@ -344,9 +346,12 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		} else {
 			if (cnt20kHz_20ms == 0) {
 				// V1 : run MPP-Tracker in every cycle
-				// problem: Pbat=12W Vpv=32.5V-38.2V; estimated V_MPP 37.xV -> MPP missmatch loss
-				// problem: Pbat=4W Vpv=26.3V-35.2V; V_OC=39V -> MPP missmatch loss
-				// lower boundary can happen because MPP algorithm count the energy which is extracted form input capacitors
+				// problem: Pbat=12W Vpv=32.5V-38.2V; estimated V_MPP 37.xV -> MPP mismatch loss
+				// problem: Pbat=4W Vpv=26.3V-35.2V; V_OC=39V -> MPP mismatch loss
+				// lower boundary can happen because MPP algorithm count the energy which is extracted form input capacitors, but impact is low:
+				// C=2x12.5uF  U_prev=284V  U=280V
+				// E=0.5*C* (U_prev^2 - U^2)=0.0282 Joule
+				// f = 50Hz  -> Perr=f*E = 1.41 Watt
 				// mppt_calc_request = true;
 
 				// V2 : run MPP-Tracker in every second cycle
@@ -375,7 +380,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			}
 
 			if (mppt_calc_complete) {
-				dutyLS1 = (1.0 - v_pv_filt50Hz/v_dc_filt50Hz) * DEF_MPPT_DUTY_ABSMAX;
+				dutyLS1 = (1.0 - mppTracker.get_v_pv_ref()/v_dc_filt50Hz) * DEF_MPPT_DUTY_ABSMAX;
 				mppt_calc_complete = false;
 			}
 		}

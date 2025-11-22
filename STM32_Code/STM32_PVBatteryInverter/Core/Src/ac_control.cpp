@@ -301,7 +301,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 		p_ac_filt50Hz = p_ac_sum_mW/CYCLES_cnt20kHz_20ms/1000;
 
 		// only relevant for PAC_CONTROL for now:
-		// 70% to 130% gain to compensate for inductor model missmatch and grid harmonics
+		// 70% to 130% gain to compensate for inductor model mismatch and grid harmonics
 		if (low_power_mode_cnt == 0) {  // skip if energy packet controller disabled the gate signals
 			if (   (p_ac_filt50Hz > ctrl_ref.p_ac_rms && ctrl_ref.p_ac_rms > 0)  // feedin is positive: 500 but want 460 -> reduce gain
 			    || (p_ac_filt50Hz < ctrl_ref.p_ac_rms && ctrl_ref.p_ac_rms < 0)  // consumption is negative: -500 but want -460 -> reduce gain
