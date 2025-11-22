@@ -310,6 +310,20 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 		  case HYBRID_REMOTE_CONTROLLED:
 		  case HYBRID_PCC_SENSOR:
+			// if PV voltage is above battery voltage, battery does not start. Then use PV2AC mode
+			static uint32_t cnt_PV_v_high = 0;
+			if (   get_v_dc_FBboost_filt50Hz_100mV() > (battery->voltage_100mV+(VDC_TOLERANCE_100mV/2))
+			    && battery_connected() == false) {
+				if (cnt_PV_v_high == 0) {
+					cnt_PV_v_high = cnt_1Hz;
+				} else if (cnt_1Hz > (cnt_PV_v_high+30) ) {  // after 30 seconds
+					cnt_PV_v_high = 0;
+					nextMode(PV2AC);
+				}
+			} else {
+				cnt_PV_v_high = 0;
+			}
+
 			// preload DC bus if battery is in deepsleep to test PV power
 			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
