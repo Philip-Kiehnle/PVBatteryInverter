@@ -310,10 +310,11 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 		  case HYBRID_REMOTE_CONTROLLED:
 		  case HYBRID_PCC_SENSOR:
-			// if PV voltage is above battery voltage, battery does not start. Then use PV2AC mode
+			// If PV voltage is above battery voltage, battery does not start -> use PV2AC mode
 			static uint32_t cnt_PV_v_high = 0;
 			if (   get_v_dc_FBboost_filt50Hz_100mV() > (battery->voltage_100mV+(VDC_TOLERANCE_100mV/2))
-			    && battery_connected() == false) {
+			    && battery_connected() == false
+			) {
 				if (cnt_PV_v_high == 0) {
 					cnt_PV_v_high = cnt_1Hz;
 				} else if (cnt_1Hz > (cnt_PV_v_high+30) ) {  // after 30 seconds
@@ -325,21 +326,25 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			}
 
 			// preload DC bus if battery is in deepsleep to test PV power
-			if (battery->voltage_100mV == 0 || get_stateBattery() == BMS_OFF__BAT_OFF) {
+			if (   battery->voltage_100mV == 0
+			    || get_stateBattery() == BMS_OFF__BAT_OFF
+			) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
 					if (   (ctrl_ref->p_pcc > 20 && ctrl_ref->p_pcc_prev > 20)  // feedin required; filter 1 second spikes from freezer motor start
-					    && (battery_assumed_soc_percent < (modbus_reg_rw.soc_min_protect_percent+2))) {
+					    && (battery_assumed_soc_percent < (modbus_reg_rw.soc_min_protect_percent+2))
+					) {
 						nextMode(PV2AC);
 					} else {
 						battery_state_request(BMS_ON__BAT_OFF);  // wakeup battery
 					}
 				}
-		    } else {
+			} else {
 				ctrl_ref->v_dc_100mV = battery->voltage_100mV;
-		    }
+			}
 
-			if (   ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10
+			if (   get_stateBattery() != BMS_OFF__BAT_OFF
+			    && ctrl_ref->v_dc_100mV > bms.V_MIN_PROTECT*10
 			    && ctrl_ref->v_dc_100mV < bms.V_MAX_PROTECT*10
 			    && get_v_dc_FBboost_filt50Hz_100mV() > bms.V_MIN_PROTECT*10
 			    && get_v_dc_FBboost_filt50Hz_100mV() < bms.V_MAX_PROTECT*10
@@ -386,6 +391,16 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						} else {
 							cnt_1Hz_lowPV = cnt_1Hz;
 						}
+
+						// If previous mode was PV2AC, AC may be active and still has a setpoint
+						// -> disable AC, but wait until battery is connected
+						if (   battery_connected()
+						    && stateHYBRID_AC == HYB_AC_OFF  // state not supposed to change
+						) {
+							// If coming from PV2AC mode, likelihood is high, that battery will be charged or discharged soon
+							// -> stay connected to grid
+							ctrl_ref->mode = AC_PASSIVE;
+						}
 						break;
 
 					case HYB_AC_ON:
@@ -418,6 +433,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							//if(time > time_sunrise && time < time_sundown)  // todo PLL-like time estimation for day and night
 							if (get_p_dc_filt50Hz() >= P_MIN_PV2AC) {
 								ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
+								ctrl_ref->mode = VDC_CONTROL;
 								nextMode(PV2AC);
 							} else if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {
 								ctrl_ref->mode = AC_PASSIVE;
