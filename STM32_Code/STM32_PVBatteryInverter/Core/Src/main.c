@@ -524,7 +524,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		// fsample = 42.5MHz/15 = 2.833Msamples/s
 		// oversampling 128 -> 22.135kHz
 		// todo: 22kHz vs 20kHz : no exact average current, but robust for MPPT and much better in discontinuous mode than double sample
-		//	update: reduced analog filter BW to 7kHz, discontinuous current should be filtered already in the analog domain
+		//	update: reduced analog filter BW to 7kHz, thus, discontinuous current should be filtered already in the analog domain
+		//	update 25.11.2025: reduced analog filter BW to 1.26kHz
 		DEBUG_ISR GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4  T3: ~19.1us after T1
 
 		measVdcFBboost();
