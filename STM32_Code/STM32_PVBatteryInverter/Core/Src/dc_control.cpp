@@ -106,7 +106,21 @@ void fill_monitor_vars_dc(monitor_vars_t* mon_vars)
 void calc_async_dc_control()
 {
 	if (mppt_calc_request) {
-		mppTracker.step(p_dc_filt50Hz, v_pv_filt50Hz);
+		// The measurement values of the first 50Hz cycle are not used because:
+		// 1. The energy in the PV input capacitor has to be compensated, due to duty cycle change
+		// 2. The delay of the analog filter for current measurement has to be taken into account
+		// 3. Enough filtering/averaging for decent precision is already available
+		// 4. The second measurement represents the current situation
+
+		static float v_dc_filt50Hz_prev = v_dc_filt50Hz;
+		// Because the current measurement is at the output of the DC link capacitors of the boost stage,
+		// the voltage change in the DC link has to be taken into account.
+		// C=2x560uF  U=361V  U_prev=360V
+		// dE=0.5*C* (U^2 - U_prev^2)=0.404 Joule
+		// f = 25Hz  -> p_cap_comp = f*dE = 10.1 Watt
+		float p_cap_comp = MPPTPARAM.mppt_freq * 0.5 * 2*560e-6 * (v_dc_filt50Hz*v_dc_filt50Hz - v_dc_filt50Hz_prev*v_dc_filt50Hz_prev);
+		mppTracker.step(p_dc_filt50Hz+p_cap_comp, v_pv_filt50Hz);
+		v_dc_filt50Hz_prev = v_dc_filt50Hz;
 		mppt_calc_request = false;
 		mppt_calc_complete = true;
 	}
@@ -352,6 +366,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 				// C=2x12.5uF  U_prev=284V  U=280V
 				// E=0.5*C* (U_prev^2 - U^2)=0.0282 Joule
 				// f = 50Hz  -> Perr=f*E = 1.41 Watt
+				// -> But 2x560µF DC capacitance has to be compensated, see above mppTracker.step()
 				// mppt_calc_request = true;
 
 				// V2 : run MPP-Tracker in every second cycle

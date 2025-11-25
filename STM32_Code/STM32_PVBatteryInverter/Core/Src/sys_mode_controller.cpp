@@ -195,9 +195,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 {
 #if SYSTEM_HAS_BATTERY == 1
 	const batteryStatus_t* battery = get_batteryStatus();
-	static float battery_assumed_soc_percent = 50;  // keeps the last known SoC in case the BMS is turned off, which resets the batteryStatus
+	static bool battery_last_seen_almost_empty = false;  // keeps the last known status in case the BMS is turned off, which resets the batteryStatus
 	if (battery->soc_percent != 0) {
-		battery_assumed_soc_percent = battery->soc_percent;
+		battery_last_seen_almost_empty = battery_almost_empty();
 	}
 	bms.read_current = true;
 	p_bat_chg_max = std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
@@ -256,7 +256,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
 #if SYSTEM_HAS_BATTERY == 1
-			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && battery_assumed_soc_percent > (modbus_reg_rw.soc_min_protect_percent+5))  // more feedin required and battery not empty
+			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && !battery_last_seen_almost_empty)  // more feedin required and battery not empty
 					 || (ctrl_ref->p_pcc < -50 && battery->soc_percent < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
 				 && !bms.warn_temperature()
 #endif //SYSTEM_HAS_BATTERY
@@ -332,7 +332,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
 					if (   (ctrl_ref->p_pcc > 20 && ctrl_ref->p_pcc_prev > 20)  // feedin required; filter 1 second spikes from freezer motor start
-					    && (battery_assumed_soc_percent < (modbus_reg_rw.soc_min_protect_percent+2))
+					    && battery_last_seen_almost_empty
 					) {
 						nextMode(PV2AC);
 					} else {
@@ -399,7 +399,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						) {
 							// If coming from PV2AC mode, likelihood is high, that battery will be charged or discharged soon
 							// -> stay connected to grid
-							ctrl_ref->mode = AC_PASSIVE;
+							if (ctrl_ref->mode != AC_OFF) {
+								ctrl_ref->mode = AC_PASSIVE;
+							}
 						}
 						break;
 
