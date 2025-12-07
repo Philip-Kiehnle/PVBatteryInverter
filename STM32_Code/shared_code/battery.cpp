@@ -190,10 +190,10 @@ static void check_bat_error()
 }
 
 
-void battery_state_request(stateBattery_t state)
+void battery_state_request(stateBattery_t state_req)
 {
 	// in case of empty battery, use ship mode and turnoff BMS
-	if (state == CMD_BAT_OFF || state == CMD_BMS_OFF__BAT_OFF) {
+	if (state_req == CMD_BAT_OFF || state_req == CMD_BMS_OFF__BAT_OFF) {
 
 #if IS_BATTERY_SUPERVISOR_PCB == 1
 		float soc_min_bms_active = 30;
@@ -203,15 +203,57 @@ void battery_state_request(stateBattery_t state)
 
 		if (   bms.batteryStatus.soc_percent > soc_min_bms_active
 		    && get_sys_errorcode() == EC_NO_ERROR
-		    && state == CMD_BAT_OFF  // BMS can remain on if no explicit shutdown command (CMD_BMS_OFF__BAT_OFF) has been sent
+		    && state_req == CMD_BAT_OFF  // BMS can remain on if no explicit shutdown command (CMD_BMS_OFF__BAT_OFF) has been sent
 		) {
-			state = BMS_ON__BAT_OFF;
+			state_req = BMS_ON__BAT_OFF;
 		} else {
-			state = BMS_OFF__BAT_OFF;
+			state_req = BMS_OFF__BAT_OFF;
 		}
 	}
 
-	stateBattery_next = state;
+	stateBattery_next = state_req;
+}
+
+
+void battery_state_eval()
+{
+	switch (stateBattery_next) {
+	  case BMS_OFF__BAT_OFF:
+	  {
+		  if (bms.batteryOff(0b01) == BMS_OK) {
+			  stateBattery = BMS_ON__BAT_OFF;
+			  bat_connected = false;
+		  }
+		  BMS_StatusTypeDef status = bms.shipmode(0b00111111);
+		  if (status == BMS_OK || status == BMS_INVALID_CMD) {  // some BMS do not support shipmode
+			  stateBattery = BMS_OFF__BAT_OFF;
+			  bat_connected = false;
+			  bmsPower(0);  // for batteries with supply voltage control
+		  }
+		  bms.batteryStatus = {0};
+		  break;
+	  }
+	  case BMS_ON__BAT_ON:
+	  {
+		  bmsPower(1);  // for batteries with supply voltage control
+		  BMS_StatusTypeDef status = bms.batteryOn(0b01);
+		  if (status == BMS_OK) {
+			  stateBattery = BMS_ON__BAT_ON;
+		  } else if (status == BMS_NCK) {
+			  stateBattery = BMS_ON__BAT_OFF;
+		  }
+		  break;
+	  }
+
+	  case BMS_ON__BAT_OFF:
+	  default:
+		  bmsPower(1);  // for batteries with supply voltage control
+		  if (bms.batteryOff(0b01) == BMS_OK) {
+			  stateBattery = BMS_ON__BAT_OFF;
+			  bat_connected = false;
+		  }
+		  break;
+	}
 }
 
 // check if sum of cell voltages deviates from DC bus voltage e.g. +-10Volt (~0.1V per Cell)
@@ -253,43 +295,7 @@ bool async_battery_communication()
 #if SYSTEM_HAS_BATTERY == 1
 	if ( (stateBattery_next != stateBattery) && !rate_limit) {
 		rate_limit = true;
-		switch (stateBattery_next) {
-		  case BMS_OFF__BAT_OFF:
-		  {
-			  if (bms.batteryOff(0b01) == BMS_OK) {
-				  stateBattery = BMS_ON__BAT_OFF;
-				  bat_connected = false;
-			  }
-			  BMS_StatusTypeDef status = bms.shipmode(0b00111111);
-			  if (status == BMS_OK || status == BMS_INVALID_CMD) {  // some BMS do not support shipmode
-				  stateBattery = BMS_OFF__BAT_OFF;
-				  bat_connected = false;
-				  bmsPower(0);  // for batteries with supply voltage control
-			  }
-			  bms.batteryStatus = {0};
-			  break;
-		  }
-		  case BMS_ON__BAT_ON:
-		  {
-			  bmsPower(1);  // for batteries with supply voltage control
-			  BMS_StatusTypeDef status = bms.batteryOn(0b01);
-			  if (status == BMS_OK) {
-				  stateBattery = BMS_ON__BAT_ON;
-			  } else if (status == BMS_NCK) {
-				  stateBattery = BMS_ON__BAT_OFF;
-			  }
-			  break;
-		  }
-
-		  case BMS_ON__BAT_OFF:
-		  default:
-			  bmsPower(1);  // for batteries with supply voltage control
-			  if (bms.batteryOff(0b01) == BMS_OK) {
-				  stateBattery = BMS_ON__BAT_OFF;
-				  bat_connected = false;
-			  }
-			  break;
-		}
+		battery_state_eval();
 	}
 
 	if ( stateBattery == BMS_ON__BAT_ON

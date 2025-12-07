@@ -60,12 +60,13 @@ static inline void nextMode(enum mode_t next_mode)
 		sys_mode_needs_battery = false;
 #if SYSTEM_HAS_BATTERY == 1
 		battery_state_request( (next_mode == OFF) ? CMD_BMS_OFF__BAT_OFF : CMD_BAT_OFF );
+		battery_state_eval();  // prevent voltage deviation error within first second contactor off
 #endif //SYSTEM_HAS_BATTERY
 	}
 
 	if (sys_mode == OFF) {
-		// stay in OFF mode for 5 minutes to discharge DC bus
-		if ( cnt_1Hz > (cnt_rel_1Hz+(5*60))) {
+		// stay in OFF mode for 10 minutes to discharge DC bus and prevent mode toggling in case of low PV power
+		if ( cnt_1Hz > (cnt_rel_1Hz+(10*60))) {
 			sys_mode = next_mode;
 			cnt_rel_1Hz = cnt_1Hz;
 		}
@@ -191,6 +192,11 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 }
 
 
+static inline bool check_feedin_required(control_ref_t* ctrl_ref, int16_t p_threshold) {
+	return (ctrl_ref->p_pcc > p_threshold && ctrl_ref->p_pcc_prev > p_threshold);  // filter 1 second spikes from freezer motor start
+}
+
+
 void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 {
 #if SYSTEM_HAS_BATTERY == 1
@@ -237,7 +243,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 #if SYSTEM_HAS_BATTERY == 1
 			if (battery_connected() == false) {  // wait until battery is disconnected
 #endif //SYSTEM_HAS_BATTERY
-				ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);  // init of PV DC controller
+				ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);  // init of PV DC controller; todo: use measured grid voltage
 
 				if (stateDC > VOLTAGE_CONTROL) {
 					ctrl_ref->mode = VDC_VARIABLE_CONTROL;  // increases voltage too much with 2x1kW grid resistance for debugging
@@ -251,12 +257,16 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 #endif //USE_TRAFO_33V
 
-			sys_mode_needs_battery = false;
+			// delay the battery disable procedure for short periods in PV2AC mode,
+			// e.g. to reduce the DC link voltage for cold PV start (high PV voltage)
+			if ( cnt_1Hz > (cnt_rel_1Hz+30)) {  // 30 seconds
+				sys_mode_needs_battery = false;
+			}
 
-			if (    cnt_1Hz > (cnt_rel_1Hz+5)  // stay in PV2AC mode for min 5 seconds
+			if (    cnt_1Hz > (cnt_rel_1Hz+10)  // stay in PV2AC mode for min 10 seconds
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
 #if SYSTEM_HAS_BATTERY == 1
-			     && ((ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50 && !battery_last_seen_almost_empty)  // more feedin required and battery not empty
+			     && ((check_feedin_required(ctrl_ref, 50) && !battery_last_seen_almost_empty)  // more feedin required and battery not empty
 					 || (ctrl_ref->p_pcc < -50 && battery->soc_percent < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
 				 && !bms.warn_temperature()
 #endif //SYSTEM_HAS_BATTERY
@@ -268,19 +278,20 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);
 #endif //SYSTEM_HAS_BATTERY
 				nextMode(SYS_MODE);
-			} else if (    cnt_1Hz > (cnt_rel_1Hz+(3*60))  // stay in PV2AC mode for min 3 minutes in case of low PV power
+			} else if (    cnt_1Hz > (cnt_rel_1Hz+(5*60))  // stay in PV2AC mode for min 5 minutes in case of low PV power
 					    && get_p_ac_filt1minute() < 5 && get_p_ac_filt50Hz() < 5  // todo: AC power seems larger than measured
 			          ) {
-				if (SYS_MODE == PV2AC) {
+				if (   SYS_MODE == PV2AC
+				    || battery_last_seen_almost_empty) {
 					nextMode(OFF);
 				} else if (cnt_1Hz > (cnt_rel_1Hz+(10*60))) {  // limit toggling rate between battery charging and PV2AC
-					// prevent short turnoff in the evening when battery is full
-					ctrl_ref->mode = VDC_CONTROL;
 #if SYSTEM_HAS_BATTERY == 1
 					ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 #else
 					ctrl_ref->v_dc_100mV = (1.02*VGRID_AMP*10);
 #endif //SYSTEM_HAS_BATTERY
+					// prevent short turnoff in the evening when battery is full
+					ctrl_ref->mode = VDC_CONTROL;
 					nextMode(SYS_MODE);
 				}
 			}
@@ -331,7 +342,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 			) {
 				ctrl_ref->v_dc_100mV = (bms.V_MIN_PROTECT*10 + bms.V_MAX_PROTECT*10)/2;
 				if (get_v_dc_FBboost_filt50Hz_100mV() >= ctrl_ref->v_dc_100mV ) {
-					if (   (ctrl_ref->p_pcc > 20 && ctrl_ref->p_pcc_prev > 20)  // feedin required; filter 1 second spikes from freezer motor start
+					if (   check_feedin_required(ctrl_ref, 20)
 					    && battery_last_seen_almost_empty
 					) {
 						nextMode(PV2AC);
@@ -368,8 +379,8 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 				switch (stateHYBRID_AC) {
 					case HYB_AC_OFF:
 						if (   battery_connected()
-							&& (   (!battery_almost_empty()          // enough energy for feedin
-								    && (ctrl_ref->p_pcc > 50 && ctrl_ref->p_pcc_prev > 50))  // feedin required; filter 1 second spikes from freezer motor start
+							&& (   ((!battery_almost_empty() || (get_p_pv_filt1Hz() >= P_MIN_PV2AC))  // enough power for feedin
+							        && check_feedin_required(ctrl_ref, 50))
 							    || bms.warn_temperature()              // hot or cold battery -> PV2AC
 							    || battery_almost_full()               // or battery charge power has to be reduced
 							    || p_bat_50Hz >= p_bat_chg_max         // or battery charge power is large and has to be reduced
@@ -380,10 +391,10 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 								cnt_1Hz_lowPV = cnt_1Hz;
 						// Shutdown of already discharged battery when PV power is low
 						} else if(   battery_connected()
-								  && get_p_dc_filt50Hz() < P_BAT_MIN_CHARGE
-								  // && battery->power_W < P_BAT_MIN_CHARGE  // todo: check why bat power has 14W offset
-								  && battery_almost_empty()
-								  ) {
+							  && get_p_pv_filt1Hz() < P_BAT_MIN_CHARGE
+							  // && battery->power_W < P_BAT_MIN_CHARGE  // todo: check why bat power has 14W offset
+							  && battery_almost_empty()
+							  ) {
 							if (cnt_1Hz > (cnt_1Hz_lowPV+240)) {  // 4 minutes
 								nextMode(OFF);
 								cnt_1Hz_lowPV = cnt_1Hz;
@@ -420,11 +431,14 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							      && battery_full()
 							  	  )
 							) {
+							ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
+							ctrl_ref->mode = VDC_CONTROL;
 							nextMode(PV2AC);
 
-						// AC turnoff in case of empty battery.
+						// In case of empty battery: AC turnoff or switch to PV2AC
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required
 						} else if ( battery_connected()
+									&& (get_p_pv_filt1Hz() <= P_MIN_HYBRID)  // prevent empty battery to change the mode during cloudy days
 									&& (  battery_empty()
 									    || bms.warn_temperature_cell_high()  // if battery hot, use PV2AC mode
 									    || battery->voltage_100mV < get_v_ac_amp_filt50Hz_100mV()  // if battery voltage is lower than grid voltage
@@ -433,11 +447,11 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						   ) {
 							// prevent system shutdown during sunrise
 							//if(time > time_sunrise && time < time_sundown)  // todo PLL-like time estimation for day and night
-							if (get_p_dc_filt50Hz() >= P_MIN_PV2AC) {
+							if (get_p_pv_filt1Hz() >= P_MIN_PV2AC) {
 								ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
 								ctrl_ref->mode = VDC_CONTROL;
 								nextMode(PV2AC);
-							} else if (get_p_dc_filt50Hz() >= P_BAT_MIN_CHARGE) {
+							} else if (get_p_pv_filt1Hz() >= P_BAT_MIN_CHARGE) {
 								ctrl_ref->mode = AC_PASSIVE;
 							} else {
 								ctrl_ref->mode = AC_OFF;
@@ -451,7 +465,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						break;
 				}
 			// if MPP Tracker does not provide enough power to charge DC bus, shutdown battery after 30sec
-			} else if (cnt_1Hz > (cnt_1Hz_chargeDC+30)) {
+			} else if (   cnt_1Hz > (cnt_1Hz_chargeDC+30)
+			           && cnt_1Hz > (cnt_rel_1Hz+30)
+			) {
 				sys_mode_needs_battery = false;
 				ctrl_ref->mode = AC_OFF;
 			}

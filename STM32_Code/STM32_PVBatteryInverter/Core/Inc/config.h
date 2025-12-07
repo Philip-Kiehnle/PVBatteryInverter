@@ -71,6 +71,7 @@
 #define P_AC_MAX (2000)
 #define P_BAT_MIN_CHARGE 14  // BMS 4.7Watt; Final wiring: 6.9W including both contactors
 #define P_MIN_PV2AC 18
+#define P_MIN_HYBRID 25
 
 /***************/
 /* Fan control */
@@ -103,8 +104,8 @@
 #define DEF_MPPT_DUTY_ABSMAX 4250
 
 #define DC_CTRL_FREQ 20000
-#define DC_CTRL_FREQ_MPPT 50
-#define CYCLES_cnt20kHz_20ms (DC_CTRL_FREQ/DC_CTRL_FREQ_MPPT)
+#define DC_CTRL_FREQ_SLOW 50
+#define CYCLES_cnt20kHz_20ms (DC_CTRL_FREQ/DC_CTRL_FREQ_SLOW)
 
 #define AC_CTRL_FREQ DC_CTRL_FREQ
 

@@ -28,7 +28,7 @@ constexpr MPPT_parameter_t MPPTPARAM = MPPT_parameter_t{
 	.i_in_max = 9.0,
 	.p_max = 2800,
 	.nr_pv_modules = 8,
-	.mppt_freq = DC_CTRL_FREQ_MPPT/2,  // one cycle stabilisation, one cycle MPPT calculation
+	.mppt_freq = DC_CTRL_FREQ_SLOW/2,  // one cycle stabilisation, one cycle MPPT calculation
 };
 
 constexpr GMPPT_parameter_t GMPPTPARAM = GMPPT_parameter_t{

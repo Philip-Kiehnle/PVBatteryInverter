@@ -34,6 +34,7 @@ const char*     get_battery_csc_err_str(uint8_t bit);
 
 void battery_update_request();
 void battery_state_request(stateBattery_t state);
+void battery_state_eval();
 bool async_battery_communication();
 bool battery_set_balancing(uint8_t stack_mask, uint16_t vCellBalTarget_mV);
 bool battery_bus_voltage_match_coarse();

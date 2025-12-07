@@ -35,7 +35,8 @@ volatile uint16_t debug_dutyHS;
 volatile uint16_t v_dc_FBboost_sincfilt_100mV;
 volatile uint16_t v_dc_FBboost_filt50Hz_100mV;
 
-volatile float p_dc_filt50Hz;
+volatile float p_dc_filt50Hz;  // power from DC boost stage
+volatile float p_pv_filt1Hz;
 volatile float v_pv_filt50Hz;
 volatile float v_dc_filt50Hz;
 volatile float i_pv_filt50Hz;
@@ -76,6 +77,12 @@ uint16_t get_v_dc_FBboost_sincfilt_100mV()
 uint16_t get_v_dc_FBboost_filt50Hz_100mV()
 {
 	return v_dc_FBboost_filt50Hz_100mV;
+}
+
+
+float get_p_pv_filt1Hz()
+{
+	return p_pv_filt1Hz;
 }
 
 
@@ -129,7 +136,18 @@ void calc_async_dc_control()
 
 		bat_protect_calc_request = false;
 
-		constexpr float TC = 0.02;  // 20ms execution interval
+		constexpr float TC = 1.0f / DC_CTRL_FREQ_SLOW;  // 20ms execution interval
+
+		static uint16_t cnt50Hz_1s = 0;
+		static int32_t p_pv_sum;
+		p_pv_sum += p_dc_filt50Hz;  // capacitor compensation can be neglected
+		cnt50Hz_1s++;
+
+		if (cnt50Hz_1s == DC_CTRL_FREQ_SLOW) {
+			p_pv_filt1Hz = p_pv_sum/DC_CTRL_FREQ_SLOW;
+			p_pv_sum = 0;
+			cnt50Hz_1s = 0;
+		}
 
 		/**********************************************/
 		/* Battery power limit -> AC power controller */

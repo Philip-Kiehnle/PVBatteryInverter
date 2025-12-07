@@ -40,6 +40,7 @@ uint16_t get_p_ac_bat_chg_reduction();
 uint16_t get_p_ac_max_dc_lim();
 uint16_t get_v_dc_FBboost_sincfilt_100mV();
 uint16_t get_v_dc_FBboost_filt50Hz_100mV();
+float get_p_pv_filt1Hz();
 float get_p_dc_filt50Hz();
 float get_v_dc_filt50Hz();
 void shutdownDC();
