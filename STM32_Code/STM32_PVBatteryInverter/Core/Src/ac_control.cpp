@@ -448,9 +448,10 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 		//if (cnt_rel >= 1.0*AC_CTRL_FREQ) {  // turnon for testing
 			static int16_t i_ac_ref_amp_10mA = 0;
 			switch (ctrl_ref.mode) {
-			  case AC_PASSIVE:  // for battery reconnect to avoid DC voltage controller fighting AC Vdc voltage controller
+			  case AC_PASSIVE:  // for battery reconnect to avoid DC voltage controller fighting AC Vdc voltage controller or if no AC power required
 				gatedriverAC(0);
-				nextState(WAIT_CONTACTOR_AC);  // todo gatedriver is turned on for short period
+				piCtrl.y = 0;
+				piCtrl.x_prev = 0;
 				break;
 
 			  case VDC_CONTROL:
@@ -505,7 +506,7 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 					 && get_p_ac_bat_chg_reduction() <= 40  // avoid low power mode during PV feedin
 					 && ctrl_ref.p_pcc <= 10  // pcc controller has already reduced grid consumption
 					 && get_p_ac_max_dc_lim() > ctrl_ref.p_ac_low_power_mode_exit  // p_pv + p_bat have capability to compensate accumulated energy after return to normal mode
-					 && i_ac_ref_amp_10mA < (2.0*100)  // Irms=1.4A results in 6.3W (9W peak) loss if GaN transistor Vgs=-3V
+					 && i_ac_ref_amp_10mA < (2.0*100)  // current has to be low. Irms=1.4A results in 6.3W (9W peak) loss if GaN transistor Vgs=-3V
 					 && i_ac_ref_amp_10mA > (-2.0*100)
 					 && check_zero_crossing(phase)  // turnoff during zero crossing reduces "click" noise in inductor
 					 && ctrl_ref.ext_ctrl_mode == EXT_OFF  // do not use packet/burst mode in case of external power control
@@ -523,6 +524,8 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 							i_ac_ref_amp_10mA = 100;  // clamp to 1A for starting point
 						}
 					}
+				} else {
+					gatedriverAC(1);
 				}
 #endif
 

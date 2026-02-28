@@ -40,9 +40,9 @@
 #define F_MAX 51
 
 #define E_I_AC_RMS_MAX_CNT 15  // 15 samples @ 20kHz -> 750µs
-//#define E_I_AC_RMS_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+#define E_I_AC_RMS_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples; ((17.2÷√2)^2 × 0.1 Ohm)÷2 + 2Wswitching = 9.4W < 12Wdesign
 #define E_I_AC_PULSE_MAX_AMP_10mA (19.1 * 100)  // 3100W÷230V×sqrt(2) amplitude for 1 sample
-#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+//#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
 //#define E_I_AC_PULSE_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for 1 sample -> triggered twice in 2 month with Pac=1800W
 //#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples -> triggered error even with 460W limit (11.03.2025 18:27)
 //#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample

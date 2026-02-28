@@ -20,7 +20,8 @@ typedef struct {
 	uint16_t dutyDC_HS;
 	float p_dc_filt50Hz;
 	float v_dc_filt50Hz;
-	uint16_t stateAC;  // AC variables
+	uint8_t stateAC;  // AC variables
+	uint8_t ctrl_mode_AC;
 	int16_t f_ac_10mHz;
 	int16_t v_ac_rms_100mV;
 	int16_t i_ac_ref_amp_10mA;

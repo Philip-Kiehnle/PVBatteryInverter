@@ -239,6 +239,7 @@ void fill_monitor_vars_sys(monitor_vars_t* mon_vars)
 	fill_monitor_vars_dc(mon_vars);
 	fill_monitor_vars_ac(mon_vars);
 
+	mon_vars->ctrl_mode_AC = ctrl_ref.mode;
 	mon_vars->p_ac_ref = ctrl_ref.p_ac_rms;
 
 #if SYSTEM_HAS_BATTERY == 1
