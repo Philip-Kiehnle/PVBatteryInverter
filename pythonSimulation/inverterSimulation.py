@@ -131,6 +131,11 @@ Vdc_ref = 350.0
 Ipv = 2.0  # constant PV current; ToDo: implement PV LUT
 sourceDC = src_load.sourceDC(T=T, V0=Vdc0)
 v_dc = Vdc0 * np.ones(N)
+
+for i in range(len(v_dc)):
+    if i > (0.9*1/T):
+        v_dc[i] = 400
+
 v_dc_comp = np.zeros(N)
 v_dc_comp_python = np.zeros(N)
 
@@ -227,6 +232,8 @@ for i in range(len(v_grid)-1):
 
             i_dc[i] = v_grid[i] * i_grid[i] / v_dc[i]
             v_dc[i+1] = sourceDC.step(Ipv-i_dc[i])
+            if i >= 18000:
+                v_dc[i+1] = 400
             i_grid[i+1] = loadRL.step(v_pred[i] + GRID*(v_grid_estim[i] -v_grid[i]) )
         else: # current control
             v_pred[i] = ctrl.step_predict_i(int( SCALE_I2ADCRAW*i_ref[i+1] ), int( SCALE_I2ADCRAW*i_grid[i] ) ) / SCALE_I2ADCRAW
