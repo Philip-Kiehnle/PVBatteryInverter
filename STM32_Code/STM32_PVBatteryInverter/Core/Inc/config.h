@@ -14,8 +14,8 @@
 #define DEBUG_ISR if(0)  // 0: no pin toggling  1: enable pin toggling. Increases runtime and maybe ADC noise.
 
 #define VDC_MAX_MPPT_100mV 400*10        // 400V / 96cells = 4.167V
-#define E_VDC_MAX_FB_BOOST_100mV 404*10  // worst case for battery if BMS fails: 404V / 96cells = 4.208V
-#define E_VDC_MAX_FB_GRID_100mV 404*10   // worst case for battery if BMS fails: 404V / 96cells = 4.208V
+#define E_VDC_MAX_FB_BOOST_100mV 408*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define E_VDC_MAX_FB_GRID_100mV 408*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
 
 /***********/
 /* AC grid */

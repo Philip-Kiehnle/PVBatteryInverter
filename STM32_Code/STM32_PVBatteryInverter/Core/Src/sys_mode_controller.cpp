@@ -446,7 +446,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 						// check if battery should be disconnected (variable Vdc -> higher efficiency)
 						if ( (bms.warn_temperature())
 							 || ( (ctrl_ref->p_pcc < -50 || electricity_meter_get_status() == EL_METER_CONN_ERR)  // other PV inverters produce enough for household or PCC sensor fail
-							      && (battery->power_W > P_MIN_PV2AC)  // minimum charging power to compensate switching loss for AC bridge
+							      && (get_p_pv_filt1Hz() > P_MIN_PV2AC)  // minimum PV power to compensate switching loss for AC bridge
 							      && battery_full()
 							  	  )
 							) {
