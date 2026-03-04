@@ -117,10 +117,9 @@ static inline bool check_zero_crossing_contactor_comp(int16_t phase)
 
 uint16_t get_p_ac_max()
 {
-	uint16_t p_ac_max = get_p_ac_max_dc_lim();
-	if (p_ac_max > P_AC_MAX) p_ac_max = P_AC_MAX;
-
-	return p_ac_max;
+	const uint16_t p_ac_max_ac_lim = (stateAC >= GRID_SYNC) ?
+								   P_AC_MAX : std::max(FAN_P_AC_START/2, P_AC_MAX/3);  // avoid integration of PI controller causing fan start
+	return std::min(get_p_ac_max_dc_lim(), p_ac_max_ac_lim);
 }
 
 

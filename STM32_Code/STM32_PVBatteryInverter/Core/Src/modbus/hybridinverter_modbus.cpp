@@ -36,7 +36,7 @@ modbus_reg_rw_t modbus_reg_rw = {
 
 	// battery related
 	.soc_min_protect_percent = 25,  // user can write lower value, but high default value prevents deep discharge
-	.soc_max_protect_percent = 90,
+	.soc_max_protect_percent = 82,
 	.p_bat_chg_max_W = 350*4,
 	.p_bat_dischg_max_W = 350*4,
 

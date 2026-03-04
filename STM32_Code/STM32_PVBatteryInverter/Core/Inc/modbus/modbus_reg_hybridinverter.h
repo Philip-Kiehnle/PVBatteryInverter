@@ -15,6 +15,7 @@ typedef enum {
 	CMD_P_AC_EXT_OFF,
 	CMD_AC_LOCK_INACTIVE, CMD_AC_LOCK_SOFT, CMD_AC_LOCK_HARD,  // AC softlock gets disabled by excess PV power
 	CMD_DC_LOCK_INACTIVE, CMD_DC_LOCK_SOFT, CMD_DC_LOCK_HARD,  // DC softlock gets disabled by PV timer set in modbus register
+	CMD_BAT_LOCK_INACTIVE, CMD_BAT_LOCK_HARD
 } modbus_cmd_t;
 
 typedef struct {

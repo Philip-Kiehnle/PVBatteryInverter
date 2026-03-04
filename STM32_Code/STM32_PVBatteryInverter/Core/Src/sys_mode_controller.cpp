@@ -148,6 +148,14 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 			ctrl_ref->ext_dc_lock = EXT_LOCK_HARD;
 			break;
 
+		case CMD_BAT_LOCK_INACTIVE:
+			ctrl_ref->ext_bat_lock = EXT_LOCK_INACTIVE;
+			break;
+
+		case CMD_BAT_LOCK_HARD:
+			ctrl_ref->ext_bat_lock = EXT_LOCK_HARD;
+			break;
+
 	}
 
 	modbus_reg_rw.cmd = CMD_INVALID;  // reset to invalid command
@@ -206,7 +214,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 		battery_last_seen_almost_empty = battery_almost_empty();
 	}
 	bms.read_current = true;
-	p_bat_chg_max = std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
+
+	p_bat_chg_max = (battery->soc_percent >= modbus_reg_rw.soc_max_protect_percent) ?
+					0 : std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
 	p_bat_dischg_max = std::min(battery->p_discharge_max, modbus_reg_rw.p_bat_dischg_max_W);
 #endif //SYSTEM_HAS_BATTERY
 	static uint32_t cnt_1Hz_chargeDC;
@@ -265,6 +275,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 			if (    cnt_1Hz > (cnt_rel_1Hz+10)  // stay in PV2AC mode for min 10 seconds
 			     && (SYS_MODE != PV2AC)  // in PV2AC general mode, the only other mode is OFF
+			     && ctrl_ref->ext_bat_lock == EXT_LOCK_INACTIVE
 #if SYSTEM_HAS_BATTERY == 1
 			     && ((check_feedin_required(ctrl_ref, 50) && !battery_last_seen_almost_empty)  // more feedin required and battery not empty
 					 || (ctrl_ref->p_pcc < -50 && battery->soc_percent < 98))  // battery recharge required; todo battery soc control curve, goal: >90% at sunset
@@ -282,7 +293,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 					    && get_p_ac_filt1minute() < 5 && get_p_ac_filt50Hz() < 5  // todo: AC power seems larger than measured
 			          ) {
 				if (   SYS_MODE == PV2AC
-				    || battery_last_seen_almost_empty) {
+				    || ctrl_ref->ext_bat_lock == EXT_LOCK_INACTIVE
+				    || battery_last_seen_almost_empty
+				) {
 					nextMode(OFF);
 				} else if (cnt_1Hz > (cnt_rel_1Hz+(10*60))) {  // limit toggling rate between battery charging and PV2AC
 #if SYSTEM_HAS_BATTERY == 1
@@ -321,6 +334,12 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 		  case HYBRID_REMOTE_CONTROLLED:
 		  case HYBRID_PCC_SENSOR:
+			if (ctrl_ref->ext_bat_lock != EXT_LOCK_INACTIVE) {
+				ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
+				ctrl_ref->mode = VDC_CONTROL;
+				nextMode(PV2AC);
+				break;
+			}
 			// If PV voltage is above battery voltage, battery does not start -> use PV2AC mode
 			static uint32_t cnt_PV_v_high = 0;
 			if (   get_v_dc_FBboost_filt50Hz_100mV() > (battery->voltage_100mV+(VDC_TOLERANCE_100mV/2))

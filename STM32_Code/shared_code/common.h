@@ -57,6 +57,7 @@ typedef struct {
 	ext_ctrl_mode_t ext_ctrl_mode;
 	ext_lock_t ext_ac_lock;
 	ext_lock_t ext_dc_lock;
+	ext_lock_t ext_bat_lock;
 	int16_t p_ac_external;
 	int16_t p_ac_rms;  // power for AC control
 	uint16_t p_ac_low_power_mode_enter;
