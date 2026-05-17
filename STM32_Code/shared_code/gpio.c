@@ -10,7 +10,13 @@ inline void gatedriverDC(bool state)
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<7);  // enable boost gatedriver
 	} else {
+#if PWM_TEST_MODE == 1
+		if ( get_sys_errorcode() != EC_NO_ERROR ) {
+			GPIOB->BRR = (1<<7);  // disable boost gatedriver
+		}
+#else
 		GPIOB->BRR = (1<<7);  // disable boost gatedriver
+#endif //PWM_TEST_MODE
 	}
 }
 
@@ -19,14 +25,22 @@ inline void gatedriverAC(bool state)
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<14);  // enable grid FB gatedriver
 	} else {
+#if PWM_TEST_MODE == 1
+		if ( get_sys_errorcode() != EC_NO_ERROR ) {
+			GPIOB->BRR = (1<<14);  // disable grid FB gatedriver
+		}
+#else
 		GPIOB->BRR = (1<<14);  // disable grid FB gatedriver
+#endif //PWM_TEST_MODE
 	}
 }
 
 inline void contactorAC(bool state)
 {
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
+#if SENSOR_CALIBRATION_MODE == 0 && PWM_TEST_MODE == 0
 		GPIOB->BSRR = (1<<10);
+#endif
 	} else {
 		GPIOB->BRR = (1<<10);
 	}

@@ -32,6 +32,11 @@ volatile int16_t p_ac_filt50Hz;
 volatile int16_t p_ac_filt1minute;
 
 volatile int16_t debug_v_ac_rms_100mV;
+#if SENSOR_CALIBRATION_MODE == 1
+volatile int16_t debug_v_ac_100mV;
+volatile int16_t debug_i_ac_10mA;
+#endif //SENSOR_CALIBRATION_MODE
+
 volatile int16_t debug_f_ac_10mHz;
 volatile int16_t debug_i_ac_ref_amp_10mA;
 
@@ -170,6 +175,10 @@ int16_t acControlStep(uint16_t cnt20kHz_20ms, control_ref_t ctrl_ref, uint16_t v
 	int16_t v_ac_amp_100mV = (((int32_t)vd) * (10*VGRID_ADCR) )/(1<<ADC_BITS_VGRID);
 	int16_t v_ac_rms_100mV = (((int32_t)vd) * ((10*VGRID_ADCR)/M_SQRT2) )/(1<<ADC_BITS_VGRID);
 	debug_v_ac_rms_100mV = v_ac_rms_100mV;
+#if SENSOR_CALIBRATION_MODE == 1
+	debug_v_ac_100mV = v_ac_100mV;
+	debug_i_ac_10mA = i_ac_10mA;
+#endif //SENSOR_CALIBRATION_MODE
 
 	//static int16_t v_ac_rms_filt50Hz_100mV = 0;
 	static int32_t v_ac_amp_sum = 0;
@@ -784,7 +793,7 @@ void measVdcFBgrid()
 		// pos value range from 50 to 250 -> div by 200
 
 //#define V_DC_MAX_FBgrid (1+59)  // 68kOhm 450×68÷(450+68)
-#define V_DC_CALIB_FBgrid  995  // per mil
+#define V_DC_CALIB_FBgrid  997  // per mil; 995: 350.4V shown as 349.6  997: 350.4V shown as 350.3
 #define V_DC_MAX_FBgrid (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.25Vcell*96=408V -> Vadc=1.088V (32edges)
 
 #ifndef E_VDC_MAX_FB_GRID_100mV

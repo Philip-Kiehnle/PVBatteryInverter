@@ -117,6 +117,12 @@ volatile uint16_t debug_v_dc_FBboost_sincfilt_100mV;
 volatile uint16_t debug_v_dc_FBgrid_sincfilt_100mV;
 
 extern volatile int16_t debug_v_ac_rms_100mV;
+#if SENSOR_CALIBRATION_MODE == 1
+extern volatile int16_t debug_v_ac_100mV;
+extern volatile int16_t debug_i_ac_10mA;
+volatile int16_t debug_i_dc_filt_10mA;
+#endif //SENSOR_CALIBRATION_MODE
+
 extern volatile int16_t debug_i_ac_ref_amp_10mA;
 
 
@@ -454,7 +460,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 //#define V_AC_CALIB_OFFSET 1979 // Vin=0V offset=0.13V; Vin=313Vsine offset=0.87V
 #define V_AC_CALIB_OFFSET 1982 // Vin=0V offset=-0.41V; Vin=313Vsine offset=0.1V
-#define V_AC_CALIB_GAIN_PER_MIL 989
+#define V_AC_CALIB_GAIN_PER_MIL 992
+// 18.05.2026 Fluke multimeter
+// V_AC_CALIB_OFFSET=1982  V_AC_CALIB_GAIN_PER_MIL=989
+// 350.4V  shown as  349.1V to  349.3V
+// -350.4V shown as -348.2V to -349.7V
 
 		int v_ac_raw_no_calib = ADC1ConvertedData[0];
 		int16_t v_ac_raw = ((v_ac_raw_no_calib-V_AC_CALIB_OFFSET)*V_AC_CALIB_GAIN_PER_MIL)/1000;
@@ -470,10 +480,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		uint16_t v_dc_FBboost_sincfilt_100mV = get_v_dc_FBboost_sincfilt_100mV();
 		uint16_t v_dc_FBboost_filt50Hz_100mV = get_v_dc_FBboost_filt50Hz_100mV();
 		int16_t duty = acControlStep(cnt20kHz_20ms, ctrl_ref, v_dc_FBboost_sincfilt_100mV, v_dc_FBboost_filt50Hz_100mV, v_ac_raw, i_ac_raw);
-//duty = 150;  // fixed duty for timing alignment test
-		// debug AC fullbridge
-//			int16_t duty = 4250;
-//			gatedriverAC(1);
+#if PWM_TEST_MODE == 1
+		fan_control_test(1);
+		duty = 4250;  // 50%
+		//duty = 150;  // fixed duty for timing alignment test
+		gatedriverAC(1);
+#endif //PWM_TEST_MODE
 
 		// set the PWM duty cycle value (into a 'shadow register')
 		__HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, duty);
@@ -533,6 +545,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 #define CNT_I_DC_AVG 16  // +3bit in hardware
 		int16_t i_dc_filt_10mA = (ADC2ConvertedData[0]-CNT_I_DC_AVG*IDC_OFFSET_RAW)/CNT_I_DC_AVG * IDC_RAW_TO_10mA;
+#if SENSOR_CALIBRATION_MODE == 1
+		debug_i_dc_filt_10mA = i_dc_filt_10mA;
+#endif //SENSOR_CALIBRATION_MODE
 
 		cnt20kHz_20ms++;
 
@@ -585,6 +600,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 				dutyB1 = dutyHS;
 				break;
 		}
+
+#if PWM_TEST_MODE == 1
+		dutyB1 = DEF_MPPT_DUTY_ABSMAX/2;
+		dutyB2 = DEF_MPPT_DUTY_ABSMAX/2;
+		gatedriverDC(1);
+#endif //PWM_TEST_MODE
 
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
@@ -781,6 +802,9 @@ int main(void)
   bool uart_output_text = false;
   bool uart_input_text = true;
 
+#if SENSOR_CALIBRATION_MODE == 1
+  uart_output_text = true;
+#endif //SENSOR_CALIBRATION_MODE
 
   /* USER CODE END 2 */
 
@@ -950,8 +974,12 @@ int main(void)
 		uSendInt(get_p_ac_filt50Hz());
 		uSend("  v_filt50Hz ");
 		uSend_100m(debug_v_ac_rms_100mV);
-//		uSend("  i ");
-//		uSend_10m(iac_10mA);
+#if SENSOR_CALIBRATION_MODE == 1
+		uSend("  v_ac ");
+		uSend_100m(debug_v_ac_100mV);
+		uSend("  i_ac ");
+		uSend_10m(debug_i_ac_10mA);
+#endif //SENSOR_CALIBRATION_MODE
 		uSend("  rI ");
 		uSend_10m(debug_i_ac_ref_amp_10mA);
 		uSend("\n");
@@ -966,9 +994,12 @@ int main(void)
 		uSend_100m(debug_v_dc_FBgrid_sincfilt_100mV);
 		uSend("\n");
 
-	//		uSend("Idc ");
-	//		uSend_10m(Idc_filt_10mA);
-	//		uSend("\n");
+#if SENSOR_CALIBRATION_MODE == 1
+		uSend("i_dc ");
+		uSend_10m(debug_i_dc_filt_10mA);
+		uSend("\n");
+#endif //SENSOR_CALIBRATION_MODE
+
 		//	// no current 4avg: 2632-2634
 		//	// ~-1A : 2592  ->LSB 23,8mA;  ~+1A 2675
 		//

@@ -13,6 +13,17 @@
 //ISR runtime measurement using testpin TP202(PC15) and TP201(PC4)
 #define DEBUG_ISR if(0)  // 0: no pin toggling  1: enable pin toggling. Increases runtime and maybe ADC noise.
 
+#define SENSOR_CALIBRATION_MODE 0  // 0: normal operation  1: UART output for sensor calibration; AC relay is disabled
+#define PWM_TEST_MODE 0  // 0: normal operation  1: 50% dutycycle for all fullbridge outputs; AC relay is disabled
+
+#ifndef SENSOR_CALIBRATION_MODE
+#error "SENSOR_CALIBRATION_MODE has to be defined as 0 or 1"
+#endif
+
+#ifndef PWM_TEST_MODE
+#error "PWM_TEST_MODE has to be defined as 0 or 1"
+#endif
+
 #define VDC_MAX_MPPT_100mV 400*10        // 400V / 96cells = 4.167V
 #define E_VDC_MAX_FB_BOOST_100mV 408*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
 #define E_VDC_MAX_FB_GRID_100mV 408*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
@@ -84,12 +95,14 @@
 /*******************/
 /* Current sensors */
 /*******************/
-#define IDC_OFFSET_RAW 2631  // 2635->-60mA  2632:~0mA at room temperature -87mA at 3°C  2629: 49mA at room temperature
+//#define IDC_OFFSET_RAW 2631  // 2635->-60mA  2632:~0mA at room temperature -87mA at 3°C  2629: 49mA at room temperature
+#define IDC_OFFSET_RAW 2627 // new STM32 at room temperature; offset=2631: Multimeter 0.00A: STM32:-0.11A; Multimeter:2.00A  STM32: 1.84 to 1.86A; Multimeter:-2.00 STM32: -2.07 to -2.14A
 #define IDC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // 2.301897321 -> 23mA per LSB
 
-#define IAC_OFFSET_RAW 2631  // 2629: +60mA  2631: 0mA
+//#define IAC_OFFSET_RAW 2631  // 2629: +60mA  2631: 0mA
+#define IAC_OFFSET_RAW 2635 // new STM32 at room temperature; offset=2631: Multimeter 0.00A: STM32:0.09A
 #define IAC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IAC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IAC_RAW_TO_10mA (IAC_mV_per_LSB * 100.0/IAC_mV_per_A)  // 2.301897321 -> 23mA per LSB

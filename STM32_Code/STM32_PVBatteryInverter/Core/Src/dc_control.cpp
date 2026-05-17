@@ -624,7 +624,7 @@ void measVdcFBboost()
 //#define V_DC_CALIB_FBboost  995  // per mil for 68kOhm 450×68÷(450+68)
 
 #define V_DC_MAX_FBboost (1+375)  // 375k voltage divider; 4.1Vcell*96=393.6V -> Vadc=1.05V (40edges); 4.31Vcell*96=413.8V -> Vadc=1.10V (30edges)
-#define V_DC_CALIB_FBboost  995  // 310.1V is shown as 310.3V
+#define V_DC_CALIB_FBboost  997  // new FBboost PCB-Nr.2 995: 320.4V shown as 319.6  997: 320.3V shown as 320.2; old FBboost 995: 310.1V is shown as 310.3V
 
 #ifndef E_VDC_MAX_FB_BOOST_100mV
 #error "Define E_VDC_MAX_FB_BOOST_100mV"
