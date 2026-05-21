@@ -10,7 +10,8 @@
 #include "common.h"
 
 enum mode_t get_sys_mode();
-uint16_t get_p_bat_chg_max();
+uint16_t get_p_bat_chg_soft_max();
+uint16_t get_p_bat_chg_hard_max();
 uint16_t get_p_bat_dischg_max();
 void sys_mode_ctrl_step(control_ref_t* ctrl_ref);
 void apply_sys_mode_cmd(control_ref_t* ctrl_ref);

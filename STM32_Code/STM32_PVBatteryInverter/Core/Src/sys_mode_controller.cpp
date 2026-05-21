@@ -18,7 +18,8 @@
 
 enum mode_t sys_mode = SYS_MODE;
 static stateHYBRID_AC_t stateHYBRID_AC = HYB_AC_OFF;
-static uint16_t p_bat_chg_max;
+static uint16_t p_bat_chg_soft_max;  // recommendation for slow charging; can be ignored if p_pv > P_AC_MAX
+static uint16_t p_bat_chg_hard_max;  // battery limit
 static uint16_t p_bat_dischg_max;
 static uint32_t cnt_rel_1Hz;
 extern volatile uint32_t cnt_1Hz;  // overflow in 136 years
@@ -31,9 +32,15 @@ STW_mBMS bms(0, 1.0, BATTERY, KALMAN);
 #endif
 
 
-uint16_t get_p_bat_chg_max()
+uint16_t get_p_bat_chg_soft_max()
 {
-	return p_bat_chg_max;
+	return p_bat_chg_soft_max;
+}
+
+
+uint16_t get_p_bat_chg_hard_max()
+{
+	return p_bat_chg_hard_max;
 }
 
 
@@ -215,8 +222,9 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 	}
 	bms.read_current = true;
 
-	p_bat_chg_max = (battery->soc_percent >= modbus_reg_rw.soc_max_protect_percent) ?
-					0 : std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
+	p_bat_chg_soft_max = (battery->soc_percent >= modbus_reg_rw.soc_max_protect_percent) ?
+						 0 : std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
+	p_bat_chg_hard_max = battery->p_charge_max;
 	p_bat_dischg_max = std::min(battery->p_discharge_max, modbus_reg_rw.p_bat_dischg_max_W);
 #endif //SYSTEM_HAS_BATTERY
 	static uint32_t cnt_1Hz_chargeDC;
@@ -388,7 +396,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 
 				if (   ctrl_ref->ext_ac_lock == EXT_LOCK_SOFT  // AC softlock can be disabled by excess PV power
 				    && battery_connected()
-				    && p_bat_50Hz >= p_bat_chg_max  // battery charge power is large and has to be reduced
+				    && p_bat_50Hz >= p_bat_chg_soft_max  // battery charge power is large and has to be reduced
 				){
 					ctrl_ref->ext_ac_lock = EXT_LOCK_INACTIVE;
 				}
@@ -402,7 +410,7 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							        && check_feedin_required(ctrl_ref, 50))
 							    || bms.warn_temperature()              // hot or cold battery -> PV2AC
 							    || battery_almost_full()               // or battery charge power has to be reduced
-							    || p_bat_50Hz >= p_bat_chg_max         // or battery charge power is large and has to be reduced
+							    || p_bat_50Hz >= p_bat_chg_soft_max    // or battery charge power is large and has to be reduced
 							    || ctrl_ref->ext_ctrl_mode != EXT_OFF  // or external control
 							   )
 							) {
@@ -450,9 +458,10 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 							      && battery_full()
 							  	  )
 							) {
-							ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
-							ctrl_ref->mode = VDC_CONTROL;
-							nextMode(PV2AC);
+							// todo: unstable for high PV power
+//							ctrl_ref->v_dc_100mV = battery->voltage_100mV;  // init of PV DC controller
+//							ctrl_ref->mode = VDC_CONTROL;
+//							nextMode(PV2AC);
 
 						// In case of empty battery: AC turnoff or switch to PV2AC
 						// during day, AC stays connected, but AC energy packet control turns off gatepulses if no feedin required

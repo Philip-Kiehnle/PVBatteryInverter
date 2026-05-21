@@ -170,8 +170,8 @@ void calc_async_dc_control()
 //			p_limit = bms.p_discharge_max();
 //		}
 
-		uint16_t p_bat_chg_max = get_p_bat_chg_max();
-		piCtrl_Pac_Pbat.step( (p_bat_50Hz - p_bat_chg_max), 0, P_AC_MAX);
+		uint16_t p_bat_chg_soft_max = get_p_bat_chg_soft_max();
+		piCtrl_Pac_Pbat.step( (p_bat_50Hz - p_bat_chg_soft_max), 0, P_AC_MAX);
 
 #if 0  // use if linear Vcell power limit in BMS code causes ringing
 	    /**********************************************/
@@ -196,7 +196,8 @@ void calc_async_dc_control()
 		p_ac_bat_chg_reduction = piCtrl_Pac_Pbat.y;
 
 		// Limit MPP Tracker
-		mppTracker.set_limit(MPPTPARAM.i_in_max, p_bat_chg_max + P_AC_MAX);
+		float p_pv_max = battery_full() ? P_AC_MAX : (P_AC_MAX+get_p_bat_chg_hard_max());
+		mppTracker.set_limit(MPPTPARAM.i_in_max, p_pv_max);
 	}
 }
 
