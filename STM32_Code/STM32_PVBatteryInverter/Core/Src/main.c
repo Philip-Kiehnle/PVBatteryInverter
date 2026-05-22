@@ -584,11 +584,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 				break;
 
 			case DCDC_HB2:
-#if NUM_MPPT_HALFBRIDGES == 1
-				dutyB1 = dutyHS;
-#else
 				dutyB2 = dutyHS;
-#endif
 				break;
 
 			case DCDC_INTERLEAVED:

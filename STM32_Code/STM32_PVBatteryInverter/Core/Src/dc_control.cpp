@@ -48,7 +48,12 @@ MPPTracker mppTracker(PVMODULE, MPPTPARAM, GMPPTPARAM);
 
 volatile enum stateDC_t stateDC = INIT_DC;
 
-constexpr enum dcdc_mode_t DEFAULT_DCDC_MODE = DCDC_HB1;
+#if ((NUM_MPPT_HALFBRIDGES == 1) && (MPPT_HALFBRIDGE_NR == 2))
+	constexpr enum dcdc_mode_t DEFAULT_DCDC_MODE = DCDC_HB2;
+#else
+	constexpr enum dcdc_mode_t DEFAULT_DCDC_MODE = DCDC_HB1;
+#endif
+
 volatile enum dcdc_mode_t dcdc_mode = DEFAULT_DCDC_MODE;
 
 static volatile uint32_t cnt_rel = 0;
@@ -469,7 +474,9 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 			  dcdc_mode = DCDC_INTERLEAVED;
 		  }
 	  } else if ( (i_pv_filt50Hz < 3.5) && (cnt_interleaved_mode >= 1.0*DC_CTRL_FREQ) ) {  // min 1sec in interleaved mode
+
 		  if (dcdc_mode != DCDC_HB1 && dcdc_mode != DCDC_HB2) {
+#if NUM_MPPT_HALFBRIDGES == 2
 			  if ( hb_prev == DCDC_HB1 ) {  // equal distribution between both halfbridges
 				  dcdc_mode = DCDC_HB2;
 				  hb_prev = DCDC_HB2;
@@ -477,6 +484,11 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 				  dcdc_mode = DCDC_HB1;
 				  hb_prev = DCDC_HB1;
 			  }
+#elif MPPT_HALFBRIDGE_NR == 1
+			  dcdc_mode = DCDC_HB1;
+#else
+			  dcdc_mode = DCDC_HB2;
+#endif
 	  	  }
 	  }
 

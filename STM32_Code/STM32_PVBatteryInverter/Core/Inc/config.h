@@ -122,7 +122,8 @@
 
 #define AC_CTRL_FREQ DC_CTRL_FREQ
 
-//#define NUM_MPPT_HALFBRIDGES 1
-#define NUM_MPPT_HALFBRIDGES 2
+//#define NUM_MPPT_HALFBRIDGES 2
+#define NUM_MPPT_HALFBRIDGES 1
+#define MPPT_HALFBRIDGE_NR 2  // required if NUM_MPPT_HALFBRIDGES==1 to select the halfbridge. The other also receives gate signals if input current is high!
 
 #endif /* INC_CONFIG_H */
