@@ -601,6 +601,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 		dutyB1 = DEF_MPPT_DUTY_ABSMAX/2;
 		dutyB2 = DEF_MPPT_DUTY_ABSMAX/2;
 		gatedriverDC(1);
+#elif PWM_TEST_MODE == 2
+		dutyB2 = (0.9*DEF_MPPT_DUTY_ABSMAX);
+		static uint16_t test_mode_cnt = 0;
+		if (test_mode_cnt <= 2) {
+			gatedriverDC(1);
+			test_mode_cnt++;
+		} else {
+			GPIOB->BRR = (1<<7);  // disable boost gatedriver
+			set_sys_errorcode(EC_EMERGENCY_STOP);
+		}
 #endif //PWM_TEST_MODE
 
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value

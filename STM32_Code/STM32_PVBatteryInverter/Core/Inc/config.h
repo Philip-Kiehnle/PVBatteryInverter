@@ -14,19 +14,22 @@
 #define DEBUG_ISR if(0)  // 0: no pin toggling  1: enable pin toggling. Increases runtime and maybe ADC noise.
 
 #define SENSOR_CALIBRATION_MODE 0  // 0: normal operation  1: UART output for sensor calibration; AC relay is disabled
-#define PWM_TEST_MODE 0  // 0: normal operation  1: 50% dutycycle for all fullbridge outputs; AC relay is disabled
+#define PWM_TEST_MODE 2
+// 0: normal operation
+// 1: 50% dutycycle for all fullbridge outputs; AC relay is disabled
+// 2: 90% HS dutycycle for boost converter, two periods only; AC relay is disabled
 
 #ifndef SENSOR_CALIBRATION_MODE
 #error "SENSOR_CALIBRATION_MODE has to be defined as 0 or 1"
 #endif
 
 #ifndef PWM_TEST_MODE
-#error "PWM_TEST_MODE has to be defined as 0 or 1"
+#error "PWM_TEST_MODE has to be defined as 0, 1 or 2"
 #endif
 
-#define VDC_MAX_MPPT_100mV 400*10        // 400V / 96cells = 4.167V
-#define E_VDC_MAX_FB_BOOST_100mV 408*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
-#define E_VDC_MAX_FB_GRID_100mV 408*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define VDC_MAX_MPPT_100mV 340*10        // 400V / 96cells = 4.167V
+#define E_VDC_MAX_FB_BOOST_100mV 345*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define E_VDC_MAX_FB_GRID_100mV 345*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
 
 /***********/
 /* AC grid */

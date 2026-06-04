@@ -10,7 +10,7 @@ inline void gatedriverDC(bool state)
 	if ( state && get_sys_errorcode()==EC_NO_ERROR ) {
 		GPIOB->BSRR = (1<<7);  // enable boost gatedriver
 	} else {
-#if PWM_TEST_MODE == 1
+#if (PWM_TEST_MODE == 1) || (PWM_TEST_MODE == 2)  // in test mode, disable only in case of error
 		if ( get_sys_errorcode() != EC_NO_ERROR ) {
 			GPIOB->BRR = (1<<7);  // disable boost gatedriver
 		}
