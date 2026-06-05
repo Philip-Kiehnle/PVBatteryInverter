@@ -13,8 +13,9 @@
 //ISR runtime measurement using testpin TP202(PC15) and TP201(PC4)
 #define DEBUG_ISR if(0)  // 0: no pin toggling  1: enable pin toggling. Increases runtime and maybe ADC noise.
 
+#define TEST_BATTERY_CONTACTOR_MODE 0
 #define SENSOR_CALIBRATION_MODE 0  // 0: normal operation  1: UART output for sensor calibration; AC relay is disabled
-#define PWM_TEST_MODE 2
+#define PWM_TEST_MODE 0
 // 0: normal operation
 // 1: 50% dutycycle for all fullbridge outputs; AC relay is disabled
 // 2: 90% HS dutycycle for boost converter, two periods only; AC relay is disabled
@@ -27,9 +28,9 @@
 #error "PWM_TEST_MODE has to be defined as 0, 1 or 2"
 #endif
 
-#define VDC_MAX_MPPT_100mV 340*10        // 400V / 96cells = 4.167V
-#define E_VDC_MAX_FB_BOOST_100mV 345*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
-#define E_VDC_MAX_FB_GRID_100mV 345*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define VDC_MAX_MPPT_100mV 360*10        // 400V / 96cells = 4.167V
+#define E_VDC_MAX_FB_BOOST_100mV 385*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define E_VDC_MAX_FB_GRID_100mV 385*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
 
 /***********/
 /* AC grid */
@@ -54,10 +55,10 @@
 #define F_MAX 51
 
 #define E_I_AC_RMS_MAX_CNT 15  // 15 samples @ 20kHz -> 750µs
-#define E_I_AC_RMS_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples; ((17.2÷√2)^2 × 0.1 Ohm)÷2 + 2Wswitching = 9.4W < 12Wdesign
-#define E_I_AC_PULSE_MAX_AMP_10mA (19.1 * 100)  // 3100W÷230V×sqrt(2) amplitude for 1 sample
-//#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
-//#define E_I_AC_PULSE_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for 1 sample -> triggered twice in 2 month with Pac=1800W
+//#define E_I_AC_RMS_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples; ((17.2÷√2)^2 × 0.1 Ohm)÷2 + 2Wswitching = 9.4W < 12Wdesign
+//#define E_I_AC_PULSE_MAX_AMP_10mA (19.1 * 100)  // 3100W÷230V×sqrt(2) amplitude for 1 sample
+#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+#define E_I_AC_PULSE_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for 1 sample -> triggered twice in 2 month with Pac=1800W
 //#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples -> triggered error even with 460W limit (11.03.2025 18:27)
 //#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
@@ -104,8 +105,8 @@
 #define IDC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IDC_RAW_TO_10mA (IDC_mV_per_LSB * 100.0/IDC_mV_per_A)  // 2.301897321 -> 23mA per LSB
 
-//#define IAC_OFFSET_RAW 2631  // 2629: +60mA  2631: 0mA
-#define IAC_OFFSET_RAW 2635 // new STM32 at room temperature; offset=2631: Multimeter 0.00A: STM32:0.09A
+#define IAC_OFFSET_RAW 2631  // 2629: +60mA  2631: 0mA
+//#define IAC_OFFSET_RAW 2635 // new STM32 at room temperature; offset=2631: Multimeter 0.00A: STM32:0.09A -> but 1.77A vs 2.07A in other direction -> using old value gives better results with current
 #define IAC_mV_per_LSB (3300.0/4096)  // 3.3V 12bit
 #define IAC_mV_per_A 35 // current sensor datasheet 35mV/A
 #define IAC_RAW_TO_10mA (IAC_mV_per_LSB * 100.0/IAC_mV_per_A)  // 2.301897321 -> 23mA per LSB

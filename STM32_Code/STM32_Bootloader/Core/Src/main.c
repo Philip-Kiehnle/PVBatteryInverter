@@ -106,6 +106,12 @@ int main(void)
   if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
 	// prevent noise
     if ( HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15) ) {
+
+	// Store watchdog flag, because bootloader clears it
+	if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != RESET) {
+		HAL_PWR_EnableBkUpAccess();
+		TAMP->BKP0R = 0x57444721;  // "WDG!"
+	}
 	// start application
 	OPENBL_FLASH_JumpToAddress(0x8000000+0x00008000U);
     }

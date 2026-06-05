@@ -40,10 +40,12 @@ struct _sys_errordesc {
 	{ EC_I_DC_SENSOR,               "EC_I_DC_SENSOR : DC current sensor 60A overcurrent fault. 5V reset required." },
 	{ EC_I_AC_SENSOR,               "EC_I_AC_SENSOR : AC current sensor 60A overcurrent fault. 5V reset required." },
 	{ EC_V_SUPPLY_5V_LOW,           "EC_V_SUPPLY_5V_LOW : 5V supply voltage dropped. Prevented powerstage from low gate voltages." },
+	{ EC_ISR_RUNTIME_TOO_LONG,      "EC_ISR_RUNTIME_TOO_LONG : Runtime of ISR exceeded limit. Shutdown to prevent controller instability." },
 
-	{ EC_V_DC_MAX_FB_BOOST,         "EC_V_DC_MAX_FB_BOOST : DC voltage too high (Full-bridge PV boost)" },
-	{ EC_V_DC_SENSOR_FB_BOOST,      "EC_V_DC_SENSOR_FB_BOOST : Vdc sigma delta pulse count invalid (Full-bridge PV boost)"},
-	{ EC_TEMPERATURE_FB_BOOST,      "EC_TEMPERATURE_FB_BOOST : Temperature too high (Full-bridge PV boost)"},
+	{ EC_V_DC_MAX_FB_BOOST,                 "EC_V_DC_MAX_FB_BOOST : DC voltage too high (Full-bridge PV boost)" },
+	{ EC_V_DC_SENSOR_FB_BOOST,              "EC_V_DC_SENSOR_FB_BOOST : Vdc sigma delta pulse count invalid (Full-bridge PV boost)"},
+	{ EC_TEMPERATURE_FB_BOOST,              "EC_TEMPERATURE_FB_BOOST : Temperature too high (Full-bridge PV boost)"},
+	{ EC_PASSIVE_REVERSE_CURRENT_FB_BOOST,  "EC_PASSIVE_REVERSE_CURRENT_FB_BOOST : GaN reverse conduction with negative gate voltage (Full-bridge PV boost)"},
 
 	{ EC_V_DC_MAX_FB_GRID,          "EC_V_DC_MAX_FB_GRID : DC voltage too high (Full-bridge AC-grid)" },
 	{ EC_V_DC_SENSOR_FB_GRID,       "EC_V_DC_SENSOR_FB_GRID : Vdc sigma delta pulse count invalid (Full-bridge AC-grid)"},
@@ -57,6 +59,8 @@ struct _sys_errordesc {
 	{ EC_I_AC_RMS_MAX,              "EC_I_AC_RMS_MAX : AC current exceeded rms max in multiple control periods" },
 	{ EC_I_AC_PULSE_MAX,            "EC_I_AC_PULSE_MAX : AC current exceeded pulse max in one control period" },
 	{ EC_I_AC_DC_OFFSET,            "EC_I_AC_DC_OFFSET : DC offset in AC current too high" },
+
+	{ EC_TEST_COMPLETE,             "EC_TEST_COMPLETE : Test mode completed. This error is used to prevent any further system operation." },
 
 	{ EC_BATTERY_COMM_FAIL,             "EC_BATTERY_COMM_FAIL : No battery communication for 60 sec" },
 	{ EC_BATTERY_V_CELL_MIN,            "EC_BATTERY_V_CELL_MIN : Battery cell voltage below min voltage" },

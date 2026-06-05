@@ -214,6 +214,23 @@ void shutdownDC()
 }
 
 
+inline void check_GaN_reverse_loss(int16_t i_dc_filt50Hz_mA)
+{
+	// High loss can occur in GaN reverse conduction with negative gate voltage
+	constexpr uint32_t PASSIVE_INPUT_CURRENT_STATIC_MAX_100mA = 8;  // assume 5V reverse voltage and 800mA (4Watt) allowed
+	constexpr uint16_t EXTRA_INPUT_CURRENT_100mAs = 2;  // e.g. 200mA for 1 second before error is triggered
+	constexpr uint16_t I_MAX_100mA_1SECOND = PASSIVE_INPUT_CURRENT_STATIC_MAX_100mA + EXTRA_INPUT_CURRENT_100mAs;
+	constexpr int32_t GaN_ENERGY_ERROR_LIMIT = DC_CTRL_FREQ * (I_MAX_100mA_1SECOND*I_MAX_100mA_1SECOND - PASSIVE_INPUT_CURRENT_STATIC_MAX_100mA*PASSIVE_INPUT_CURRENT_STATIC_MAX_100mA);
+	static int32_t e_extra = 0;
+
+	int32_t i_square_extra = (int32_t)(i_dc_filt50Hz_mA/100)*(int32_t)(i_dc_filt50Hz_mA/100) - PASSIVE_INPUT_CURRENT_STATIC_MAX_100mA*PASSIVE_INPUT_CURRENT_STATIC_MAX_100mA;
+	e_extra = std::max(e_extra+i_square_extra, (int32_t)0);
+	if (e_extra > GaN_ENERGY_ERROR_LIMIT) {
+		set_sys_errorcode(EC_PASSIVE_REVERSE_CURRENT_FB_BOOST);
+	}
+}
+
+
 static inline void nextState(enum stateDC_t state)
 {
 	stateDC = state;
@@ -252,7 +269,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	} else {
 		shutdownDC();
 		vdc_inRange = false;
-		nextState(INIT_DC);
+		nextState(INIT_DC);  // used in this step
 	}
 
 	if (get_sys_errorcode() != EC_NO_ERROR ) {
@@ -260,9 +277,9 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 #if SYSTEM_HAS_BATTERY == 1
 		battery_state_request(CMD_BAT_OFF);
 #endif //SYSTEM_HAS_BATTERY
-		nextState(INIT_DC);
+		nextState(INIT_DC);  // used in this step
 	} else if (ext_dc_lock != EXT_LOCK_INACTIVE) {
-		nextState(WAIT_PV_VOLTAGE);
+		nextState(WAIT_PV_VOLTAGE);  // used in this step
 	}
 
 	cnt_rel++;
@@ -308,12 +325,15 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	switch (stateDC) {
 	  case INIT_DC:
 		shutdownDC();
+		check_GaN_reverse_loss(i_dc_filt50Hz_mA);
 		nextState(WAIT_PV_VOLTAGE);
 		break;
 
 	  case WAIT_PV_VOLTAGE:
 	  {
-		gatedriverDC(0);  // todo: high loss can occur in GaN reverse conduction with negative gate voltage
+		gatedriverDC(0);
+		check_GaN_reverse_loss(i_dc_filt50Hz_mA);
+
 		if (   ext_dc_lock == EXT_LOCK_INACTIVE
 		    && vdc_inRange
 		    && cnt_rel >= 5*DC_CTRL_FREQ  // wait at least 5 sec to avoid instabilities
@@ -367,16 +387,23 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		break;
 	  }
 	  case WAIT_CONTACTOR_DC:
+	  {
+		constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAM.v_pv_min/(VDC_MAX_MPPT_100mV/10));
+		int16_t err = v_dc_ref_100mV-v_dc_FBboost_sincfilt_100mV;
+		piCtrl.step(err, 0, DEF_MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY);
+		dutyLS1_tmp = piCtrl.y;
 		//if (cnt_rel == 0.025*DC_CTRL_FREQ) {  // 25ms delay for contactor action
 		if (cnt_rel >= 0.2*DC_CTRL_FREQ) {  // 200ms delay for battery enable. Hangs, if battery not connecting
 			mppTracker.set_voltage(0, v_dc_filt50Hz * (1.0 - (float)dutyLS1/DEF_MPPT_DUTY_ABSMAX));
 			nextState(MPPT);
 		}
 		break;
-
+	  }
 	  case MPPT:
 #if SYSTEM_HAS_BATTERY == 1
 		if (sys_mode_needs_battery && !battery_connected()) {
+			dutyLS1_tmp = 0;
+			piCtrl.reset();
 			nextState(VOLTAGE_CONTROL);
 			break;
 		}
@@ -385,6 +412,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		if ( v_dc_FBboost_sincfilt_100mV > VDC_MAX_MPPT_100mV ) {
 			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
 			dutyLS1_tmp = 0;
+			piCtrl.reset();
 			nextState(VOLTAGE_CONTROL);
 		} else {
 			if (cnt20kHz_20ms == 0) {
@@ -423,7 +451,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 				}
 			}
 
-			static float v_pv_ref = 280;
+			static float v_pv_ref = mppTracker.get_v_pv_ref();
 			if (mppt_calc_complete) {
 				v_pv_ref = mppTracker.get_v_pv_ref();
 				mppt_calc_complete = false;

@@ -425,6 +425,7 @@ void configure_analog_watchdog()
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
+	uint32_t start_ISR_cycles = DWT->CYCCNT;
 	//static volatile uint16_t vdc_sinc_mix_100mV;
 	static volatile uint16_t cnt20kHz_20ms = 0;
 
@@ -600,12 +601,19 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 			test_mode_cnt++;
 		} else {
 			GPIOB->BRR = (1<<7);  // disable boost gatedriver
-			set_sys_errorcode(EC_EMERGENCY_STOP);
+			set_sys_errorcode(EC_TEST_COMPLETE);
 		}
 #endif //PWM_TEST_MODE
 
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, dutyB1);  // update pwm value
 		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, DEF_MPPT_DUTY_ABSMAX-dutyB2);
+
+		uint32_t isr_cycles = DWT->CYCCNT - start_ISR_cycles;
+#define ISR_CYC_LIMIT  (0.99*170000/20)  // 99% of 170MHz/20kHz; 98% triggers error; Idea allow 101% for one of two cycles and others only 97%
+		if (isr_cycles > ISR_CYC_LIMIT) {
+			shutdownAll();
+			set_sys_errorcode(EC_ISR_RUNTIME_TOO_LONG);
+		}
 
 		DEBUG_ISR GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4  T4: ~27.2us after T1
     }
@@ -660,6 +668,20 @@ int main(void)
 
   /* Configure the overcurrent watchdog */
   configure_analog_watchdog();
+
+  /* Configure the cycle counter for ISR runtime check */
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // Enable Trace and debug blocks
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;          // Enable CYCCNT register
+
+  // Test battery contactor
+#if TEST_BATTERY_CONTACTOR_MODE == 1
+  bmsPower(1);
+  contactorBattery(1);
+  set_sys_errorcode(EC_TEST_COMPLETE);  // prevent system operation
+  while (1) {
+	resetWatchdog();
+  }
+#endif
 
   /* Configure the FDCAN peripheral */
   FDCAN_Config();  // CAN2 is connected to Battery Cell Stack Controller CAN Bus
@@ -786,8 +808,12 @@ int main(void)
   uSend(" A\n\n");
 
   /*## Check if the system has resumed from IWDG reset ####################*/
-  if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != 0x00u)
-  {
+  HAL_PWR_EnableBkUpAccess();  // for access to flags written by the bootloader
+
+  //  if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != 0x00u) {  // Does not work, because bootloader clears the flag
+  if (TAMP->BKP0R == 0x57444721) {  // "WDG!"
+    TAMP->BKP0R = 0;
+
     uSend("Watchdog caused reset!");
     uSend("\n");
     set_sys_errorcode(EC_WATCHDOG_RESET);  // prevent ongoing inverter turnon in case of software bug
