@@ -226,11 +226,13 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	//GPIOC->BSRR = (1<<4);  // set Testpin TP201 PC4
 
 	static int16_t dutyLS1 = 0;
+	static int16_t dutyLS1_tmp = 0;
 
 	// PI controller
-	constexpr float TE = 1.0/50;   // 20ms execution interval
+	//constexpr float TE = 1.0/50;   // 20ms execution interval
+	constexpr float TE = 1.0/20000;   // 50µs execution interval
 	constexpr float KP = 0.6;      // 0.6 dutycycle change per 100mV difference; 300 per 50V; 1÷(1−(300÷4250))×310V=334V
-	constexpr float KI = 0.01/TE;  // 0.01 dutycycle change per 100mV difference per cycle; 300 per 50V for 60cycles (60/50=1.2sec)
+	constexpr float KI = 0.01*50;  // 0.01 dutycycle change per 100mV difference per 20ms; 300 per 50V for 60 50Hz-cycles (60/50=1.2sec)
 	static PICtrl piCtrl(TE, KP, KI);
 
 	bool vdc_inRange = false;
@@ -289,6 +291,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		v_dc_filt50Hz = (float)v_dc_FBboost_filt50Hz_100mV/10.0;
 		//v_pv_filt50Hz = mppTracker.get_v_pv_ref();  // very noisy because it is based on calculated v_pv in MPPT algorithm in MPPT Version 2
 		v_pv_filt50Hz = v_dc_filt50Hz * (1.0 - (float)dutyLS1/DEF_MPPT_DUTY_ABSMAX);
+		//v_pv_filt50Hz = (v_dc_filt50Hz + (float)v_dc_FBboost_sincfilt_100mV/10.0)/2 * (1.0 - (float)dutyLS1/DEF_MPPT_DUTY_ABSMAX);  // todo: test this idea 05.2026
 
 		p_dc_filt50Hz = p_dc_sum/CYCLES_cnt20kHz_20ms;
 		p_dc_sum = 0;
@@ -316,7 +319,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 		    && cnt_rel >= 5*DC_CTRL_FREQ  // wait at least 5 sec to avoid instabilities
 		    && pv_probe_timer50Hz >= PV_WAIT_SEC*50  // probe pv current from time to time during night mode when battery holds DC voltage
 		) {
-			dutyLS1 = 0;
+			dutyLS1_tmp = 0;
 			piCtrl.reset();
 			nextState(VOLTAGE_CONTROL);
 		}
@@ -326,12 +329,10 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  {  // curly braces to have scope for variable initialization
 		gatedriverDC(1);
 
-		if (cnt20kHz_20ms == 0) {
-			constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAM.v_pv_min/(VDC_MAX_MPPT_100mV/10));
-			int16_t err = v_dc_ref_100mV-v_dc_FBboost_sincfilt_100mV;
-			piCtrl.step(err, 0, DEF_MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY);
-			dutyLS1 = piCtrl.y;
-		}
+		constexpr float MAX_LS_DUTY = 1.0 - (MPPTPARAM.v_pv_min/(VDC_MAX_MPPT_100mV/10));
+		int16_t err = v_dc_ref_100mV-v_dc_FBboost_sincfilt_100mV;
+		piCtrl.step(err, 0, DEF_MPPT_DUTY_ABSMAX*(float)MAX_LS_DUTY);
+		dutyLS1_tmp = piCtrl.y;
 
 		if (   (  v_dc_FBboost_sincfilt_100mV > (v_dc_ref_100mV-VDC_TOLERANCE_100mV)
 		       && v_dc_FBboost_sincfilt_100mV < (v_dc_ref_100mV+VDC_TOLERANCE_100mV)
@@ -383,7 +384,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 
 		if ( v_dc_FBboost_sincfilt_100mV > VDC_MAX_MPPT_100mV ) {
 			//dutyLS1 -= 0.15 * MPPT_DUTY_ABSMAX;  // triggers overvoltage fault
-			dutyLS1 = 0;
+			dutyLS1_tmp = 0;
 			nextState(VOLTAGE_CONTROL);
 		} else {
 			if (cnt20kHz_20ms == 0) {
@@ -422,10 +423,13 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 				}
 			}
 
+			static float v_pv_ref = 280;
 			if (mppt_calc_complete) {
-				dutyLS1 = (1.0 - mppTracker.get_v_pv_ref()/v_dc_filt50Hz) * DEF_MPPT_DUTY_ABSMAX;
+				v_pv_ref = mppTracker.get_v_pv_ref();
 				mppt_calc_complete = false;
 			}
+			// adjust dutycycle every 50µs to compensate capacitor voltage 100Hz pulsation
+			dutyLS1_tmp = (1.0 - (10*v_pv_ref)/v_dc_FBboost_sincfilt_100mV) * DEF_MPPT_DUTY_ABSMAX;
 		}
 
 		break;
@@ -492,15 +496,31 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	  	  }
 	  }
 
-	  int16_t dutyB1 = DEF_MPPT_DUTY_ABSMAX - dutyLS1;
-
-	  if (dutyB1 > ((int)DEF_MPPT_DUTY_ABSMAX-MIN_PULSE)) {
-		  dutyB1 = DEF_MPPT_DUTY_ABSMAX;
-	  } else if (dutyB1 < MIN_PULSE){
-		  dutyB1 = 0;
+	  // Never allow high boost ratio without smooth change of dutycycle or protection via current sensor.
+	  // Input capacitor can deliver high currents!
+	  if (dutyLS1_tmp > dutyLS1) {
+		dutyLS1++;
+//	  else if (dutyLS1_tmp < dutyLS1) {  not required because diode prevents current to input capacitor. REQUIRED FOR SYNCHRONUOUS BOOST CONVERTER!
+//		dutyLS1--;
+//	  }
+	  } else {
+		dutyLS1 = dutyLS1_tmp;
 	  }
 
-	  debug_dutyHS = dutyB1;
+	  int16_t dutyHS = DEF_MPPT_DUTY_ABSMAX - dutyLS1;
+
+#define DEF_DC_BOOST_DUTY_HS_MIN (0.8*DEF_MPPT_DUTY_ABSMAX)  // limited boost ratio of 1.25 (e.g. 288V to 360V) limits current to <12A with Vin=325V
+//#define DEF_DC_BOOST_DUTY_HS_MIN (0.75*DEF_MPPT_DUTY_ABSMAX)  // limited boost ratio of 1.33 (e.g. 270V to 360V)
+
+	  if (dutyHS > ((int)DEF_MPPT_DUTY_ABSMAX-MIN_PULSE)) {
+		  dutyHS = DEF_MPPT_DUTY_ABSMAX;
+	  } else if (dutyHS < DEF_DC_BOOST_DUTY_HS_MIN){
+		  dutyHS = DEF_DC_BOOST_DUTY_HS_MIN;
+//	  } else if (dutyHS < MIN_PULSE){
+//		  dutyHS = 0;
+	  }
+
+	  debug_dutyHS = dutyHS;
 
 
 	  //GPIOC->BRR = (1<<4);  // reset Testpin TP201 PC4
@@ -510,7 +530,7 @@ int16_t dcControlStep(uint16_t cnt20kHz_20ms, uint16_t v_dc_ref_100mV, int16_t i
 	// 21.04.2024: with debug:-g   -Ofast  < 8.84us for 2min (minimal different main loop)
 	// 21.04.2024: with debug:-g3  -Ofast  < 8.55us for 2min (minimal different main loop)
 
-	  return dutyB1;
+	  return dutyHS;
 }
 
 errorPVBI_t checkDCLimits()
