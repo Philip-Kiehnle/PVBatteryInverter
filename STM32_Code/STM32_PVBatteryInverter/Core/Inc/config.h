@@ -28,9 +28,9 @@
 #error "PWM_TEST_MODE has to be defined as 0, 1 or 2"
 #endif
 
-#define VDC_MAX_MPPT_100mV 360*10        // 400V / 96cells = 4.167V
-#define E_VDC_MAX_FB_BOOST_100mV 385*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
-#define E_VDC_MAX_FB_GRID_100mV 385*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define VDC_MAX_MPPT_100mV 390*10        // 400V / 96cells = 4.167V
+#define E_VDC_MAX_FB_BOOST_100mV 400*10  // worst case for battery if BMS fails: 408V / 96cells = 4.25V
+#define E_VDC_MAX_FB_GRID_100mV 400*10   // worst case for battery if BMS fails: 408V / 96cells = 4.25V
 
 /***********/
 /* AC grid */
@@ -55,10 +55,10 @@
 #define F_MAX 51
 
 #define E_I_AC_RMS_MAX_CNT 15  // 15 samples @ 20kHz -> 750µs
-//#define E_I_AC_RMS_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples; ((17.2÷√2)^2 × 0.1 Ohm)÷2 + 2Wswitching = 9.4W < 12Wdesign
-//#define E_I_AC_PULSE_MAX_AMP_10mA (19.1 * 100)  // 3100W÷230V×sqrt(2) amplitude for 1 sample
-#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
-#define E_I_AC_PULSE_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for 1 sample -> triggered twice in 2 month with Pac=1800W
+#define E_I_AC_RMS_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples; ((17.2÷√2)^2 × 0.1 Ohm)÷2 + 2Wswitching = 9.4W < 12Wdesign
+#define E_I_AC_PULSE_MAX_AMP_10mA (19.1 * 100)  // 3100W÷230V×sqrt(2) amplitude for 1 sample
+//#define E_I_AC_RMS_MAX_AMP_10mA (15.4 * 100)  // 2500W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples
+//#define E_I_AC_PULSE_MAX_AMP_10mA (17.2 * 100)  // 2800W÷230V×sqrt(2) amplitude for 1 sample -> triggered twice in 2 month with Pac=1800W
 //#define E_I_AC_RMS_MAX_AMP_10mA (8.0 * 100)  // 1300W÷230V×sqrt(2) amplitude for E_I_AC_RMS_MAX_CNT samples -> triggered error even with 460W limit (11.03.2025 18:27)
 //#define E_I_AC_PULSE_MAX_AMP_10mA (10.5 * 100)  // 1700W÷230V×sqrt(2) amplitude for 1 sample
 #define E_I_AC_DC_OFFSET_MAX_10mA (0.8 * 100)  // 800mA in E_I_AC_DC_OFFSET_CYCLES consecutive 50Hz periods  todo decrease
