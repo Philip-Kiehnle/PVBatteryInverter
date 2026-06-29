@@ -1,13 +1,13 @@
 
 # PVBatteryInverter - Highly Efficient Photovoltaic and Battery Hybrid Inverter using GaN Semiconductors
 This project was inspired by multiple drivers:
- * AC-connected battery systems have disadvantages in terms of charging efficiency ( PV -> DC/AC -> AC/DC -> Battery ) and cost/environmental impact, because of the extra inverter.  
+ * AC-connected battery systems have disadvantages in terms of charging efficiency ( PV -> DC/AC -> AC/DC -> Battery ) and cost/environmental impact, because of the additional inverter.  
  A multilevel battery converter is efficient but does not offer a DC port for PV and thus, increases installed converter power in the grid and grid operators have to calculate the worst case for grid utilization.
  * DC-connected battery systems do not guarantee a better efficiency by default. E.g. in case of a large inverter (~10 kW) operating under small loads during nighttime (30–150 Watt).
  * Commercial solutions often require an additional power meter for the self-consumption power control. In my opinion, this is a complete waste of time, space, resources and energy:
    * The installation is complicated, and requires space in the meter cabinet.
-   * The extra power meter requires extra power of 0.4–2 Watt.
-   * The extra power meter has an offset from the official meter measurement, meaning it cannot be used for exact zero-import control.
+   * The additional power meter requires extra power of 0.4–2 Watt.
+   * The additional power meter has an offset from the official meter measurement, meaning it cannot be used for exact zero-import control.
    * The digital energy meters in Germany already offer an optical interface, which can be set to send the actual power every second  [More details below](#head_electricityMeter)
  * GaN instead of SiC or Si-IGBT offers improved efficiency.
  * No GaN-based inverter is out there at the moment (9.12.2023)
@@ -17,6 +17,9 @@ This project was inspired by multiple drivers:
 
 Let's build an efficient 2kW hybrid inverter, which solves all the problems shown above!
 
+System Overview:
+
+<img src="documentation/system_overview.svg" alt="System Overview" width="800">
 
 # Components
 
@@ -44,6 +47,10 @@ energy = 18 Ah * 355.2 V = 6.4 kWh
 
 ## Inverter Housing
 An unused inverter housing was available, including passive components like boost inductors and an LCL-filter, which can be reused.
+
+A control PCB and GaN Full-Bridge PCBs were added. This picture was taken during the development phase:
+
+<img src="documentation/img/inverter_housing_night.jpg" alt="Inverter Housing" width="450">
 
 ### PV input
 Common-Mode-Choke (CMC) -> Capacitor: MKP 900V  12.5uF +-5% -> Inductor -> Diode for PV string protection during development -> GaN Half-Bridge
@@ -84,7 +91,7 @@ This assumption has enough tolerance because:
 If the power rating is set to 2300 W, the loss will increase to:
 Ploss = Pswitch + 0.5*0.1 Ohm*(10 A)^2 = 1.1 W + 5 W = 6.1 W
 But the inverter's inductors had an original design power of 2 kW. On the other hand, the ripple is lower than in the original design, because of an increased switching frequency.
-This increases the core loss but the cental inductor of phase L2 can be assumed as a heat sink, because it is not used.
+This increases the core loss but the central inductor of phase L2 can be assumed as a heat sink, because it is not used.
 
 Start heatsink fan at 1200W (5.2A) assume 90mOhm:
 Ploss = Pswitch + 0.5*0.09 Ohm*(5.2 A)^2 = 1.1 W + 1.2 W = 2.3 W
@@ -117,13 +124,13 @@ So the controller has to avoid that, which is possible most of the time.
 In case of large load steps, like hobs switching with 2 kW, there will be a mismatch.  
 But experiments have shown that for a cooking session of 30 minutes, a mismatch of about 12 Wh occurs.  
 If this amount is equally spread over 24 hours, the mismatch in each hour is 0.5 W.
-To beat that value, an extra energy meter has to:
+To beat that value, an additional energy meter must:
   * consume less than 0.5 W
   * offer better temporal resolution than 1 second
-  * offers no offset compared to the main electricity meter, or use an offset in feed-in direction and thus always feeds a little bit of power into the grid
-  * comes at no cost
+  * offer no offset compared to the main electricity meter, or use an offset in feed-in direction and thus always feeds a little bit of power into the grid
+  * come at no cost
 
-This demonstrates the whole extent of stupidity to install an extra energy meter, if a digital electricity meter is already installed!  
+This demonstrates the whole extent of stupidity to install an additional energy meter, if a digital electricity meter is already installed!  
 A detailed analysis is also carried out in the [PowerSensorEmulator
 ](https://github.com/Philip-Kiehnle/PowerSensorEmulator
 ) repository.
@@ -131,3 +138,25 @@ A detailed analysis is also carried out in the [PowerSensorEmulator
 
 # Efficiency
 
+## Power Consumption
+Assuming 90 % efficiency of the 5 V power supply.
+
+### Mode "Connected to AC Grid - Passive"
+The gate signals are turned off whenever there is no exchange of AC power.
+
+BMS: 6 W  
+Smartphone: 1 W  
+PV-Boost GaN Full-Bridge not switching: 5 V ⋅ 90 mA / 0.9 = 0.5 W  
+Grid GaN Full-Bridge not switching: 5 V ⋅ 90 mA / 0.9 = 0.5 W  
+Grid Relay: 0.4 W  
+STM32_PVBatteryInverter PCB:  5 V ⋅ 50 mA / 0.9 = 0.28 W (todo: check)  
+STM32_BatterySupervisor PCB:  5 V ⋅ 40 mA / 0.9 = 0.22 W (todo: check)  
+
+**Total: 8.9 W**
+
+### Mode "Idle"
+BMS 12 V power supply is OFF, so the idle consumption is reduced to **2.9 W**.  
+The BMS reactivation and the routine for closing contactors takes about 10 seconds.
+
+### Mode "Connected to AC Grid - Active"
+Todo: measure efficiency curve

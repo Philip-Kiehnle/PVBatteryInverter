@@ -222,8 +222,10 @@ void sys_mode_ctrl_step(control_ref_t* ctrl_ref)
 	}
 	bms.read_current = true;
 
+	uint16_t p_bat_chg_max_W_ext = std::max((uint16_t)20, modbus_reg_rw.p_bat_chg_max_W);  // allows AC gatedriver pulse disable in AC mode in case of PV power measurement noise
+
 	p_bat_chg_soft_max = (battery->soc_percent >= modbus_reg_rw.soc_max_protect_percent) ?
-						 0 : std::min(battery->p_charge_max, modbus_reg_rw.p_bat_chg_max_W);
+						 0 : std::min(battery->p_charge_max, p_bat_chg_max_W_ext);
 	p_bat_chg_hard_max = battery->p_charge_max;
 	p_bat_dischg_max = std::min(battery->p_discharge_max, modbus_reg_rw.p_bat_dischg_max_W);
 #endif //SYSTEM_HAS_BATTERY
