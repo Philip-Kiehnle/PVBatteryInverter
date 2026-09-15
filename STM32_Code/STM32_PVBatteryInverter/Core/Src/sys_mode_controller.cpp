@@ -163,6 +163,12 @@ void apply_sys_mode_cmd(control_ref_t* ctrl_ref)
 			ctrl_ref->ext_bat_lock = EXT_LOCK_HARD;
 			break;
 
+		case CMD_BMS_ON:
+			if (get_stateBattery() == BMS_OFF__BAT_OFF) {
+				battery_state_request(BMS_ON__BAT_OFF);
+			}
+			break;
+
 	}
 
 	modbus_reg_rw.cmd = CMD_INVALID;  // reset to invalid command
